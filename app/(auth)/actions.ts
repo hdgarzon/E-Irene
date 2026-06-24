@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AuthState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -42,11 +43,27 @@ export async function signUpAction(
   }
 
   const supabase = await createClient();
-  const { error: signUpError } = await supabase.auth.signUp({
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
   });
   if (signUpError) return { error: signUpError.message };
+
+  // Si el proyecto exige confirmación de correo, signUp no devuelve sesión.
+  // Para el flujo de onboarding autoconfirmamos (admin) y abrimos sesión.
+  if (!signUpData.session) {
+    if (signUpData.user) {
+      const admin = createAdminClient();
+      await admin.auth.admin.updateUserById(signUpData.user.id, { email_confirm: true });
+    }
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: parsed.data.email,
+      password: parsed.data.password,
+    });
+    if (signInError) {
+      return { error: "Cuenta creada. Revisa tu correo para confirmarla e inicia sesión." };
+    }
+  }
 
   // Con la sesión ya activa, crea la clínica + perfil admin de forma atómica.
   const { error: rpcError } = await supabase.rpc("create_clinic_and_admin", {
