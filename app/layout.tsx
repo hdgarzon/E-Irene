@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { SwRegister } from "@/components/sw-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,6 +18,11 @@ export const metadata: Metadata = {
   title: "E-Irene · Plataforma clínica de salud mental",
   description:
     "Transcripción en vivo, análisis con IA y reportes clínicos para profesionales de salud mental.",
+  appleWebApp: { capable: true, title: "E-Irene", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a2540",
 };
 
 export default function RootLayout({
@@ -32,6 +38,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster richColors position="top-right" />
+        <SwRegister />
       </body>
     </html>
   );

@@ -24,7 +24,7 @@ test("recordatorio de cita muestra confirmación (modo demo)", async ({ page }) 
   await page.getByRole("button", { name: /agendar cita/i }).click();
   await expect(page).toHaveURL(/\/appointments$/);
 
-  // Enviar recordatorio
+  // Enviar recordatorio (plan Free → correo, modo demo)
   await page.getByRole("button", { name: /enviar recordatorio/i }).click();
-  await expect(page.getByText(/Recordatorio simulado/)).toBeVisible();
+  await expect(page.getByText(/Recordatorio por correo simulado/)).toBeVisible();
 });

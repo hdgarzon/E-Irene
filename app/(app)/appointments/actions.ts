@@ -12,9 +12,12 @@ import {
   type AppointmentInput,
 } from "@/lib/db/appointments";
 import { getPatient } from "@/lib/db/patients";
+import { getClinicOverview } from "@/lib/db/clinic";
 import { recordNotification } from "@/lib/db/notifications";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildReminderEmail } from "@/lib/email/templates";
+import { getWhatsAppProvider, buildReminderWhatsApp } from "@/lib/whatsapp/providers";
+import { PLANS } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import { fromInputDateTime, formatFullDate, formatTime } from "@/lib/dates";
 
@@ -120,36 +123,64 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
   const appt = await getAppointment(appointmentId);
   if (!appt) return { ok: false, message: "Cita no encontrada." };
 
-  const patient = await getPatient(appt.patientId);
-  const to = patient?.email ?? null;
-  if (!to) {
+  const [patient, overview] = await Promise.all([
+    getPatient(appt.patientId),
+    getClinicOverview(),
+  ]);
+  const dateLabel = formatFullDate(appt.scheduledAt);
+  const timeLabel = formatTime(appt.scheduledAt);
+
+  // WhatsApp si el plan lo permite y hay teléfono; si no, correo.
+  const useWhatsApp = PLANS[overview.plan].whatsapp && Boolean(patient?.phone);
+  const channel: "email" | "whatsapp" = useWhatsApp ? "whatsapp" : "email";
+
+  if (channel === "email" && !patient?.email) {
     await recordNotification(user.clinicId, {
       patientId: appt.patientId,
       appointmentId,
+      channel,
       type: "appointment_reminder",
       status: "failed",
-      payload: { reason: "sin_email" },
+      payload: { reason: "sin_contacto" },
     });
     return { ok: false, message: "El paciente no tiene correo registrado." };
   }
 
-  const provider = getEmailProvider();
   try {
-    await provider.send(
-      buildReminderEmail({
-        to,
-        patientName: appt.patientName,
-        clinicName: user.clinicName,
-        dateLabel: formatFullDate(appt.scheduledAt),
-        timeLabel: formatTime(appt.scheduledAt),
-      }),
-    );
+    let mode: string;
+    if (channel === "whatsapp") {
+      const wa = getWhatsAppProvider();
+      await wa.send({
+        to: patient!.phone!,
+        body: buildReminderWhatsApp({
+          patientName: appt.patientName,
+          clinicName: user.clinicName,
+          dateLabel,
+          timeLabel,
+        }),
+      });
+      mode = wa.mode;
+    } else {
+      const email = getEmailProvider();
+      await email.send(
+        buildReminderEmail({
+          to: patient!.email!,
+          patientName: appt.patientName,
+          clinicName: user.clinicName,
+          dateLabel,
+          timeLabel,
+        }),
+      );
+      mode = email.mode;
+    }
+
     await recordNotification(user.clinicId, {
       patientId: appt.patientId,
       appointmentId,
+      channel,
       type: "appointment_reminder",
       status: "sent",
-      payload: { to, mode: provider.mode },
+      payload: { mode },
     });
     await logAudit({
       clinicId: user.clinicId,
@@ -157,23 +188,25 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
       action: "reminder.sent",
       entityType: "appointment",
       entityId: appointmentId,
-      metadata: { mode: provider.mode },
+      metadata: { channel, mode },
     });
+
+    const channelLabel = channel === "whatsapp" ? "WhatsApp" : "correo";
+    const message =
+      mode === "log" || mode === "twilio"
+        ? `Recordatorio por ${channelLabel}${mode === "log" ? " simulado (modo demo)" : " enviado"}.`
+        : `Recordatorio enviado por ${channelLabel}.`;
+    return { ok: true, message };
   } catch {
     await recordNotification(user.clinicId, {
       patientId: appt.patientId,
       appointmentId,
+      channel,
       type: "appointment_reminder",
       status: "failed",
     });
     return { ok: false, message: "No se pudo enviar el recordatorio." };
   }
-
-  const note =
-    provider.mode === "log"
-      ? "Recordatorio simulado (modo demo). Conecta Resend para envío real."
-      : "Recordatorio enviado por correo.";
-  return { ok: true, message: note };
 }
 
 export async function setStatusAction(formData: FormData): Promise<void> {
