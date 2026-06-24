@@ -43,27 +43,26 @@ export async function signUpAction(
   }
 
   const supabase = await createClient();
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+
+  // Creamos el usuario ya confirmado vía admin (no envía correo → evita el
+  // rate limit de email y funciona aunque el proyecto exija confirmación).
+  const admin = createAdminClient();
+  const { error: createError } = await admin.auth.admin.createUser({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    email_confirm: true,
+  });
+  if (createError) {
+    const dup = /already|registered|exists/i.test(createError.message);
+    return { error: dup ? "Ese correo ya está registrado." : createError.message };
+  }
+
+  // Abrimos sesión para fijar las cookies del usuario.
+  const { error: signInError } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
   });
-  if (signUpError) return { error: signUpError.message };
-
-  // Si el proyecto exige confirmación de correo, signUp no devuelve sesión.
-  // Para el flujo de onboarding autoconfirmamos (admin) y abrimos sesión.
-  if (!signUpData.session) {
-    if (signUpData.user) {
-      const admin = createAdminClient();
-      await admin.auth.admin.updateUserById(signUpData.user.id, { email_confirm: true });
-    }
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: parsed.data.email,
-      password: parsed.data.password,
-    });
-    if (signInError) {
-      return { error: "Cuenta creada. Revisa tu correo para confirmarla e inicia sesión." };
-    }
-  }
+  if (signInError) return { error: "No se pudo iniciar sesión tras el registro." };
 
   // Con la sesión ya activa, crea la clínica + perfil admin de forma atómica.
   const { error: rpcError } = await supabase.rpc("create_clinic_and_admin", {
