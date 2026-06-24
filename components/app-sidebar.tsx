@@ -26,7 +26,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, roles: ["admin", "doctor", "secretaria"], enabled: true },
   { href: "/patients", label: "Pacientes", icon: Users, roles: ["admin", "doctor", "secretaria"], enabled: true },
-  { href: "/appointments", label: "Agenda", icon: CalendarDays, roles: ["admin", "doctor", "secretaria"], enabled: false },
+  { href: "/appointments", label: "Agenda", icon: CalendarDays, roles: ["admin", "doctor", "secretaria"], enabled: true },
   { href: "/consultations", label: "Consultas", icon: Mic, roles: ["admin", "doctor"], enabled: false },
   { href: "/reports", label: "Reportes", icon: FileText, roles: ["admin", "doctor"], enabled: false },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["admin"], enabled: false },

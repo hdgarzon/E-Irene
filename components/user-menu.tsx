@@ -47,6 +47,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <form action={signOutAction}>
           <DropdownMenuItem
             variant="destructive"
+            nativeButton
             render={<button type="submit" className="w-full" />}
           >
             <LogOut className="size-4" />
