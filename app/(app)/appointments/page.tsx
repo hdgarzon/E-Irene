@@ -43,7 +43,7 @@ export default async function AppointmentsPage() {
         <div className="space-y-6">
           {groups.map((group) => (
             <section key={group.key}>
-              <h2 className="mb-2 px-1 text-sm font-semibold capitalize text-muted-foreground">
+              <h2 className="mb-2 px-1 text-sm font-semibold text-muted-foreground first-letter:uppercase">
                 {group.label}
               </h2>
               <div className="divide-y divide-gray-line overflow-hidden rounded-2xl border border-gray-line bg-card">
