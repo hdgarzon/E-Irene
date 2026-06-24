@@ -1,0 +1,39 @@
+import { createHash } from "node:crypto";
+
+/** Versión del documento de consentimiento. Cambiar al modificar el texto. */
+export const CONSENT_VERSION = "2026-06-v1";
+
+/** Texto del consentimiento informado (salud mental, Colombia). */
+export const CONSENT_TEXT = `CONSENTIMIENTO INFORMADO PARA LA ATENCIÓN PSICOLÓGICA Y EL TRATAMIENTO DE DATOS
+
+1. Naturaleza del servicio. Declaro que recibo atención psicológica profesional de carácter
+voluntario y comprendo que sus resultados dependen de múltiples factores.
+
+2. Grabación y transcripción. Autorizo que mis sesiones sean transcritas en tiempo real para
+fines clínicos. El audio NO se almacena: únicamente se conserva la transcripción en texto,
+cifrada. Puedo revocar esta autorización en cualquier momento.
+
+3. Análisis asistido por inteligencia artificial. Entiendo que la transcripción puede analizarse
+con herramientas de IA para apoyar al profesional (resumen, sentimiento, patrones). Dichas
+sugerencias NO constituyen un diagnóstico y son validadas por el profesional tratante.
+
+4. Tratamiento de datos personales (Ley 1581 de 2012). Autorizo el tratamiento de mis datos
+personales y sensibles de salud con fines de atención clínica, conforme a la política de
+privacidad. Mis datos se almacenan cifrados y aislados. Conozco mis derechos a conocer,
+actualizar, rectificar y suprimir mis datos.
+
+5. Historia clínica electrónica (Ley 2015 de 2020, Decreto 580 de 2024). Comprendo que la
+información se incorpora a una historia clínica electrónica con plena validez legal.
+
+6. Confidencialidad. La información está protegida por el secreto profesional, salvo las
+excepciones previstas por la ley.
+
+Manifiesto que he leído y comprendido este documento y que mis preguntas han sido resueltas.`;
+
+/** SHA-256 hex de un texto (prueba de integridad del documento firmado). */
+export function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+/** Hash del documento vigente (se guarda junto a la firma como prueba legal). */
+export const CONSENT_HASH = sha256(`${CONSENT_VERSION}\n${CONSENT_TEXT}`);

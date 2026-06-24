@@ -1,8 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Calendar, Mail, Phone, IdCard, Mic } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Mail,
+  Phone,
+  IdCard,
+  Mic,
+  FileSignature,
+  ShieldCheck,
+} from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
+import { getActiveConsent } from "@/lib/db/consents";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function InfoRow({
   icon: Icon,
@@ -32,6 +44,7 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) notFound();
+  const consent = await getActiveConsent(id);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -76,15 +89,60 @@ export default async function PatientDetailPage({
         </div>
       )}
 
-      {/* Placeholder de consultas — se implementa en el Plan 2 */}
-      <div className="rounded-2xl border border-dashed border-gray-line bg-card p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-navy">Consultas</h2>
-          <Badge variant="secondary">Pronto</Badge>
+      {/* Consentimiento informado */}
+      <div className="rounded-2xl border border-gray-line bg-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
+            <FileSignature className="size-4 text-purple" />
+            Consentimiento informado
+          </h2>
+          {consent ? (
+            <Badge className="bg-mint/15 text-[#04342a]">Firmado</Badge>
+          ) : (
+            <Badge className="bg-coral/15 text-destructive">Pendiente</Badge>
+          )}
         </div>
-        <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
-          <Mic className="size-4 text-purple" />
-          La transcripción en vivo y el análisis con IA llegan en la siguiente etapa.
+        {consent ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Firmado por <span className="text-navy">{consent.signerName}</span> el{" "}
+            {new Date(consent.signedAt).toLocaleDateString("es-CO")} · versión{" "}
+            {consent.documentVersion}.
+          </p>
+        ) : (
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Requerido antes de iniciar una consulta.
+            </p>
+            <Link
+              href={`/patients/${id}/consent`}
+              className={cn(buttonVariants({ size: "sm" }))}
+            >
+              Capturar consentimiento
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* Consultas */}
+      <div className="rounded-2xl border border-gray-line bg-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
+            <Mic className="size-4 text-purple" />
+            Consultas
+          </h2>
+          {consent ? (
+            <Link
+              href={`/consultations/new?patientId=${id}`}
+              className={cn(buttonVariants({ size: "sm" }))}
+            >
+              Iniciar consulta
+            </Link>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5" />
+              Requiere consentimiento
+            </span>
+          )}
         </div>
       </div>
     </div>
