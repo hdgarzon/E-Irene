@@ -1,0 +1,9 @@
+﻿#,Sección,Contenido,Origen
+1,**Información General**,"Paciente, doctor, clínica, fecha, duración, consentimiento",Datos estructurados
+2,**Resumen Ejecutivo**,"Máx. 200 palabras, contexto, temas, evolución",GPT-4o
+3,**Análisis de Sentimiento**,"Score global (-1 a +1), timeline emocional, emociones con contexto",GPT-4o + HuggingFace
+4,**Nube de Palabras**,Visualización + Top 15 keywords + temas recurrentes con contexto,TF-IDF + GPT-4o
+5,**Patrones Lingüísticos**,"Métricas: 1ª persona, negaciones, dudas, intensidad, cambios de tema",NLP processing
+6,**Sugerencia Preliminar**,Patrón + áreas de atención + enfoque recomendado + **disclaimer grande**,GPT-4o (editable)
+7,**Transcripción Completa**,Texto íntegro con timestamps y speakers,Deepgram
+8,**Firmas y Validación**,Espacio para firma del doctor + checkbox de validación,Template

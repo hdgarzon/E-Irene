@@ -1,0 +1,4 @@
+﻿API,Latencia,WER,Diarización,Español,Precio,Recomendación
+**Deepgram Nova-3**,~280ms,~5%,Sí (2-10 spk),OK,\$0.0048/min,⭐ **RECOMENDADO**
+AssemblyAI Universal-3,~400ms,~5%,Sí (muy buena),Excelente,\$0.0035/min,⭐ Alternativa
+OpenAI Whisper API,4-15s (batch),~5%,NO,Líder,\$0.006/min,⚠️ NO para tiempo real

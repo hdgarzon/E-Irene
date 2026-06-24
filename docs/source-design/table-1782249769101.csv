@@ -1,0 +1,4 @@
+﻿Opción,Modelo,Precisión español,Costo,Recomendación
+**HuggingFace Transformers**,DistilBERT/RoBERTa,~85%,**Gratis** (self-hosted),⭐ **RECOMENDADO**
+Azure Text Analytics,Microsoft pre-entrenado,~90%,\$1/1K records,Alternativa HIPAA
+GPT-4o zero-shot,Prompt directo,~88%,Incluido en análisis,⚠️ Más caro

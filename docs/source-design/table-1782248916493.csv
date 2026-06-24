@@ -1,0 +1,16 @@
+﻿Paso,Actor,Acción,Dato sensible
+1,Navegador,`getUserMedia()` solicita micrófono,—
+2,Navegador,Devuelve `MediaStream`,—
+3,Frontend,`POST /consultations/start`,"`patient_id`, `consent_id`"
+4,Backend,Devuelve `session_id` + token WebSocket,Token temporal 15 min
+5,Frontend,Abre WebSocket a `wss://api.deepgram.com`,Con token de autenticación
+6,**Navegador → Deepgram**,**Envía audio chunks (Int16Array)**,**Audio NUNCA pasa por tu servidor**
+7,Deepgram,Devuelve transcript parcial,"`{transcript, is_final: false}`"
+8,Frontend,Emite vía WebSocket al backend,"`{chunk, speaker, timestamp}`"
+9,Backend,INSERT en `transcript_chunks`,**Texto ENCRIPTADO**
+10,Deepgram,Devuelve transcript final,"`{transcript, is_final: true}`"
+11,Frontend,Emite chunk final al backend,"`{chunk_final, confidence}`"
+12,Backend,UPDATE `consultations`,**Transcripción completa ENCRIPTADA**
+13,Frontend,Cierra WebSocket con Deepgram,`connection.close()`
+14,Frontend,`POST /consultations/{id}/end`,Trigger análisis IA
+15,Backend,UPDATE `consultations`,`ended_at = NOW()`

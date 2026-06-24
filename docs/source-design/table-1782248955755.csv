@@ -1,0 +1,5 @@
+﻿Sección,Input,Output
+**A. Contexto**,"Datos de la sesión (número, fecha, duración, doctor, notas previas)",—
+**B. Transcripción**,Texto completo con timestamps y speakers,—
+**C. Instrucciones**,5 pasos de análisis detallados,JSON estricto
+**D. Formato**,Schema JSON con campos obligatorios,Validado con Zod

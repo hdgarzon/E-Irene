@@ -1,0 +1,5 @@
+﻿Fase,Duración,Entregables
+**Fase 1: MVP**,8-10 semanas,"Auth, pacientes, agenda, email, grabación, transcripción básica, PDF simple"
+**Fase 2: IA Avanzada**,4-6 semanas,"Sentimiento, keywords, nube de palabras, pronóstico editable, historial comparativo"
+**Fase 3: Multi-Clínica**,4-5 semanas,"Panel admin, gestión de clínicas, asignación de doctores, facturación"
+**Fase 4: Escalamiento**,4-6 semanas,"WhatsApp API, PWA móvil, telemedicina, certificación HIPAA"

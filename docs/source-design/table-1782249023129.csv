@@ -1,0 +1,5 @@
+﻿Plan,Precio,Target,Límites clave
+**FREE**,\$0/mes,Psicólogos individuales,"1 doctor, 5 pacientes, 10 citas, 2h transcripción, sin IA"
+**PRO**,\$49/mes,Consulta privada,"1 doctor, ilimitado, 20h transcripción, IA completa"
+**CLÍNICA**,\$149/mes,Clínicas 2-5 doctores,"5 doctores, 100h transcripción, WhatsApp, white-label"
+**ENTERPRISE**,Custom,"Hospitales, EPS","Ilimitado, HIPAA, on-premise, SSO, account manager"

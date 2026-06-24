@@ -1,0 +1,11 @@
+﻿Capa,Tecnología
+**Frontend**,Next.js 14 + Tailwind + shadcn/ui + TanStack Query
+**Backend**,NestJS (TypeScript) + GraphQL + REST
+**Base de datos**,PostgreSQL 15 + Redis + Prisma ORM
+**Autenticación**,"Clerk (SSO, MFA, RBAC, multi-tenant)"
+**Transcripción**,Deepgram Live API (streaming)
+**IA / NLP**,OpenAI GPT-4o + HuggingFace (sentiment)
+**PDF**,Puppeteer + HTML templates + S3 presigned URLs
+**Email**,Resend
+**WhatsApp**,Twilio API (futuro)
+**Monitoreo**,Sentry + LogRocket

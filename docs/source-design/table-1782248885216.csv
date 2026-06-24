@@ -1,0 +1,13 @@
+﻿Entidad,Propósito,Seguridad
+`clinics`,Raíz del multi-tenant,—
+`users`,"Todos los roles (admin, doctor, secretaria, paciente)",Password hash
+`patients`,Datos del paciente,**TODOS los campos encriptados**
+`consents`,Consentimiento informado digital,Firma + hash para prueba legal
+`appointments`,Citas y agenda,—
+`consultations`,Sesiones de consulta,Transcripción encriptada
+`transcript_chunks`,Fragmentos de transcripción,Texto encriptado
+`reports`,Reportes generados por IA,"Sentimiento, keywords, sugerencia encriptados"
+`patient_progress`,Seguimiento del paciente,Notas encriptadas
+`audit_logs`,**Inmutable** — cumplimiento legal,"Solo INSERT, nunca UPDATE/DELETE"
+`notifications`,Email/WhatsApp recordatorios,—
+`clinic_doctors`,Relación N:M clínica-doctor,—

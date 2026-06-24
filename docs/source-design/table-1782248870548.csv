@@ -1,0 +1,8 @@
+﻿Requisito,Solución Implementada
+**Audio NO se guarda**,WebRTC → Deepgram directo (streaming). Tu servidor solo recibe texto.
+**Transcripción en tiempo real**,Deepgram Live API con WebSocket. Buffer en RAM (Redis).
+**Post-procesamiento**,"Al cerrar sesión, todo el texto se envía a GPT-4o para análisis completo."
+**Consentimiento digital**,"Tabla `consents` con firma, IP, user-agent, hash del documento y timestamp."
+**Pronóstico editable**,"Campo `doctor_edited` en `reports`. La IA sugiere, el doctor valida/modifica."
+**Multi-tenant**,Todas las tablas tienen `clinic_id`. RLS en PostgreSQL aísla datos.
+**Paciente con login**,Tabla `patient_progress` para que el paciente vea su evolución.

@@ -1,0 +1,8 @@
+﻿Color,Hex,Uso
+**Navy Deep**,`#0A2540`,"Fondos principales, texto"
+**Purple Accent**,`#635BFF`,"CTAs, botones primarios"
+**Mint Green**,`#00D4AA`,"Éxito, confirmaciones, salud"
+**Coral Alert**,`#FF6B6B`,"Alertas, errores, atención"
+**Cloud White**,`#F6F9FC`,Fondos de tarjetas
+**Soft Mint**,`#96F7D6`,"Hover states, badges"
+**Gray Line**,`#E3E8EE`,"Bordes, divisores"
