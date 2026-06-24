@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createPatient, updatePatient } from "@/lib/db/patients";
+import { getClinicOverview } from "@/lib/db/clinic";
+import { canAddPatient, limitLabel, PLANS } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import type { PatientInput } from "@/lib/db/patient-mappers";
 
@@ -64,6 +66,15 @@ export async function createPatientAction(
   const user = await requireUser();
   const parsed = parseForm(formData);
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+
+  const overview = await getClinicOverview();
+  if (!canAddPatient(overview.plan, overview.patientCount)) {
+    return {
+      error: `Alcanzaste el límite de ${limitLabel(
+        PLANS[overview.plan].maxPatients,
+      )} pacientes del plan ${PLANS[overview.plan].label}. Mejora tu plan en Configuración.`,
+    };
+  }
 
   let patientId: string;
   try {
