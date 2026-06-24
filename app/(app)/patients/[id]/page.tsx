@@ -9,6 +9,7 @@ import {
   Mic,
   FileSignature,
   ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
@@ -134,19 +135,30 @@ export default async function PatientDetailPage({
             <Mic className="size-4 text-purple" />
             Consultas
           </h2>
-          {consent ? (
-            <Link
-              href={`/consultations/new?patientId=${id}`}
-              className={cn(buttonVariants({ size: "sm" }))}
-            >
-              Iniciar consulta
-            </Link>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldCheck className="size-3.5" />
-              Requiere consentimiento
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {consultations.length > 0 && (
+              <Link
+                href={`/patients/${id}/progress`}
+                className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+              >
+                <TrendingUp className="size-3.5" />
+                Ver evolución
+              </Link>
+            )}
+            {consent ? (
+              <Link
+                href={`/consultations/new?patientId=${id}`}
+                className={cn(buttonVariants({ size: "sm" }))}
+              >
+                Iniciar consulta
+              </Link>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ShieldCheck className="size-3.5" />
+                Requiere consentimiento
+              </span>
+            )}
+          </div>
         </div>
 
         {consultations.length > 0 && (

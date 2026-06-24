@@ -73,6 +73,33 @@ export async function getReportByConsultation(consultationId: string): Promise<R
   return data ? mapRow(data as ReportRow) : null;
 }
 
+/** Reportes del paciente (descifrados) con la fecha de su consulta, cronológico. */
+export async function listReportsForPatient(
+  patientId: string,
+): Promise<{ consultationId: string; date: string; payload: ReportPayload }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      "consultation_id, payload_enc, created_at, consultations!reports_consultation_id_fkey(started_at)",
+    )
+    .eq("patient_id", patientId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (
+    data as unknown as {
+      consultation_id: string;
+      payload_enc: string;
+      created_at: string;
+      consultations: { started_at: string } | null;
+    }[]
+  ).map((r) => ({
+    consultationId: r.consultation_id,
+    date: r.consultations?.started_at ?? r.created_at,
+    payload: reportSchema.parse(JSON.parse(decrypt(r.payload_enc))),
+  }));
+}
+
 export async function getReport(reportId: string): Promise<Report | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("reports").select(COLS).eq("id", reportId).maybeSingle();

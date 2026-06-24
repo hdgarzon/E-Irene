@@ -75,4 +75,11 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   expect(pdf.headers()["content-type"]).toContain("application/pdf");
   const body = await pdf.body();
   expect(body.subarray(0, 4).toString()).toBe("%PDF");
+
+  // Historial comparativo (Fase 2)
+  await page.getByRole("link", { name: /volver a la ficha del paciente/i }).click();
+  await page.getByRole("link", { name: /ver evolución/i }).click();
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(page.getByText(/Evolución del sentimiento/)).toBeVisible();
+  await expect(page.getByText(/1 sesión analizada/)).toBeVisible();
 });
