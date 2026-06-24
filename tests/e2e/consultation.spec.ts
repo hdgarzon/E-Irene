@@ -67,4 +67,12 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
 
   // Transcripción presente
   await expect(page.getByText("Transcripción")).toBeVisible();
+
+  // Descargar PDF (react-pdf)
+  const consultationId = page.url().match(/consultations\/([^/]+)/)![1];
+  const pdf = await page.request.get(`/consultations/${consultationId}/pdf`);
+  expect(pdf.ok()).toBeTruthy();
+  expect(pdf.headers()["content-type"]).toContain("application/pdf");
+  const body = await pdf.body();
+  expect(body.subarray(0, 4).toString()).toBe("%PDF");
 });

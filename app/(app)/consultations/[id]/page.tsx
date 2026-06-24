@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 import { getConsultation, getTranscript } from "@/lib/db/consultations";
 import { getReportByConsultation } from "@/lib/db/reports";
 import { ReportView } from "@/components/report-view";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default async function ConsultationPage({
   params,
@@ -38,7 +40,20 @@ export default async function ConsultationPage({
             {new Date(consultation.startedAt).toLocaleString("es-CO")}
           </p>
         </div>
-        <Badge className="bg-mint/15 text-[#04342a]">Finalizada</Badge>
+        <div className="flex items-center gap-3">
+          {report && (
+            <a
+              href={`/consultations/${id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <Download className="size-4" />
+              Descargar PDF
+            </a>
+          )}
+          <Badge className="bg-mint/15 text-[#04342a]">Finalizada</Badge>
+        </div>
       </div>
 
       {report && <ReportView report={report} consultationId={id} />}

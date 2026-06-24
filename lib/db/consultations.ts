@@ -9,6 +9,7 @@ export interface Consultation {
   patientId: string;
   patientName: string;
   doctorId: string;
+  doctorName: string;
   status: ConsultationStatus;
   startedAt: string;
   endedAt: string | null;
@@ -22,11 +23,13 @@ interface ConsultationRow {
   started_at: string;
   ended_at: string | null;
   patients: { full_name_enc: string } | null;
+  doctor: { full_name: string } | null;
 }
 
 const SELECT =
   "id, patient_id, doctor_id, status, started_at, ended_at, " +
-  "patients!consultations_patient_id_fkey(full_name_enc)";
+  "patients!consultations_patient_id_fkey(full_name_enc), " +
+  "doctor:users!consultations_doctor_id_fkey(full_name)";
 
 function mapRow(r: ConsultationRow): Consultation {
   return {
@@ -34,6 +37,7 @@ function mapRow(r: ConsultationRow): Consultation {
     patientId: r.patient_id,
     patientName: r.patients ? decrypt(r.patients.full_name_enc) : "—",
     doctorId: r.doctor_id,
+    doctorName: r.doctor?.full_name ?? "—",
     status: r.status,
     startedAt: r.started_at,
     endedAt: r.ended_at,

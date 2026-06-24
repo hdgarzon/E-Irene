@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
+import { listConsultationsForPatient } from "@/lib/db/consultations";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,10 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) notFound();
-  const consent = await getActiveConsent(id);
+  const [consent, consultations] = await Promise.all([
+    getActiveConsent(id),
+    listConsultationsForPatient(id),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -144,6 +148,39 @@ export default async function PatientDetailPage({
             </span>
           )}
         </div>
+
+        {consultations.length > 0 && (
+          <ul className="mt-4 divide-y divide-gray-line border-t border-gray-line">
+            {consultations.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/consultations/${c.id}`}
+                  className="flex items-center justify-between py-3 text-sm hover:text-purple"
+                >
+                  <span className="text-navy">
+                    {new Date(c.startedAt).toLocaleString("es-CO", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                  <Badge
+                    className={
+                      c.status === "in_progress"
+                        ? "bg-purple/15 text-purple"
+                        : "bg-mint/15 text-[#04342a]"
+                    }
+                  >
+                    {c.status === "in_progress"
+                      ? "En curso"
+                      : c.status === "analyzed"
+                        ? "Analizada"
+                        : "Finalizada"}
+                  </Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
