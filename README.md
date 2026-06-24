@@ -4,8 +4,20 @@ Plataforma clínica SaaS multi-tenant para profesionales de salud mental. Transc
 en vivo, las analiza con IA y genera reportes clínicos, bajo cumplimiento legal colombiano
 (Habeas Data, consentimiento digital, historia clínica electrónica).
 
-> **Estado:** Fase 1 — fundación + auth multi-tenant + pacientes. Ver
-> [docs/superpowers/plans](docs/superpowers/plans) para el roadmap de planes.
+> **Estado:** Fases 1-4 implementadas (modo demo, sin API keys requeridas).
+> Ver [docs/superpowers/plans](docs/superpowers/plans) para el detalle de cada fase.
+
+## Funcionalidades
+
+- **Auth multi-tenant** con roles (admin/doctor/secretaría) y aislamiento RLS por clínica.
+- **Pacientes** con PII cifrada (AES-256) · **Agenda** de citas con estados y recordatorios.
+- **Consentimiento digital** (firma en canvas + hash + IP/UA).
+- **Consulta con transcripción en vivo** (el audio nunca se almacena) → **análisis con IA**
+  (sentimiento, nube de palabras, patrones, sugerencia editable) → **reporte PDF** de 8 secciones.
+- **Historial comparativo** de la evolución del paciente entre sesiones.
+- **Multi-clínica:** equipo, planes (Free/Pro/Clínica/Enterprise) con límites aplicados.
+- **Recordatorios** por correo (Resend) o WhatsApp (Twilio) según el plan.
+- **PWA** instalable con shell offline. Ver [docs/COMPLIANCE.md](docs/COMPLIANCE.md) para seguridad.
 
 ## Stack
 
