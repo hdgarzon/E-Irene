@@ -42,3 +42,9 @@ next-env.d.ts
 
 # Permitir el ejemplo de entorno (sin secretos)
 !.env.example
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -24,9 +24,11 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Embed desambiguado: existen 2 relaciones users↔clinics (FK directa y vía
+  // clinic_doctors), así que fijamos la FK directa por su nombre.
   const { data: profile } = await supabase
     .from("users")
-    .select("role, full_name, email, clinic_id, clinics(name)")
+    .select("role, full_name, email, clinic_id, clinic:clinics!users_clinic_id_fkey(name)")
     .eq("id", user.id)
     .single();
 
@@ -38,7 +40,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     fullName: profile.full_name,
     role: profile.role,
     clinicId: profile.clinic_id,
-    clinicName: profile.clinics?.name ?? "",
+    clinicName: profile.clinic?.name ?? "",
   };
 });
 

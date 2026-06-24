@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# E-Irene
 
-## Getting Started
+Plataforma clínica SaaS multi-tenant para profesionales de salud mental. Transcribe sesiones
+en vivo, las analiza con IA y genera reportes clínicos, bajo cumplimiento legal colombiano
+(Habeas Data, consentimiento digital, historia clínica electrónica).
 
-First, run the development server:
+> **Estado:** Fase 1 — fundación + auth multi-tenant + pacientes. Ver
+> [docs/superpowers/plans](docs/superpowers/plans) para el roadmap de planes.
+
+## Stack
+
+- **Next.js 16** (App Router) + React 19 + TypeScript
+- **Supabase** — Postgres + Auth + RLS (multi-tenant) + Storage + Realtime
+- **Tailwind CSS 4** + shadcn/ui con tokens de marca
+- **Zod** (validación) · **Vitest** (unit) · **Playwright** (E2E)
+- Cifrado **AES-256-GCM** app-layer para PII y datos clínicos
+- Capa de proveedores para transcripción (Deepgram) y análisis (OpenAI GPT-4o), con **mock**
+  por defecto para correr sin API keys
+
+## Requisitos
+
+- Node 20+ y npm
+- Docker (para Supabase local)
+- Supabase CLI (`npx supabase`)
+
+## Puesta en marcha
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Dependencias
+npm install
+
+# 2. Levantar Supabase local (Postgres, Auth, Storage…) — requiere Docker
+npx supabase start
+
+# 3. Aplicar el schema + RLS + audit logs
+npx supabase db reset
+
+# 4. Variables de entorno
+cp .env.example .env.local
+#   Rellena con los valores de `npx supabase status`:
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (publishable),
+#   SUPABASE_SERVICE_ROLE_KEY (secret).
+#   Genera la clave de cifrado:
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+#   …y pégala en ENCRYPTION_KEY.
+
+# 5. Regenerar tipos TS desde la DB (opcional, ya versionados)
+npx supabase gen types typescript --local > types/database.ts
+
+# 6. Arrancar
+npm run dev   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Las API keys de Deepgram/OpenAI/Resend son **opcionales**: si se dejan vacías, la app funciona
+en modo demo (mock). Al añadirlas en `.env.local` se activan los proveedores reales.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Comando | Descripción |
+|---|---|
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Build de producción |
+| `npm run typecheck` | Chequeo de tipos |
+| `npm test` | Tests unitarios (Vitest) |
+| `npm run test:e2e` | Tests E2E (Playwright) — requiere Supabase local |
 
-## Learn More
+## Estructura
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/(auth)        Login / signup
+app/(app)         Rutas protegidas: dashboard, pacientes
+lib/crypto.ts     Cifrado AES-256-GCM
+lib/providers     Interfaces de transcripción/IA + mocks
+lib/supabase      Clientes server/browser/admin
+lib/db            Capa de datos por dominio (pacientes, audit)
+lib/auth.ts       Sesión y control de roles
+supabase/migrations  Schema, RLS multi-tenant, audit inmutable
+proxy.ts          Refresh de sesión + guard de rutas (Next 16)
+tests/            Vitest (unit + RLS) y Playwright (E2E)
+docs/             Spec, planes y diseño original
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Seguridad y cumplimiento
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Aislamiento por clínica** vía RLS (testeado en `tests/rls.test.ts`).
+- **PII cifrada** en reposo (AES-256-GCM) + TLS en tránsito.
+- **audit_logs inmutable** (solo INSERT; trigger bloquea UPDATE/DELETE).
+- **Consentimiento digital** con hash + firma + IP/UA (Ley 527).
+- El **audio nunca se persiste**: WebRTC → Deepgram directo; el servidor solo recibe texto.
+- Las sugerencias de IA **no constituyen diagnóstico** (disclaimers visibles).

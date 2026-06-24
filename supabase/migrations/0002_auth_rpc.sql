@@ -32,7 +32,7 @@ begin
   base_slug := regexp_replace(lower(trim(clinic_name)), '[^a-z0-9]+', '-', 'g');
   base_slug := trim(both '-' from base_slug);
   if base_slug = '' then base_slug := 'clinica'; end if;
-  final_slug := base_slug || '-' || substr(encode(gen_random_bytes(3), 'hex'), 1, 6);
+  final_slug := base_slug || '-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 6);
 
   insert into public.clinics (name, slug)
   values (clinic_name, final_slug)
