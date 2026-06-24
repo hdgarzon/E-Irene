@@ -5,6 +5,7 @@ import { groupByDay, formatTime } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AppointmentStatusMenu } from "@/components/appointment-status";
+import { ReminderButton } from "@/components/reminder-button";
 
 export default async function AppointmentsPage() {
   const appointments = await listAppointments();
@@ -68,6 +69,8 @@ export default async function AppointmentsPage() {
                     </div>
 
                     <AppointmentStatusMenu id={appt.id} status={appt.status} />
+
+                    <ReminderButton appointmentId={appt.id} />
 
                     <Link
                       href={`/appointments/${appt.id}/edit`}

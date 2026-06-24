@@ -13,6 +13,10 @@ import {
 } from "@/lib/db/consultations";
 import { createReport, updateSuggestion, validateReport } from "@/lib/db/reports";
 import { getAnalysisProvider } from "@/lib/providers";
+import { getPatient } from "@/lib/db/patients";
+import { recordNotification } from "@/lib/db/notifications";
+import { getEmailProvider } from "@/lib/email/providers";
+import { buildReportReadyEmail } from "@/lib/email/templates";
 import { logAudit } from "@/lib/db/audit";
 
 export async function startConsultationAction(patientId: string): Promise<void> {
@@ -113,6 +117,31 @@ export async function endConsultationAction(consultationId: string): Promise<voi
       entityId: report.id,
       metadata: { consultationId },
     });
+
+    // Aviso "reporte listo" al paciente (sin contenido clínico).
+    const patient = await getPatient(consultation.patientId);
+    if (patient?.email) {
+      try {
+        await getEmailProvider().send(
+          buildReportReadyEmail({
+            to: patient.email,
+            patientName: patient.fullName,
+            clinicName: user.clinicName,
+          }),
+        );
+        await recordNotification(user.clinicId, {
+          patientId: consultation.patientId,
+          type: "report_ready",
+          status: "sent",
+        });
+      } catch {
+        await recordNotification(user.clinicId, {
+          patientId: consultation.patientId,
+          type: "report_ready",
+          status: "failed",
+        });
+      }
+    }
   }
 
   redirect(`/consultations/${consultationId}`);

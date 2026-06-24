@@ -45,6 +45,17 @@ export function formatDayLabel(key: string): string {
   }).format(d);
 }
 
+/** Fecha completa legible: "lunes, 15 de enero de 2030". */
+export function formatFullDate(iso: string): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: TZ,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
 /** ISO → "YYYY-MM-DDTHH:mm" en Bogotá, para <input type="datetime-local">. */
 export function toInputDateTime(iso: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {

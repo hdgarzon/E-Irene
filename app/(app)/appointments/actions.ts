@@ -8,10 +8,15 @@ import {
   createAppointment,
   updateAppointment,
   setAppointmentStatus,
+  getAppointment,
   type AppointmentInput,
 } from "@/lib/db/appointments";
+import { getPatient } from "@/lib/db/patients";
+import { recordNotification } from "@/lib/db/notifications";
+import { getEmailProvider } from "@/lib/email/providers";
+import { buildReminderEmail } from "@/lib/email/templates";
 import { logAudit } from "@/lib/db/audit";
-import { fromInputDateTime } from "@/lib/dates";
+import { fromInputDateTime, formatFullDate, formatTime } from "@/lib/dates";
 
 export type AppointmentFormState = {
   error?: string;
@@ -106,6 +111,69 @@ export async function updateAppointmentAction(
 
   revalidatePath("/appointments");
   redirect("/appointments");
+}
+
+export type ReminderResult = { ok: boolean; message: string };
+
+export async function sendReminderAction(appointmentId: string): Promise<ReminderResult> {
+  const user = await requireUser();
+  const appt = await getAppointment(appointmentId);
+  if (!appt) return { ok: false, message: "Cita no encontrada." };
+
+  const patient = await getPatient(appt.patientId);
+  const to = patient?.email ?? null;
+  if (!to) {
+    await recordNotification(user.clinicId, {
+      patientId: appt.patientId,
+      appointmentId,
+      type: "appointment_reminder",
+      status: "failed",
+      payload: { reason: "sin_email" },
+    });
+    return { ok: false, message: "El paciente no tiene correo registrado." };
+  }
+
+  const provider = getEmailProvider();
+  try {
+    await provider.send(
+      buildReminderEmail({
+        to,
+        patientName: appt.patientName,
+        clinicName: user.clinicName,
+        dateLabel: formatFullDate(appt.scheduledAt),
+        timeLabel: formatTime(appt.scheduledAt),
+      }),
+    );
+    await recordNotification(user.clinicId, {
+      patientId: appt.patientId,
+      appointmentId,
+      type: "appointment_reminder",
+      status: "sent",
+      payload: { to, mode: provider.mode },
+    });
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "reminder.sent",
+      entityType: "appointment",
+      entityId: appointmentId,
+      metadata: { mode: provider.mode },
+    });
+  } catch {
+    await recordNotification(user.clinicId, {
+      patientId: appt.patientId,
+      appointmentId,
+      type: "appointment_reminder",
+      status: "failed",
+    });
+    return { ok: false, message: "No se pudo enviar el recordatorio." };
+  }
+
+  const note =
+    provider.mode === "log"
+      ? "Recordatorio simulado (modo demo). Conecta Resend para envío real."
+      : "Recordatorio enviado por correo.";
+  return { ok: true, message: note };
 }
 
 export async function setStatusAction(formData: FormData): Promise<void> {
