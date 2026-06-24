@@ -126,6 +126,15 @@ export async function endConsultation(consultationId: string): Promise<string> {
   return transcript;
 }
 
+export async function markConsultationAnalyzed(consultationId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("consultations")
+    .update({ status: "analyzed" })
+    .eq("id", consultationId);
+  if (error) throw error;
+}
+
 export async function getTranscript(consultationId: string): Promise<string | null> {
   const supabase = await createClient();
   const { data, error } = await supabase

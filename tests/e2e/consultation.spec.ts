@@ -47,9 +47,24 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
   await expect(page.getByText(/momentos aparece/)).toBeVisible();
 
-  // Finalizar
+  // Finalizar → genera reporte IA
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
+
+  // Reporte IA con sus secciones + disclaimer
+  await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Resumen ejecutivo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Análisis de sentimiento" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Nube de palabras/ })).toBeVisible();
+
+  // Editar la sugerencia y validar
+  await page.fill('textarea[name="suggestion"]', "Continuar con técnicas de respiración y registro de logros.");
+  await page.getByRole("button", { name: /guardar sugerencia/i }).click();
+  await expect(page.getByText("Guardado")).toBeVisible();
+
+  await page.getByRole("button", { name: /validar y firmar/i }).click();
+  await expect(page.getByText(/Reporte validado el/)).toBeVisible();
+
+  // Transcripción presente
   await expect(page.getByText("Transcripción")).toBeVisible();
-  await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
 });

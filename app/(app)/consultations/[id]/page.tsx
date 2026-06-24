@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getConsultation, getTranscript } from "@/lib/db/consultations";
+import { getReportByConsultation } from "@/lib/db/reports";
+import { ReportView } from "@/components/report-view";
 import { Badge } from "@/components/ui/badge";
 
 export default async function ConsultationPage({
@@ -12,7 +14,10 @@ export default async function ConsultationPage({
   const { id } = await params;
   const consultation = await getConsultation(id);
   if (!consultation) notFound();
-  const transcript = await getTranscript(id);
+  const [transcript, report] = await Promise.all([
+    getTranscript(id),
+    getReportByConsultation(id),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -36,7 +41,7 @@ export default async function ConsultationPage({
         <Badge className="bg-mint/15 text-[#04342a]">Finalizada</Badge>
       </div>
 
-      {/* El análisis con IA se inserta aquí en el Plan 5 */}
+      {report && <ReportView report={report} consultationId={id} />}
 
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <h2 className="mb-3 flex items-center gap-2 font-heading font-semibold text-navy">
