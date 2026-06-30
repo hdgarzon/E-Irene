@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MicOff, Square } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
+
+// URL inlineada aquí (no importada del barrel de providers, que arrastra
+// módulos Node.js incompatibles con el bundle del cliente).
+const DEEPGRAM_LISTEN_URL =
+  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true";
 import {
   appendChunkAction,
   endConsultationAction,
@@ -15,12 +20,22 @@ function mmss(total: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+interface DeepgramResult {
+  is_final?: boolean;
+  channel?: { alternatives?: { transcript?: string }[] };
+}
+
 export function LiveConsultation({
   consultationId,
   patientName,
+  transcriptionMode,
+  sessionToken,
 }: {
   consultationId: string;
   patientName: string;
+  /** "deepgram" usa streaming real navegador→Deepgram; "mock" reproduce un guion de demo. */
+  transcriptionMode: "mock" | "deepgram";
+  sessionToken?: string;
 }) {
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
   const [done, setDone] = useState(false);
@@ -28,9 +43,15 @@ export function LiveConsultation({
   const [micOk, setMicOk] = useState<boolean | null>(null);
   const [pending, startTransition] = useTransition();
   const streamRef = useRef<MediaStream | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const seqRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // ── Modo mock: guion simulado (sin micrófono real necesario) ──
   useEffect(() => {
+    if (transcriptionMode !== "mock") return;
+
     const md = navigator.mediaDevices;
     if (md?.getUserMedia) {
       md.getUserMedia({ audio: true })
@@ -59,20 +80,95 @@ export function LiveConsultation({
       void appendChunkAction(consultationId, { seq, speaker: line.speaker, text: line.text }).catch(
         () => {},
       );
-    }, 1400);
+    }, 700);
 
     return () => {
       clearInterval(streamer);
       clearInterval(clock);
     };
-  }, [consultationId]);
+  }, [transcriptionMode, consultationId]);
+
+  // ── Modo real: micrófono → MediaRecorder → WebSocket directo a Deepgram ──
+  useEffect(() => {
+    if (transcriptionMode !== "deepgram" || !sessionToken) return;
+
+    const clock = setInterval(() => setElapsed((e) => e + 1), 1000);
+    let cancelled = false;
+
+    async function start() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        setMicOk(true);
+
+        const ws = new WebSocket(DEEPGRAM_LISTEN_URL, ["token", sessionToken!]);
+        wsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          try {
+            const data: DeepgramResult = JSON.parse(event.data as string);
+            const text = data.channel?.alternatives?.[0]?.transcript?.trim();
+            if (data.is_final && text) {
+              const seq = seqRef.current++;
+              setChunks((prev) => [...prev, { speaker: "Transcripción", text }]);
+              void appendChunkAction(consultationId, { seq, speaker: "Transcripción", text }).catch(
+                () => {},
+              );
+            }
+          } catch {
+            // mensaje no-JSON (p.ej. control frames); se ignora.
+          }
+        };
+
+        ws.onopen = () => {
+          const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+          recorderRef.current = recorder;
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+          };
+          recorder.start(250);
+        };
+      } catch {
+        setMicOk(false);
+      }
+    }
+
+    void start();
+
+    return () => {
+      cancelled = true;
+      clearInterval(clock);
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        recorderRef.current.stop();
+      }
+      recorderRef.current = null;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [transcriptionMode, sessionToken, consultationId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [chunks]);
 
   function finalize() {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      recorderRef.current.stop();
+    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "CloseStream" }));
+      wsRef.current.close();
+    }
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    setDone(true);
     startTransition(() => endConsultationAction(consultationId));
   }
 
@@ -88,6 +184,9 @@ export function LiveConsultation({
               <>
                 <span className="inline-block size-2 animate-pulse rounded-full bg-destructive" />
                 Grabando · transcribiendo en vivo
+                {transcriptionMode === "deepgram" && (
+                  <span className="text-xs text-purple">(Deepgram)</span>
+                )}
               </>
             )}
           </p>

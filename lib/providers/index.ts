@@ -1,12 +1,15 @@
 import type { AnalysisProvider, TranscriptionProvider } from "./types";
 import { MockAnalysisProvider, MockTranscriptionProvider } from "./mock";
+import { OpenAIAnalysisProvider } from "./openai";
+import { DeepgramTranscriptionProvider } from "./deepgram";
 
 export * from "./types";
 
 /**
  * Factories env-driven. Por defecto devuelven el mock (la app corre sin keys).
- * Los adaptadores reales (Deepgram/OpenAI) se conectan en planes posteriores:
- * cuando existan, se eligen aquí según `*_PROVIDER` o la presencia de la API key.
+ * Con `OPENAI_API_KEY`/`DEEPGRAM_API_KEY` configuradas se activan los
+ * proveedores reales automáticamente; `*_PROVIDER=mock` fuerza el mock
+ * (usado por la suite de regresión E2E para que sea determinista y gratis).
  */
 
 export function getAnalysisProvider(): AnalysisProvider {
@@ -15,8 +18,7 @@ export function getAnalysisProvider(): AnalysisProvider {
   if (forced === "mock" || (!hasKey && forced !== "openai")) {
     return new MockAnalysisProvider();
   }
-  // TODO(plan-2): return new OpenAIAnalysisProvider() cuando esté implementado.
-  return new MockAnalysisProvider();
+  return new OpenAIAnalysisProvider();
 }
 
 export function getTranscriptionProvider(): TranscriptionProvider {
@@ -25,6 +27,5 @@ export function getTranscriptionProvider(): TranscriptionProvider {
   if (forced === "mock" || (!hasKey && forced !== "deepgram")) {
     return new MockTranscriptionProvider();
   }
-  // TODO(plan-2): return new DeepgramTranscriptionProvider() cuando esté implementado.
-  return new MockTranscriptionProvider();
+  return new DeepgramTranscriptionProvider();
 }

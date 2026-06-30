@@ -17,5 +17,9 @@ export default defineConfig({
     url: "http://127.0.0.1:3000",
     reuseExistingServer: true,
     timeout: 120_000,
+    // Fuerza los proveedores mock para la suite de regresión: determinista,
+    // sin red ni costo, sin importar si .env.local trae API keys reales.
+    // (Process env tiene prioridad sobre .env.local en Next.js.)
+    env: { ANALYSIS_PROVIDER: "mock", TRANSCRIPTION_PROVIDER: "mock" },
   },
 });
