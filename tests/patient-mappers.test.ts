@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import { encrypt } from "@/lib/crypto";
 import {
   encryptPatient,
   decryptPatient,
+  tryDecryptPatient,
   type PatientRow,
 } from "@/lib/db/patient-mappers";
 
@@ -56,5 +58,37 @@ describe("patient mappers (cifrado de PII)", () => {
     });
     expect(out.fullName).toBe("Solo Nombre");
     expect(out.document).toBeNull();
+  });
+});
+
+describe("tryDecryptPatient (tolerante a clave incorrecta)", () => {
+  it("descifra normalmente cuando el cifrado es válido", () => {
+    const enc = encryptPatient({ fullName: "Ana Gómez" });
+    const row: PatientRow = { id: "p1", created_at: "2026-06-23T00:00:00Z", ...enc };
+    expect(tryDecryptPatient(row)).toMatchObject({ id: "p1", fullName: "Ana Gómez" });
+  });
+
+  it("devuelve null (no lanza) si el cifrado no corresponde a la clave actual", () => {
+    // Simula datos cifrados con una ENCRYPTION_KEY distinta a la vigente
+    // (p. ej. tras rotar la clave sin migrar registros antiguos — el
+    // incidente real que motivó esta protección).
+    const otherKey = Buffer.from("b".repeat(32)).toString("base64");
+    const row: PatientRow = {
+      id: "p-huerfano",
+      created_at: "2026-06-23T00:00:00Z",
+      full_name_enc: encrypt("Paciente Antiguo", otherKey),
+      document_enc: null,
+      phone_enc: null,
+      email_enc: null,
+      notes_enc: null,
+      birth_date: null,
+      gender: null,
+    };
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => tryDecryptPatient(row)).not.toThrow();
+    expect(tryDecryptPatient(row)).toBeNull();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

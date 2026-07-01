@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   decryptPatient,
   encryptPatient,
+  tryDecryptPatient,
   type Patient,
   type PatientInput,
   type PatientRow,
@@ -18,10 +19,12 @@ export async function listPatients(): Promise<Patient[]> {
     .select(COLUMNS)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data as PatientRow[]).map(decryptPatient);
+  return (data as PatientRow[])
+    .map(tryDecryptPatient)
+    .filter((p): p is Patient => p !== null);
 }
 
-/** Obtiene un paciente por id (o null). */
+/** Obtiene un paciente por id (o null si no existe o no se puede descifrar). */
 export async function getPatient(id: string): Promise<Patient | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -30,7 +33,7 @@ export async function getPatient(id: string): Promise<Patient | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data ? decryptPatient(data as PatientRow) : null;
+  return data ? tryDecryptPatient(data as PatientRow) : null;
 }
 
 /** Crea un paciente con PII cifrada. `clinicId`/`createdBy` vienen de la sesión. */

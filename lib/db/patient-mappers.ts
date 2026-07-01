@@ -55,3 +55,18 @@ export function decryptPatient(row: PatientRow): Patient {
     createdAt: row.created_at,
   };
 }
+
+/**
+ * Descifra una fila; si falla (p. ej. datos cifrados con una ENCRYPTION_KEY
+ * distinta a la actual, como puede pasar si la clave se rota sin migrar los
+ * datos antiguos), se omite en vez de romper toda la página. Se registra en
+ * los logs del servidor para poder investigar/limpiar el registro afectado.
+ */
+export function tryDecryptPatient(row: PatientRow): Patient | null {
+  try {
+    return decryptPatient(row);
+  } catch (error) {
+    console.error(`[patients] no se pudo descifrar el paciente ${row.id}:`, error);
+    return null;
+  }
+}
