@@ -82,4 +82,16 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await expect(page).toHaveURL(/\/progress$/);
   await expect(page.getByText(/Evolución del sentimiento/)).toBeVisible();
   await expect(page.getByText(/1 sesión analizada/)).toBeVisible();
+
+  // Vista global de Consultas: aparece la consulta recién analizada
+  await page.goto("/consultations");
+  await expect(page.getByText("Pedro Silva")).toBeVisible();
+  await expect(page.getByText("Analizada", { exact: true })).toBeVisible();
+  await page.getByText("Pedro Silva").click();
+  await expect(page).toHaveURL(new RegExp(`/consultations/${consultationId}$`));
+
+  // Vista global de Reportes: aparece el reporte, ya validado
+  await page.goto("/reports");
+  await expect(page.getByText("Pedro Silva")).toBeVisible();
+  await expect(page.getByText(/Validado/)).toBeVisible();
 });

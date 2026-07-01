@@ -35,13 +35,27 @@ function mapRow(r: ConsultationRow): Consultation {
   return {
     id: r.id,
     patientId: r.patient_id,
-    patientName: r.patients ? decrypt(r.patients.full_name_enc) : "—",
+    patientName: safeDecryptName(r.patients?.full_name_enc),
     doctorId: r.doctor_id,
     doctorName: r.doctor?.full_name ?? "—",
     status: r.status,
     startedAt: r.started_at,
     endedAt: r.ended_at,
   };
+}
+
+/**
+ * Descifra el nombre del paciente sin lanzar: si el cifrado no corresponde a
+ * la clave actual (p. ej. tras rotar ENCRYPTION_KEY sin migrar datos
+ * antiguos), muestra un placeholder en vez de romper toda la lista.
+ */
+function safeDecryptName(fullNameEnc: string | null | undefined): string {
+  if (!fullNameEnc) return "—";
+  try {
+    return decrypt(fullNameEnc);
+  } catch {
+    return "(nombre no disponible)";
+  }
 }
 
 export async function startConsultation(
@@ -69,6 +83,17 @@ export async function getConsultation(id: string): Promise<Consultation | null> 
   const { data, error } = await supabase.from("consultations").select(SELECT).eq("id", id).maybeSingle();
   if (error) throw error;
   return data ? mapRow(data as unknown as ConsultationRow) : null;
+}
+
+/** Todas las consultas de la clínica del usuario (RLS scoped), más recientes primero. */
+export async function listConsultations(): Promise<Consultation[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("consultations")
+    .select(SELECT)
+    .order("started_at", { ascending: false });
+  if (error) throw error;
+  return (data as unknown as ConsultationRow[]).map(mapRow);
 }
 
 export async function listConsultationsForPatient(patientId: string): Promise<Consultation[]> {

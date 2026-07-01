@@ -73,6 +73,77 @@ export async function getReportByConsultation(consultationId: string): Promise<R
   return data ? mapRow(data as ReportRow) : null;
 }
 
+export interface ReportListItem {
+  id: string;
+  consultationId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+  sentimentLabel: ReportPayload["sentiment"]["label"];
+  sentimentScore: number;
+  validated: boolean;
+}
+
+/**
+ * Todos los reportes de la clínica del usuario (RLS scoped), más recientes
+ * primero. Si el payload de un reporte no descifra con la clave actual
+ * (p. ej. tras rotar ENCRYPTION_KEY sin migrar datos antiguos), se omite en
+ * vez de romper toda la lista; se registra en los logs del servidor.
+ */
+export async function listReports(): Promise<ReportListItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      "id, consultation_id, patient_id, payload_enc, validated_at, created_at, " +
+        "patients!reports_patient_id_fkey(full_name_enc), " +
+        "consultations!reports_consultation_id_fkey(started_at)",
+    )
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = data as unknown as {
+    id: string;
+    consultation_id: string;
+    patient_id: string;
+    payload_enc: string;
+    validated_at: string | null;
+    created_at: string;
+    patients: { full_name_enc: string } | null;
+    consultations: { started_at: string } | null;
+  }[];
+
+  const items: ReportListItem[] = [];
+  for (const r of rows) {
+    let payload: ReportPayload;
+    try {
+      payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
+    } catch (error) {
+      console.error(`[reports] no se pudo descifrar el reporte ${r.id}:`, error);
+      continue;
+    }
+    let patientName = "(nombre no disponible)";
+    if (r.patients?.full_name_enc) {
+      try {
+        patientName = decrypt(r.patients.full_name_enc);
+      } catch {
+        // se mantiene el placeholder
+      }
+    }
+    items.push({
+      id: r.id,
+      consultationId: r.consultation_id,
+      patientId: r.patient_id,
+      patientName,
+      date: r.consultations?.started_at ?? r.created_at,
+      sentimentLabel: payload.sentiment.label,
+      sentimentScore: payload.sentiment.score,
+      validated: Boolean(r.validated_at),
+    });
+  }
+  return items;
+}
+
 /** Reportes del paciente (descifrados) con la fecha de su consulta, cronológico. */
 export async function listReportsForPatient(
   patientId: string,
