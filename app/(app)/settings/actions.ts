@@ -60,7 +60,8 @@ export async function addMemberAction(
       entityType: "user",
       metadata: { role: parsed.data.role },
     });
-  } catch {
+  } catch (error) {
+    console.error("[settings] no se pudo crear el miembro:", error);
     return { error: "No se pudo crear el miembro. ¿El correo ya está registrado?" };
   }
 
