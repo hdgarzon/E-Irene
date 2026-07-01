@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Configurar Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Levanta Postgres + Auth + Storage locales (Docker) con el schema y
+      # las políticas RLS del proyecto — la misma base que se usa en dev.
+      - name: Levantar Supabase local
+        run: supabase start
+
+      # Las credenciales locales son deterministas (config.toml del repo);
+      # no son secretos, solo funcionan contra el contenedor efímero de este job.
+      - name: Configurar variables de entorno
+        run: |
+          STATUS=$(supabase status -o env)
+          API_URL=$(echo "$STATUS" | grep '^API_URL=' | cut -d'"' -f2)
+          PUBLISHABLE_KEY=$(echo "$STATUS" | grep '^PUBLISHABLE_KEY=' | cut -d'"' -f2)
+          SECRET_KEY=$(echo "$STATUS" | grep '^SECRET_KEY=' | cut -d'"' -f2)
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
+            echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+          } >> "$GITHUB_ENV"
+
+      # Sin OPENAI_API_KEY/DEEPGRAM_API_KEY: los proveedores mock se activan
+      # solos (misma lógica que en dev/prod) — sin costo, determinista.
+      - name: Tests unitarios (incluye aislamiento RLS multi-tenant)
+        run: npm test
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Instalar navegadores de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests E2E
+        run: npm run test:e2e
+
+      - name: Subir reporte de Playwright si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
