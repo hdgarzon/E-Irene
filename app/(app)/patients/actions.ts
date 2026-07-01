@@ -23,6 +23,10 @@ const patientSchema = z.object({
   birthDate: z.string().optional(),
   gender: z.string().optional(),
   notes: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
+  emergencyContactRelationship: z.string().optional(),
+  history: z.string().optional(),
 });
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -44,6 +48,10 @@ function toInput(data: z.infer<typeof patientSchema>): PatientInput {
     birthDate: clean(data.birthDate),
     gender: clean(data.gender),
     notes: clean(data.notes),
+    emergencyContactName: clean(data.emergencyContactName),
+    emergencyContactPhone: clean(data.emergencyContactPhone),
+    emergencyContactRelationship: clean(data.emergencyContactRelationship),
+    history: clean(data.history),
   };
 }
 
@@ -56,6 +64,10 @@ function parseForm(formData: FormData) {
     birthDate: formData.get("birthDate"),
     gender: formData.get("gender"),
     notes: formData.get("notes"),
+    emergencyContactName: formData.get("emergencyContactName"),
+    emergencyContactPhone: formData.get("emergencyContactPhone"),
+    emergencyContactRelationship: formData.get("emergencyContactRelationship"),
+    history: formData.get("history"),
   });
 }
 

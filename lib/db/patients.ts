@@ -9,7 +9,8 @@ import {
 } from "./patient-mappers";
 
 const COLUMNS =
-  "id, full_name_enc, document_enc, phone_enc, email_enc, notes_enc, birth_date, gender, created_at";
+  "id, full_name_enc, document_enc, phone_enc, email_enc, notes_enc, birth_date, gender, created_at, " +
+  "emergency_contact_name_enc, emergency_contact_phone_enc, emergency_contact_relationship_enc, history_enc";
 
 /** Lista los pacientes de la clínica del usuario (RLS scoped). */
 export async function listPatients(): Promise<Patient[]> {
@@ -19,7 +20,7 @@ export async function listPatients(): Promise<Patient[]> {
     .select(COLUMNS)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data as PatientRow[])
+  return (data as unknown as PatientRow[])
     .map(tryDecryptPatient)
     .filter((p): p is Patient => p !== null);
 }
@@ -33,7 +34,7 @@ export async function getPatient(id: string): Promise<Patient | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data ? tryDecryptPatient(data as PatientRow) : null;
+  return data ? tryDecryptPatient(data as unknown as PatientRow) : null;
 }
 
 /** Crea un paciente con PII cifrada. `clinicId`/`createdBy` vienen de la sesión. */
@@ -49,7 +50,7 @@ export async function createPatient(
     .select(COLUMNS)
     .single();
   if (error) throw error;
-  return decryptPatient(data as PatientRow);
+  return decryptPatient(data as unknown as PatientRow);
 }
 
 /** Actualiza un paciente (re-cifra los campos sensibles). */
@@ -62,5 +63,5 @@ export async function updatePatient(id: string, input: PatientInput): Promise<Pa
     .select(COLUMNS)
     .single();
   if (error) throw error;
-  return decryptPatient(data as PatientRow);
+  return decryptPatient(data as unknown as PatientRow);
 }

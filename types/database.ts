@@ -461,8 +461,12 @@ export type Database = {
           created_by: string | null
           document_enc: string | null
           email_enc: string | null
+          emergency_contact_name_enc: string | null
+          emergency_contact_phone_enc: string | null
+          emergency_contact_relationship_enc: string | null
           full_name_enc: string
           gender: string | null
+          history_enc: string | null
           id: string
           notes_enc: string | null
           phone_enc: string | null
@@ -475,8 +479,12 @@ export type Database = {
           created_by?: string | null
           document_enc?: string | null
           email_enc?: string | null
+          emergency_contact_name_enc?: string | null
+          emergency_contact_phone_enc?: string | null
+          emergency_contact_relationship_enc?: string | null
           full_name_enc: string
           gender?: string | null
+          history_enc?: string | null
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
@@ -489,8 +497,12 @@ export type Database = {
           created_by?: string | null
           document_enc?: string | null
           email_enc?: string | null
+          emergency_contact_name_enc?: string | null
+          emergency_contact_phone_enc?: string | null
+          emergency_contact_relationship_enc?: string | null
           full_name_enc?: string
           gender?: string | null
+          history_enc?: string | null
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null

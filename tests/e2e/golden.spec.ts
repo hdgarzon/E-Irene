@@ -12,16 +12,25 @@ test("camino dorado: signup → dashboard → crear paciente → lista", async (
   await expect(page.getByText(/Hola,/)).toBeVisible();
   await expect(page.getByText("Clínica E2E").first()).toBeVisible();
 
-  // 3. Crea un paciente
+  // 3. Crea un paciente, con antecedentes y contacto de emergencia
   await page.goto("/patients/new");
   await page.fill("#fullName", "Juan Pérez E2E");
   await page.fill("#document", "CC987654");
   await page.fill("#phone", "3007654321");
+  await page.fill("#history", "Hipertensión controlada, sin alergias conocidas.");
+  await page.fill("#emergencyContactName", "María Pérez");
+  await page.fill("#emergencyContactPhone", "3011112222");
+  await page.fill("#emergencyContactRelationship", "Madre");
   await page.getByRole("button", { name: /crear paciente/i }).click();
 
   // 4. Ficha del paciente con sus datos descifrados
   await expect(page.getByRole("heading", { name: "Juan Pérez E2E" })).toBeVisible();
   await expect(page.getByText("CC987654")).toBeVisible();
+  await expect(page.getByText(/Hipertensión controlada/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Contacto de emergencia" })).toBeVisible();
+  await expect(page.getByText("María Pérez")).toBeVisible();
+  await expect(page.getByText("3011112222")).toBeVisible();
+  await expect(page.getByText("Madre")).toBeVisible();
 
   // 5. Aparece en la lista
   await page.goto("/patients");

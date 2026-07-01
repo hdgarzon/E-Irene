@@ -10,6 +10,8 @@ import {
   FileSignature,
   ShieldCheck,
   TrendingUp,
+  Siren,
+  ClipboardList,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
@@ -91,6 +93,34 @@ export default async function PatientDetailPage({
         <div className="rounded-2xl border border-gray-line bg-card p-6">
           <h2 className="mb-2 font-heading font-semibold text-navy">Notas clínicas</h2>
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">{patient.notes}</p>
+        </div>
+      )}
+
+      {patient.history && (
+        <div className="rounded-2xl border border-gray-line bg-card p-6">
+          <h2 className="mb-2 flex items-center gap-2 font-heading font-semibold text-navy">
+            <ClipboardList className="size-4 text-purple" />
+            Antecedentes básicos
+          </h2>
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{patient.history}</p>
+        </div>
+      )}
+
+      {(patient.emergencyContactName || patient.emergencyContactPhone) && (
+        <div className="rounded-2xl border border-gray-line bg-card p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+            <Siren className="size-4 text-coral" />
+            Contacto de emergencia
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <InfoRow icon={IdCard} label="Nombre" value={patient.emergencyContactName} />
+            <InfoRow icon={Phone} label="Teléfono" value={patient.emergencyContactPhone} />
+            <InfoRow
+              icon={ShieldCheck}
+              label="Parentesco / relación"
+              value={patient.emergencyContactRelationship}
+            />
+          </div>
         </div>
       )}
 

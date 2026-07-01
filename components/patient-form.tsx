@@ -78,10 +78,54 @@ export function PatientForm({
       <div className="space-y-1.5">
         <Label htmlFor="notes">Notas clínicas iniciales</Label>
         <Textarea id="notes" name="notes" rows={4} defaultValue={d.notes ?? ""} />
-        <p className="text-xs text-muted-foreground">
-          🔒 Toda la información del paciente se guarda cifrada (AES-256).
-        </p>
       </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="history">Antecedentes básicos</Label>
+        <Textarea
+          id="history"
+          name="history"
+          rows={3}
+          defaultValue={d.history ?? ""}
+          placeholder="Alergias, medicación actual, diagnósticos o tratamientos previos…"
+        />
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-gray-line p-4">
+        <p className="text-sm font-medium text-navy">Contacto de emergencia</p>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="emergencyContactName">Nombre</Label>
+            <Input
+              id="emergencyContactName"
+              name="emergencyContactName"
+              defaultValue={d.emergencyContactName ?? ""}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="emergencyContactPhone">Teléfono</Label>
+            <Input
+              id="emergencyContactPhone"
+              name="emergencyContactPhone"
+              defaultValue={d.emergencyContactPhone ?? ""}
+              inputMode="tel"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="emergencyContactRelationship">Parentesco / relación</Label>
+          <Input
+            id="emergencyContactRelationship"
+            name="emergencyContactRelationship"
+            defaultValue={d.emergencyContactRelationship ?? ""}
+            placeholder="Madre, pareja, amigo…"
+          />
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        🔒 Toda la información del paciente se guarda cifrada (AES-256).
+      </p>
 
       {state.error && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">

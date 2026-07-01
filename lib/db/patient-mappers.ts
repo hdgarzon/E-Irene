@@ -8,6 +8,10 @@ export interface PatientInput {
   notes?: string | null;
   birthDate?: string | null;
   gender?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
+  history?: string | null;
 }
 
 export interface Patient extends PatientInput {
@@ -26,6 +30,10 @@ export interface PatientRow {
   birth_date: string | null;
   gender: string | null;
   created_at: string;
+  emergency_contact_name_enc?: string | null;
+  emergency_contact_phone_enc?: string | null;
+  emergency_contact_relationship_enc?: string | null;
+  history_enc?: string | null;
 }
 
 /** Datos en claro → columnas cifradas listas para insertar/actualizar. */
@@ -38,6 +46,10 @@ export function encryptPatient(input: PatientInput) {
     notes_enc: encryptNullable(input.notes),
     birth_date: input.birthDate ?? null,
     gender: input.gender ?? null,
+    emergency_contact_name_enc: encryptNullable(input.emergencyContactName),
+    emergency_contact_phone_enc: encryptNullable(input.emergencyContactPhone),
+    emergency_contact_relationship_enc: encryptNullable(input.emergencyContactRelationship),
+    history_enc: encryptNullable(input.history),
   };
 }
 
@@ -53,6 +65,10 @@ export function decryptPatient(row: PatientRow): Patient {
     birthDate: row.birth_date,
     gender: row.gender,
     createdAt: row.created_at,
+    emergencyContactName: decryptNullable(row.emergency_contact_name_enc ?? null),
+    emergencyContactPhone: decryptNullable(row.emergency_contact_phone_enc ?? null),
+    emergencyContactRelationship: decryptNullable(row.emergency_contact_relationship_enc ?? null),
+    history: decryptNullable(row.history_enc ?? null),
   };
 }
 

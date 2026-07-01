@@ -35,6 +35,10 @@ describe("patient mappers (cifrado de PII)", () => {
       notes: "Ansiedad laboral",
       birthDate: "1990-05-12",
       gender: "F",
+      emergencyContactName: "Luis Gómez",
+      emergencyContactPhone: "3009876543",
+      emergencyContactRelationship: "Hermano",
+      history: "Alergia a la penicilina.",
     };
     const enc = encryptPatient(input);
     const row: PatientRow = {
