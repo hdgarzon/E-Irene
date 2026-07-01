@@ -58,6 +58,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#7a2020",
   },
+  doctorNotesBox: {
+    backgroundColor: "#f0f4f8",
+    borderLeft: "3px solid #635bff",
+    padding: 8,
+    marginTop: 4,
+  },
   riskBox: {
     backgroundColor: "#fff1f1",
     border: "1px solid #ff6b6b",
@@ -175,6 +181,16 @@ function ReportDocument({ data }: { data: PdfData }) {
           Este análisis es generado por IA como apoyo clínico. NO constituye un diagnóstico médico
           ni psicológico y debe ser interpretado y validado por el profesional tratante.
         </Text>
+
+        {/* Notas del profesional — texto propio del doctor, no generado por IA */}
+        {report.doctorNotes && (
+          <>
+            <Text style={styles.sectionTitle}>Notas del profesional</Text>
+            <View style={styles.doctorNotesBox}>
+              <Text>{report.doctorNotes}</Text>
+            </View>
+          </>
+        )}
 
         {/* 8. Firma / validación */}
         <View style={styles.sign}>

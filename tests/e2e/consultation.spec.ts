@@ -52,10 +52,24 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await expect(page.getByRole("heading", { name: "Análisis de sentimiento" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Nube de palabras/ })).toBeVisible();
 
+  // Sin alertas de riesgo (transcripción demo benigna)
+  await expect(page.getByText(/No se identificaron alertas de riesgo/)).toBeVisible();
+
   // Editar la sugerencia y validar
   await page.fill('textarea[name="suggestion"]', "Continuar con técnicas de respiración y registro de logros.");
   await page.getByRole("button", { name: /guardar sugerencia/i }).click();
   await expect(page.getByText("Guardado")).toBeVisible();
+
+  // Notas privadas del profesional (no generadas por IA) — persisten tras recargar
+  await page.fill('textarea[name="notes"]', "Paciente colabora bien, evaluar remisión a psiquiatría si no mejora.");
+  await page.getByRole("button", { name: /guardar notas/i }).click();
+  await expect(page.getByText("Guardado").last()).toBeVisible();
+  await expect(async () => {
+    await page.reload();
+    await expect(page.locator('textarea[name="notes"]')).toHaveValue(
+      "Paciente colabora bien, evaluar remisión a psiquiatría si no mejora.",
+    );
+  }).toPass({ timeout: 15_000 });
 
   await page.getByRole("button", { name: /validar y firmar/i }).click();
   await expect(page.getByText(/Reporte validado el/)).toBeVisible();

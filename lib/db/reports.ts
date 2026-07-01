@@ -8,6 +8,7 @@ export interface Report {
   patientId: string;
   payload: ReportPayload;
   doctorEdited: boolean;
+  doctorNotes: string | null;
   validatedAt: string | null;
   validatedBy: string | null;
   pdfPath: string | null;
@@ -20,6 +21,7 @@ interface ReportRow {
   patient_id: string;
   payload_enc: string;
   doctor_edited: boolean;
+  doctor_notes_enc: string | null;
   validated_at: string | null;
   validated_by: string | null;
   pdf_path: string | null;
@@ -33,6 +35,7 @@ function mapRow(r: ReportRow): Report {
     patientId: r.patient_id,
     payload: reportSchema.parse(JSON.parse(decrypt(r.payload_enc))),
     doctorEdited: r.doctor_edited,
+    doctorNotes: r.doctor_notes_enc ? decrypt(r.doctor_notes_enc) : null,
     validatedAt: r.validated_at,
     validatedBy: r.validated_by,
     pdfPath: r.pdf_path,
@@ -41,7 +44,7 @@ function mapRow(r: ReportRow): Report {
 }
 
 const COLS =
-  "id, consultation_id, patient_id, payload_enc, doctor_edited, validated_at, validated_by, pdf_path, created_at";
+  "id, consultation_id, patient_id, payload_enc, doctor_edited, doctor_notes_enc, validated_at, validated_by, pdf_path, created_at";
 
 export async function createReport(
   clinicId: string,
@@ -187,6 +190,20 @@ export async function updateSuggestion(reportId: string, suggestion: string): Pr
   const { error } = await supabase
     .from("reports")
     .update({ payload_enc: encrypt(JSON.stringify(payload)), doctor_edited: true })
+    .eq("id", reportId);
+  if (error) throw error;
+}
+
+/**
+ * Notas privadas del profesional sobre la sesión — texto libre, escrito por
+ * el doctor (no generado por IA), parte de la historia clínica. Vacío borra
+ * las notas.
+ */
+export async function updateDoctorNotes(reportId: string, notes: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("reports")
+    .update({ doctor_notes_enc: notes ? encrypt(notes) : null })
     .eq("id", reportId);
   if (error) throw error;
 }

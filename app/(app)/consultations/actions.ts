@@ -11,7 +11,7 @@ import {
   getConsultation,
   markConsultationAnalyzed,
 } from "@/lib/db/consultations";
-import { createReport, updateSuggestion, validateReport } from "@/lib/db/reports";
+import { createReport, updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
 import { getAnalysisProvider } from "@/lib/providers";
 import { getPatient } from "@/lib/db/patients";
 import { recordNotification } from "@/lib/db/notifications";
@@ -70,6 +70,32 @@ export async function updateSuggestionAction(
     });
   } catch {
     return { error: "No se pudo guardar la sugerencia." };
+  }
+  revalidatePath(`/consultations/${consultationId}`);
+  return { ok: true };
+}
+
+export type DoctorNotesState = { ok?: boolean; error?: string };
+
+export async function updateDoctorNotesAction(
+  reportId: string,
+  consultationId: string,
+  _prev: DoctorNotesState,
+  formData: FormData,
+): Promise<DoctorNotesState> {
+  const user = await requireUser();
+  const notes = String(formData.get("notes") ?? "").trim();
+  try {
+    await updateDoctorNotes(reportId, notes);
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "report.doctor_notes_edited",
+      entityType: "report",
+      entityId: reportId,
+    });
+  } catch {
+    return { error: "No se pudieron guardar las notas." };
   }
   revalidatePath(`/consultations/${consultationId}`);
   return { ok: true };

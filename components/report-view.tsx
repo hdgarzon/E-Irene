@@ -1,8 +1,9 @@
-import { AlertTriangle, BadgeCheck, BrainCircuit, ShieldAlert } from "lucide-react";
+import { AlertTriangle, BadgeCheck, BrainCircuit, NotebookPen, ShieldAlert } from "lucide-react";
 import type { Report } from "@/lib/db/reports";
 import type { RiskFlags } from "@/lib/providers/types";
 import { validateReportAction } from "@/app/(app)/consultations/actions";
 import { SuggestionEditor } from "@/components/suggestion-editor";
+import { DoctorNotesEditor } from "@/components/doctor-notes-editor";
 import { Button } from "@/components/ui/button";
 
 const SENTIMENT_COLOR: Record<string, string> = {
@@ -205,6 +206,18 @@ export function ReportView({
           consultationId={consultationId}
           suggestion={payload.suggestion}
           doctorEdited={report.doctorEdited}
+        />
+      </Section>
+
+      <Section title="Notas privadas del profesional">
+        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <NotebookPen className="size-3.5" />
+          Escritas por ti — no generadas por IA, no visibles para el paciente.
+        </div>
+        <DoctorNotesEditor
+          reportId={report.id}
+          consultationId={consultationId}
+          notes={report.doctorNotes}
         />
       </Section>
 

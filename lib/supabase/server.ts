@@ -29,6 +29,14 @@ export async function createClient() {
           }
         },
       },
+      global: {
+        // Sin esto, las peticiones de Supabase pasan por el fetch parcheado
+        // de Next.js y pueden quedar atrapadas en su Data Cache — un GET
+        // recién hecho después de guardar (Server Action + revalidatePath)
+        // puede devolver datos desactualizados. cache: "no-store" fuerza a
+        // que cada request a Supabase sea siempre fresca.
+        fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+      },
     },
   );
 }
