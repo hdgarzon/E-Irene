@@ -59,7 +59,8 @@ export async function signConsentAction(
       entityId: consent.id,
       metadata: { patientId },
     });
-  } catch {
+  } catch (error) {
+    console.error("[consent] no se pudo registrar el consentimiento:", error);
     return { error: "No se pudo registrar el consentimiento. Intenta de nuevo." };
   }
 
