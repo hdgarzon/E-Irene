@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 async function signConsent(page: import("@playwright/test").Page) {
   const canvas = page.locator("canvas");
@@ -19,13 +20,7 @@ async function signConsent(page: import("@playwright/test").Page) {
 
 test("consulta: consentimiento → grabar → transcribir → finalizar", async ({ page }) => {
   const email = `cons_${Date.now()}@e-irene.test`;
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica Consulta");
-  await page.fill("#fullName", "Dra. Live");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await signUpAndActivate(page, { clinicName: "Clínica Consulta", fullName: "Dra. Live", email });
 
   await page.goto("/patients/new");
   await page.fill("#fullName", "Pedro Silva");

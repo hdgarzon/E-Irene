@@ -1,15 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 test("camino dorado: signup → dashboard → crear paciente → lista", async ({ page }) => {
   const email = `e2e_${Date.now()}@e-irene.test`;
 
-  // 1. Signup (crea clínica + admin)
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica E2E");
-  await page.fill("#fullName", "Dra. Prueba");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
+  // 1. Signup vía magic link (crea clínica + admin tras activar)
+  await signUpAndActivate(page, { clinicName: "Clínica E2E", fullName: "Dra. Prueba", email });
 
   // 2. Llega al dashboard autenticado
   await expect(page).toHaveURL(/\/dashboard/);

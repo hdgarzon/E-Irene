@@ -13,6 +13,18 @@ export function SignupForm() {
     {},
   );
 
+  if (state.success) {
+    return (
+      <div className="space-y-3 text-center">
+        <h2 className="text-lg font-semibold">Revisa tu correo</h2>
+        <p className="text-sm text-muted-foreground">
+          Enviamos un enlace de activación a <strong>{state.email}</strong>. Ábrelo para
+          confirmar tu cuenta y elegir una contraseña.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-1.5">
@@ -39,15 +51,6 @@ export function SignupForm() {
         )}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Contraseña</Label>
-        <Input id="password" name="password" type="password" autoComplete="new-password" required />
-        {state.fieldErrors?.password && (
-          <p className="text-sm text-destructive">{state.fieldErrors.password}</p>
-        )}
-        <p className="text-xs text-muted-foreground">Mínimo 8 caracteres.</p>
-      </div>
-
       {state.error && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {state.error}
@@ -55,7 +58,7 @@ export function SignupForm() {
       )}
 
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Creando cuenta…" : "Crear cuenta gratis"}
+        {pending ? "Enviando enlace…" : "Crear cuenta gratis"}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">

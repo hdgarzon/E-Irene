@@ -1,14 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 test("recordatorio de cita muestra confirmación (modo demo)", async ({ page }) => {
   const email = `rem_${Date.now()}@e-irene.test`;
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica Recordatorio");
-  await page.fill("#fullName", "Dra. Mail");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await signUpAndActivate(page, { clinicName: "Clínica Recordatorio", fullName: "Dra. Mail", email });
 
   // Paciente con correo
   await page.goto("/patients/new");

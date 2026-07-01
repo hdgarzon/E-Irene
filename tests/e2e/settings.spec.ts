@@ -1,14 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 test("configuración: cambiar plan y agregar miembro al equipo", async ({ page }) => {
   const email = `set_${Date.now()}@e-irene.test`;
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica Config");
-  await page.fill("#fullName", "Dra. Admin");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await signUpAndActivate(page, { clinicName: "Clínica Config", fullName: "Dra. Admin", email });
 
   // Settings hub → plan Free por defecto
   await page.goto("/settings");

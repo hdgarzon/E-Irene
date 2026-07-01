@@ -1,15 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 test("capturar consentimiento: pendiente → firmar → firmado", async ({ page }) => {
   const email = `consent_${Date.now()}@e-irene.test`;
 
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica Consent");
-  await page.fill("#fullName", "Dra. Consent");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await signUpAndActivate(page, { clinicName: "Clínica Consent", fullName: "Dra. Consent", email });
 
   // Paciente
   await page.goto("/patients/new");

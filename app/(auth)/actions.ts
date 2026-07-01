@@ -3,15 +3,18 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
-export type AuthState = { error?: string; fieldErrors?: Record<string, string> };
+export type AuthState = {
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  success?: boolean;
+  email?: string;
+};
 
 const signUpSchema = z.object({
   clinicName: z.string().min(2, "Nombre de clínica muy corto"),
   fullName: z.string().min(2, "Ingresa tu nombre completo"),
   email: z.email("Correo inválido"),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
 });
 
 const signInSchema = z.object({
@@ -36,7 +39,6 @@ export async function signUpAction(
     clinicName: formData.get("clinicName"),
     fullName: formData.get("fullName"),
     email: formData.get("email"),
-    password: formData.get("password"),
   });
   if (!parsed.success) {
     return { fieldErrors: flattenFieldErrors(parsed.error) };
@@ -44,34 +46,21 @@ export async function signUpAction(
 
   const supabase = await createClient();
 
-  // Creamos el usuario ya confirmado vía admin (no envía correo → evita el
-  // rate limit de email y funciona aunque el proyecto exija confirmación).
-  const admin = createAdminClient();
-  const { error: createError } = await admin.auth.admin.createUser({
+  // Envía un magic link para confirmar el correo. clinic_name/full_name viajan
+  // como metadata del usuario solo para prellenar el paso de "fijar contraseña"
+  // tras la activación — no se usan para decisiones de autorización.
+  const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
-    password: parsed.data.password,
-    email_confirm: true,
+    options: {
+      data: {
+        clinic_name: parsed.data.clinicName,
+        full_name: parsed.data.fullName,
+      },
+    },
   });
-  if (createError) {
-    const dup = /already|registered|exists/i.test(createError.message);
-    return { error: dup ? "Ese correo ya está registrado." : createError.message };
-  }
+  if (error) return { error: error.message };
 
-  // Abrimos sesión para fijar las cookies del usuario.
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: parsed.data.email,
-    password: parsed.data.password,
-  });
-  if (signInError) return { error: "No se pudo iniciar sesión tras el registro." };
-
-  // Con la sesión ya activa, crea la clínica + perfil admin de forma atómica.
-  const { error: rpcError } = await supabase.rpc("create_clinic_and_admin", {
-    clinic_name: parsed.data.clinicName,
-    full_name: parsed.data.fullName,
-  });
-  if (rpcError) return { error: rpcError.message };
-
-  redirect("/dashboard");
+  return { success: true, email: parsed.data.email };
 }
 
 export async function signInAction(

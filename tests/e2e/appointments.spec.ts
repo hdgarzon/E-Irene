@@ -1,16 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { signUpAndActivate } from "./helpers/signup";
 
 test("crear paciente → agendar cita → aparece en agenda → cambiar estado", async ({ page }) => {
   const email = `appt_${Date.now()}@e-irene.test`;
 
   // Signup
-  await page.goto("/signup");
-  await page.fill("#clinicName", "Clínica Citas");
-  await page.fill("#fullName", "Dra. Agenda");
-  await page.fill("#email", email);
-  await page.fill("#password", "Password123!");
-  await page.getByRole("button", { name: /crear cuenta/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await signUpAndActivate(page, { clinicName: "Clínica Citas", fullName: "Dra. Agenda", email });
 
   // Paciente
   await page.goto("/patients/new");
