@@ -30,6 +30,8 @@ describe.runIf(hasOpenAI)("OpenAIAnalysisProvider (real)", () => {
     expect(report.keywords.length).toBeGreaterThan(0);
     expect(["negativo", "neutral", "positivo"]).toContain(report.sentiment.label);
     expect(report.suggestion.length).toBeGreaterThan(10);
+    expect(report.riskFlags).toBeDefined();
+    expect(report.riskFlags!.suicidal_ideation.level).toBe("ninguno");
   }, 30_000);
 });
 

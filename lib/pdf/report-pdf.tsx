@@ -25,6 +25,19 @@ const PATTERN_LABEL: Record<string, string> = {
   intensidad_emocional: "Intensidad emocional",
 };
 
+const RISK_LABEL: Record<string, string> = {
+  suicidal_ideation: "Ideación suicida",
+  self_harm: "Autolesión",
+  substance_use: "Consumo de sustancias",
+  risk_to_others: "Riesgo a terceros",
+};
+
+const RISK_LEVEL_COLOR: Record<string, string> = {
+  bajo: "#b7791f",
+  moderado: "#ff6b6b",
+  alto: "#c0392b",
+};
+
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, color: "#0a2540", lineHeight: 1.5 },
   brandBar: { height: 4, backgroundColor: "#635bff", marginBottom: 16 },
@@ -45,6 +58,24 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#7a2020",
   },
+  riskBox: {
+    backgroundColor: "#fff1f1",
+    border: "1px solid #ff6b6b",
+    borderRadius: 4,
+    padding: 8,
+    marginTop: 12,
+  },
+  riskTitle: { fontSize: 11, fontWeight: 700, color: "#7a2020", marginBottom: 4 },
+  riskItem: { marginBottom: 3 },
+  riskLabel: { fontWeight: 700 },
+  riskNone: {
+    backgroundColor: "#f0f4f8",
+    borderRadius: 4,
+    padding: 8,
+    marginTop: 12,
+    fontSize: 9,
+    color: "#5b6b7c",
+  },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
   tag: { marginRight: 8, color: "#635bff" },
   transcriptLine: { marginBottom: 3 },
@@ -63,6 +94,9 @@ const styles = StyleSheet.create({
 function ReportDocument({ data }: { data: PdfData }) {
   const { report, patientName, clinicName, doctorName, date, transcript, validatedAt } = data;
   const p = report.payload;
+  const activeRisks = p.riskFlags
+    ? Object.entries(p.riskFlags).filter(([, v]) => v.level !== "ninguno")
+    : [];
 
   return (
     <Document>
@@ -75,6 +109,31 @@ function ReportDocument({ data }: { data: PdfData }) {
           {clinicName} · Paciente: {patientName} · Profesional: {doctorName}
         </Text>
         <Text style={styles.meta}>Fecha: {date}</Text>
+
+        {/* Alertas de riesgo — apoyo a la detección temprana, no diagnóstico */}
+        {p.riskFlags &&
+          (activeRisks.length > 0 ? (
+            <View style={styles.riskBox}>
+              <Text style={styles.riskTitle}>Alertas de riesgo identificadas</Text>
+              {activeRisks.map(([key, v]) => (
+                <Text key={key} style={styles.riskItem}>
+                  <Text style={[styles.riskLabel, { color: RISK_LEVEL_COLOR[v.level] }]}>
+                    {RISK_LABEL[key] ?? key} — nivel {v.level}:{" "}
+                  </Text>
+                  {v.evidence}
+                </Text>
+              ))}
+              <Text style={{ marginTop: 4, fontSize: 8, color: "#7a2020" }}>
+                Detección de apoyo basada en las palabras del paciente. Requiere valoración y
+                decisión clínica del profesional tratante.
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.riskNone}>
+              No se identificaron alertas de riesgo (ideación suicida, autolesión, consumo de
+              sustancias, riesgo a terceros) en esta sesión.
+            </Text>
+          ))}
 
         {/* 2. Resumen ejecutivo */}
         <Text style={styles.sectionTitle}>Resumen ejecutivo</Text>

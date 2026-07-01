@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { extractPatientText } from "@/lib/transcript-utils";
+import { extractPatientLines, extractPatientText } from "@/lib/transcript-utils";
 import type {
   AnalysisProvider,
   ReportPayload,
+  RiskFlags,
   TranscriptionProvider,
   TranscriptionSession,
 } from "./types";
@@ -13,6 +14,40 @@ const STOPWORDS = new Set([
   "el","la","los","las","un","una","de","del","y","o","a","en","que","se","me","mi","es","con",
   "por","para","su","lo","al","como","más","pero","sus","le","ya","muy","sí","no","yo","te","si",
 ]);
+
+const RISK_KEYWORDS: Record<keyof RiskFlags, string[]> = {
+  suicidal_ideation: [
+    "quiero morir", "no quiero vivir", "quitarme la vida", "acabar con todo",
+    "suicid", "no vale la pena vivir", "mejor estaria muerto", "mejor estaria muerta",
+  ],
+  self_harm: ["cortarme", "hacerme daño", "hacerme dano", "autolesion", "lastimarme"],
+  substance_use: ["consumo mucho", "trago todos los dias", "cocaina", "marihuana a diario", "borracho todos los dias"],
+  risk_to_others: ["hacerle daño a", "hacerle dano a", "matar a", "lastimar a alguien"],
+};
+
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+/**
+ * Detección determinista por palabras clave — solo para el modo demo, sin
+ * llamar a ninguna API. El proveedor real (OpenAI) hace el análisis clínico
+ * matizado; este mock existe para que la UI y los tests tengan datos
+ * consistentes sin depender de una API externa.
+ */
+function detectRiskFlags(patientLines: string[]): RiskFlags {
+  const result = {} as RiskFlags;
+  for (const category of Object.keys(RISK_KEYWORDS) as (keyof RiskFlags)[]) {
+    const keywords = RISK_KEYWORDS[category];
+    const hit = patientLines.find((line) =>
+      keywords.some((kw) => normalizeForMatch(line).includes(kw)),
+    );
+    result[category] = hit
+      ? { level: "moderado", evidence: hit.trim() }
+      : { level: "ninguno", evidence: "" };
+  }
+  return result;
+}
 
 function tokenize(text: string): string[] {
   return text
@@ -31,6 +66,7 @@ function tokenize(text: string): string[] {
  * el sentimiento/keywords/patrones reflejen al paciente, no a quien pregunta.
  */
 export function mockAnalyze(transcript: string): ReportPayload {
+  const patientLines = extractPatientLines(transcript);
   const patientText = extractPatientText(transcript);
   const tokens = tokenize(patientText);
   const total = Math.max(tokens.length, 1);
@@ -86,6 +122,7 @@ export function mockAnalyze(transcript: string): ReportPayload {
       dudas: Number((doubts / total).toFixed(3)),
       intensidad_emocional: Number(((pos + neg) / total).toFixed(3)),
     },
+    riskFlags: detectRiskFlags(patientLines),
     suggestion:
       "Sugerencia preliminar (modo demo): observar la evolución del estado de ánimo a lo largo " +
       "de las sesiones y profundizar en los temas recurrentes detectados. " +
