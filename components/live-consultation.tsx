@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MicOff, Square } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
-
-// URL inlineada aquí (no importada del barrel de providers, que arrastra
-// módulos Node.js incompatibles con el bundle del cliente).
-const DEEPGRAM_LISTEN_URL =
-  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true";
+// Imports directos a los módulos (no al barrel @/lib/providers, que re-exporta
+// mock.ts → node:crypto, incompatible con el bundle del cliente).
+import { DEEPGRAM_LISTEN_URL } from "@/lib/providers/deepgram";
+import { majoritySpeaker, labelForSpeaker, type DiarizedWord } from "@/lib/diarization";
 import {
   appendChunkAction,
   endConsultationAction,
@@ -22,7 +21,7 @@ function mmss(total: number) {
 
 interface DeepgramResult {
   is_final?: boolean;
-  channel?: { alternatives?: { transcript?: string }[] };
+  channel?: { alternatives?: { transcript?: string; words?: DiarizedWord[] }[] };
 }
 
 export function LiveConsultation({
@@ -46,6 +45,7 @@ export function LiveConsultation({
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const seqRef = useRef(0);
+  const speakerLabelsRef = useRef<Map<number, string>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── Modo mock: guion simulado (sin micrófono real necesario) ──
@@ -111,13 +111,17 @@ export function LiveConsultation({
         ws.onmessage = (event) => {
           try {
             const data: DeepgramResult = JSON.parse(event.data as string);
-            const text = data.channel?.alternatives?.[0]?.transcript?.trim();
+            const alt = data.channel?.alternatives?.[0];
+            const text = alt?.transcript?.trim();
             if (data.is_final && text) {
+              const speakerIndex = majoritySpeaker(alt?.words ?? []);
+              const speaker =
+                speakerIndex !== undefined
+                  ? labelForSpeaker(speakerIndex, speakerLabelsRef.current)
+                  : "Transcripción";
               const seq = seqRef.current++;
-              setChunks((prev) => [...prev, { speaker: "Transcripción", text }]);
-              void appendChunkAction(consultationId, { seq, speaker: "Transcripción", text }).catch(
-                () => {},
-              );
+              setChunks((prev) => [...prev, { speaker, text }]);
+              void appendChunkAction(consultationId, { seq, speaker, text }).catch(() => {});
             }
           } catch {
             // mensaje no-JSON (p.ej. control frames); se ignora.
@@ -183,10 +187,9 @@ export function LiveConsultation({
             ) : (
               <>
                 <span className="inline-block size-2 animate-pulse rounded-full bg-destructive" />
-                Grabando · transcribiendo en vivo
-                {transcriptionMode === "deepgram" && (
-                  <span className="text-xs text-purple">(Deepgram)</span>
-                )}
+                {transcriptionMode === "deepgram"
+                  ? "Grabando · identificando Doctor y Paciente"
+                  : "Grabando · transcribiendo en vivo"}
               </>
             )}
           </p>

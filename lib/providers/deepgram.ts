@@ -55,6 +55,10 @@ export class DeepgramTranscriptionProvider implements TranscriptionProvider {
   }
 }
 
-/** Parámetros de query para el WebSocket de streaming (español, webm/opus desde MediaRecorder). */
+/**
+ * Parámetros de query para el WebSocket de streaming (español, webm/opus desde
+ * MediaRecorder). `diarize=true` activa la identificación de hablantes:
+ * Deepgram devuelve un índice `speaker` por palabra en `channel.alternatives[0].words[]`.
+ */
 export const DEEPGRAM_LISTEN_URL =
-  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true";
+  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true&diarize=true";

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { extractPatientText } from "@/lib/transcript-utils";
 import type {
   AnalysisProvider,
   ReportPayload,
@@ -23,9 +24,15 @@ function tokenize(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Genera un reporte plausible y determinista a partir del texto (sin llamar a ninguna API). */
+/**
+ * Genera un reporte plausible y determinista a partir del texto (sin llamar a
+ * ninguna API). El análisis se basa en lo que dice el PACIENTE — las
+ * intervenciones del doctor (preguntas, indicaciones) se excluyen para que
+ * el sentimiento/keywords/patrones reflejen al paciente, no a quien pregunta.
+ */
 export function mockAnalyze(transcript: string): ReportPayload {
-  const tokens = tokenize(transcript);
+  const patientText = extractPatientText(transcript);
+  const tokens = tokenize(patientText);
   const total = Math.max(tokens.length, 1);
 
   let pos = 0;
@@ -66,7 +73,7 @@ export function mockAnalyze(transcript: string): ReportPayload {
 
   return {
     summary:
-      `Sesión de ${total} palabras con tono general ${label}. ` +
+      `Según lo expresado por el paciente (${total} palabras), el tono general es ${label}. ` +
       `Se identifican ${ranked.length} temas recurrentes` +
       (topics.length ? `, destacando: ${topics.join(", ")}. ` : ". ") +
       "Resumen generado en modo demo; conecta una API de IA para análisis clínico real.",
