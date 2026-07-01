@@ -3,14 +3,7 @@ import { Plus, Users } from "lucide-react";
 import { listPatients } from "@/lib/db/patients";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { PatientsTable } from "@/components/patients-table";
 
 export default async function PatientsPage() {
   const patients = await listPatients();
@@ -45,37 +38,7 @@ export default async function PatientsPage() {
           </Link>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-gray-line bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Documento</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead className="text-right">Registrado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {patients.map((p) => (
-                <TableRow key={p.id} className="cursor-default">
-                  <TableCell>
-                    <Link
-                      href={`/patients/${p.id}`}
-                      className="font-medium text-navy hover:text-purple hover:underline"
-                    >
-                      {p.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{p.document ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.phone ?? "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {new Date(p.createdAt).toLocaleDateString("es-CO")}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <PatientsTable patients={patients} />
       )}
     </div>
   );

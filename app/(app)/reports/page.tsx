@@ -1,15 +1,7 @@
-import Link from "next/link";
-import { ChevronRight, FileText, ShieldCheck } from "lucide-react";
+import { FileText } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { listReports } from "@/lib/db/reports";
-import { formatFullDate, formatTime } from "@/lib/dates";
-import { Badge } from "@/components/ui/badge";
-
-const SENTIMENT_META: Record<string, { label: string; className: string }> = {
-  positivo: { label: "Positivo", className: "bg-mint/15 text-[#04342a]" },
-  neutral: { label: "Neutral", className: "bg-purple/15 text-purple" },
-  negativo: { label: "Negativo", className: "bg-destructive/15 text-destructive" },
-};
+import { ReportsList } from "@/components/reports-list";
 
 export default async function ReportsPage() {
   await requireRole(["admin", "doctor"]);
@@ -35,45 +27,7 @@ export default async function ReportsPage() {
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-line overflow-hidden rounded-2xl border border-gray-line bg-card">
-          {reports.map((r) => {
-            const sentiment = SENTIMENT_META[r.sentimentLabel] ?? SENTIMENT_META.neutral;
-            return (
-              <Link
-                key={r.id}
-                href={`/consultations/${r.consultationId}`}
-                className="flex items-center gap-4 p-4 transition-colors hover:bg-cloud/60"
-              >
-                <div className="flex w-24 shrink-0 flex-col">
-                  <span className="font-heading text-sm font-bold text-navy">
-                    {formatTime(r.date)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{formatFullDate(r.date)}</span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-navy">{r.patientName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Sentimiento: {sentiment.label} ({r.sentimentScore.toFixed(2)})
-                  </p>
-                </div>
-
-                <Badge className={sentiment.className}>{sentiment.label}</Badge>
-
-                {r.validated ? (
-                  <span className="flex items-center gap-1 text-xs text-mint">
-                    <ShieldCheck className="size-3.5" />
-                    Validado
-                  </span>
-                ) : (
-                  <Badge variant="secondary">Sin validar</Badge>
-                )}
-
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-              </Link>
-            );
-          })}
-        </div>
+        <ReportsList reports={reports} />
       )}
     </div>
   );

@@ -1,15 +1,7 @@
-import Link from "next/link";
-import { ChevronRight, Mic } from "lucide-react";
+import { Mic } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { listConsultations } from "@/lib/db/consultations";
-import { formatFullDate, formatTime } from "@/lib/dates";
-import { Badge } from "@/components/ui/badge";
-
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  in_progress: { label: "En curso", className: "bg-destructive/15 text-destructive" },
-  ended: { label: "Finalizada", className: "bg-secondary text-secondary-foreground" },
-  analyzed: { label: "Analizada", className: "bg-mint/15 text-[#04342a]" },
-};
+import { ConsultationsList } from "@/components/consultations-list";
 
 export default async function ConsultationsPage() {
   await requireRole(["admin", "doctor"]);
@@ -36,35 +28,7 @@ export default async function ConsultationsPage() {
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-line overflow-hidden rounded-2xl border border-gray-line bg-card">
-          {consultations.map((c) => {
-            const meta = STATUS_META[c.status] ?? STATUS_META.ended;
-            return (
-              <Link
-                key={c.id}
-                href={`/consultations/${c.id}`}
-                className="flex items-center gap-4 p-4 transition-colors hover:bg-cloud/60"
-              >
-                <div className="flex w-24 shrink-0 flex-col">
-                  <span className="font-heading text-sm font-bold text-navy">
-                    {formatTime(c.startedAt)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatFullDate(c.startedAt)}
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-navy">{c.patientName}</p>
-                  <p className="truncate text-sm text-muted-foreground">{c.doctorName}</p>
-                </div>
-
-                <Badge className={meta.className}>{meta.label}</Badge>
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-              </Link>
-            );
-          })}
-        </div>
+        <ConsultationsList consultations={consultations} />
       )}
     </div>
   );
