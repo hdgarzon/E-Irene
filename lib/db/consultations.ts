@@ -13,6 +13,7 @@ export interface Consultation {
   status: ConsultationStatus;
   startedAt: string;
   endedAt: string | null;
+  reason: string | null;
 }
 
 interface ConsultationRow {
@@ -22,12 +23,13 @@ interface ConsultationRow {
   status: ConsultationStatus;
   started_at: string;
   ended_at: string | null;
+  reason_enc: string | null;
   patients: { full_name_enc: string } | null;
   doctor: { full_name: string } | null;
 }
 
 const SELECT =
-  "id, patient_id, doctor_id, status, started_at, ended_at, " +
+  "id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
   "patients!consultations_patient_id_fkey(full_name_enc), " +
   "doctor:users!consultations_doctor_id_fkey(full_name)";
 
@@ -41,6 +43,7 @@ function mapRow(r: ConsultationRow): Consultation {
     status: r.status,
     startedAt: r.started_at,
     endedAt: r.ended_at,
+    reason: r.reason_enc ? decrypt(r.reason_enc) : null,
   };
 }
 
@@ -60,7 +63,7 @@ function safeDecryptName(fullNameEnc: string | null | undefined): string {
 
 export async function startConsultation(
   clinicId: string,
-  input: { patientId: string; doctorId: string; consentId: string | null },
+  input: { patientId: string; doctorId: string; consentId: string | null; reason?: string | null },
 ): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -71,6 +74,7 @@ export async function startConsultation(
       doctor_id: input.doctorId,
       consent_id: input.consentId,
       status: "in_progress",
+      reason_enc: input.reason ? encrypt(input.reason) : null,
     })
     .select("id")
     .single();

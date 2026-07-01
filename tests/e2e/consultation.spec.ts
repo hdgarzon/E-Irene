@@ -32,9 +32,10 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await signConsent(page);
   await expect(page.getByText("Firmado", { exact: true })).toBeVisible();
 
-  // Iniciar consulta
+  // Iniciar consulta, con motivo de la consulta
   await page.getByRole("link", { name: /iniciar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/new/);
+  await page.fill('textarea[name="reason"]', "Episodios de ansiedad antes de reuniones de trabajo.");
   await page.getByRole("button", { name: /iniciar y grabar/i }).click();
   await expect(page).toHaveURL(/consultations\/.+\/live/);
 
@@ -45,6 +46,10 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   // Finalizar → genera reporte IA
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
+
+  // Motivo de la consulta visible en la ficha de la consulta
+  await expect(page.getByRole("heading", { name: "Motivo de la consulta" })).toBeVisible();
+  await expect(page.getByText(/Episodios de ansiedad antes de reuniones/)).toBeVisible();
 
   // Reporte IA con sus secciones + disclaimer
   await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible();

@@ -25,6 +25,7 @@ export async function GET(
     clinicName: user.clinicName,
     doctorName: consultation.doctorName,
     date: new Date(consultation.startedAt).toLocaleString("es-CO"),
+    reason: consultation.reason,
     transcript,
     validatedAt: report.validatedAt,
   });

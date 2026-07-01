@@ -19,15 +19,20 @@ import { getEmailProvider } from "@/lib/email/providers";
 import { buildReportReadyEmail } from "@/lib/email/templates";
 import { logAudit } from "@/lib/db/audit";
 
-export async function startConsultationAction(patientId: string): Promise<void> {
+export async function startConsultationAction(
+  patientId: string,
+  formData: FormData,
+): Promise<void> {
   const user = await requireUser();
   const consent = await getActiveConsent(patientId);
   if (!consent) redirect(`/patients/${patientId}/consent`);
 
+  const reason = String(formData.get("reason") ?? "").trim();
   const id = await startConsultation(user.clinicId, {
     patientId,
     doctorId: user.id,
     consentId: consent!.id,
+    reason: reason || null,
   });
   await logAudit({
     clinicId: user.clinicId,

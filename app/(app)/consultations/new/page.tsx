@@ -5,6 +5,8 @@ import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export default async function NewConsultationPage({
@@ -44,8 +46,17 @@ export default async function NewConsultationPage({
               Se transcribirá la sesión en tiempo real. El audio nunca se almacena; solo el texto,
               cifrado.
             </p>
-            <form action={start} className="mt-6">
-              <Button type="submit" size="lg">
+            <form action={start} className="mt-6 space-y-4 text-left">
+              <div className="space-y-1.5">
+                <Label htmlFor="reason">Motivo de la consulta (opcional)</Label>
+                <Textarea
+                  id="reason"
+                  name="reason"
+                  rows={3}
+                  placeholder="¿Por qué viene el paciente hoy?"
+                />
+              </div>
+              <Button type="submit" size="lg" className="w-full">
                 <Mic className="size-4" />
                 Iniciar y grabar
               </Button>

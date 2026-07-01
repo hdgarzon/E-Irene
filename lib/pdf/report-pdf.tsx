@@ -14,6 +14,7 @@ export interface PdfData {
   clinicName: string;
   doctorName: string;
   date: string;
+  reason?: string | null;
   transcript: string | null;
   validatedAt: string | null;
 }
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
 });
 
 function ReportDocument({ data }: { data: PdfData }) {
-  const { report, patientName, clinicName, doctorName, date, transcript, validatedAt } = data;
+  const { report, patientName, clinicName, doctorName, date, reason, transcript, validatedAt } = data;
   const p = report.payload;
   const activeRisks = p.riskFlags
     ? Object.entries(p.riskFlags).filter(([, v]) => v.level !== "ninguno")
@@ -115,6 +116,12 @@ function ReportDocument({ data }: { data: PdfData }) {
           {clinicName} · Paciente: {patientName} · Profesional: {doctorName}
         </Text>
         <Text style={styles.meta}>Fecha: {date}</Text>
+        {reason && (
+          <Text style={{ ...styles.meta, marginTop: 6 }}>
+            <Text style={{ fontWeight: 700 }}>Motivo de la consulta: </Text>
+            {reason}
+          </Text>
+        )}
 
         {/* Alertas de riesgo — apoyo a la detección temprana, no diagnóstico */}
         {p.riskFlags &&

@@ -56,6 +56,13 @@ export default async function ConsultationPage({
         </div>
       </div>
 
+      {consultation.reason && (
+        <div className="rounded-2xl border border-gray-line bg-card p-6">
+          <h2 className="mb-2 font-heading font-semibold text-navy">Motivo de la consulta</h2>
+          <p className="text-sm leading-relaxed text-foreground/90">{consultation.reason}</p>
+        </div>
+      )}
+
       {report && <ReportView report={report} consultationId={id} />}
 
       <div className="rounded-2xl border border-gray-line bg-card p-6">

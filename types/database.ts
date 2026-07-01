@@ -266,6 +266,7 @@ export type Database = {
           ended_at: string | null
           id: string
           patient_id: string
+          reason_enc: string | null
           started_at: string
           status: Database["public"]["Enums"]["consultation_status"]
           transcript_enc: string | null
@@ -280,6 +281,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           patient_id: string
+          reason_enc?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["consultation_status"]
           transcript_enc?: string | null
@@ -294,6 +296,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           patient_id?: string
+          reason_enc?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["consultation_status"]
           transcript_enc?: string | null
