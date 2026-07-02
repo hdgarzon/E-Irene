@@ -20,11 +20,20 @@ export async function signConsentAction(
   const signerName = String(formData.get("signerName") ?? "").trim();
   const signature = String(formData.get("signature") ?? "");
   const accepted = formData.get("accepted") === "on";
+  const isMinor = formData.get("isMinor") === "on";
+  const representativeDocument = String(formData.get("representativeDocument") ?? "").trim();
+  const representativeRelationship = String(formData.get("representativeRelationship") ?? "").trim();
 
   const fieldErrors: Record<string, string> = {};
   if (signerName.length < 3) fieldErrors.signerName = "Ingresa el nombre completo de quien firma";
   if (!signature.startsWith("data:image/png")) fieldErrors.signature = "Falta la firma";
   if (!accepted) fieldErrors.accepted = "Debes aceptar el consentimiento";
+  if (isMinor && representativeDocument.length < 5) {
+    fieldErrors.representativeDocument = "Ingresa el documento del representante legal";
+  }
+  if (isMinor && !representativeRelationship) {
+    fieldErrors.representativeRelationship = "Indica el parentesco del representante legal";
+  }
   if (Object.keys(fieldErrors).length) return { fieldErrors };
 
   const h = await headers();
@@ -50,6 +59,9 @@ export async function signConsentAction(
       signerName,
       ip,
       userAgent,
+      isMinor,
+      representativeDocument: isMinor ? representativeDocument : null,
+      representativeRelationship: isMinor ? representativeRelationship : null,
     });
     await logAudit({
       clinicId: user.clinicId,

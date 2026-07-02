@@ -1,5 +1,26 @@
 import { createHash } from "node:crypto";
 
+/** Edad en años a partir de la fecha de nacimiento (ISO yyyy-mm-dd). */
+export function calculateAge(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const hasHadBirthdayThisYear =
+    now.getMonth() > birth.getMonth() ||
+    (now.getMonth() === birth.getMonth() && now.getDate() >= birth.getDate());
+  if (!hasHadBirthdayThisYear) age--;
+  return age;
+}
+
+/**
+ * true/false si se conoce la fecha de nacimiento; null si no se conoce (el
+ * profesional debe indicarlo manualmente en ese caso).
+ */
+export function isMinorByBirthDate(birthDate: string | null | undefined): boolean | null {
+  if (!birthDate) return null;
+  return calculateAge(birthDate) < 18;
+}
+
 /** Versión del documento de consentimiento. Cambiar al modificar el texto. */
 export const CONSENT_VERSION = "2026-06-v1";
 

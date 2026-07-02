@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { encryptNullable, decryptNullable } from "@/lib/crypto";
 import { CONSENT_VERSION } from "@/lib/consent";
 
 export interface Consent {
@@ -11,6 +12,9 @@ export interface Consent {
   ip: string | null;
   userAgent: string | null;
   signedAt: string;
+  isMinor: boolean;
+  representativeDocument: string | null;
+  representativeRelationship: string | null;
 }
 
 interface ConsentRow {
@@ -23,6 +27,9 @@ interface ConsentRow {
   ip: string | null;
   user_agent: string | null;
   signed_at: string;
+  is_minor: boolean;
+  representative_document_enc: string | null;
+  representative_relationship: string | null;
 }
 
 function mapRow(r: ConsentRow): Consent {
@@ -36,6 +43,9 @@ function mapRow(r: ConsentRow): Consent {
     ip: r.ip,
     userAgent: r.user_agent,
     signedAt: r.signed_at,
+    isMinor: r.is_minor,
+    representativeDocument: decryptNullable(r.representative_document_enc),
+    representativeRelationship: r.representative_relationship,
   };
 }
 
@@ -63,6 +73,9 @@ export async function createConsent(input: {
   signerName: string;
   ip: string | null;
   userAgent: string | null;
+  isMinor: boolean;
+  representativeDocument?: string | null;
+  representativeRelationship?: string | null;
 }): Promise<Consent> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -76,6 +89,9 @@ export async function createConsent(input: {
       signer_name: input.signerName,
       ip: input.ip,
       user_agent: input.userAgent,
+      is_minor: input.isMinor,
+      representative_document_enc: encryptNullable(input.representativeDocument ?? null),
+      representative_relationship: input.representativeRelationship ?? null,
     })
     .select("*")
     .single();

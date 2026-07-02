@@ -4,7 +4,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { signConsentAction } from "./actions";
 import { ConsentForm } from "@/components/consent-form";
-import { CONSENT_TEXT, CONSENT_VERSION } from "@/lib/consent";
+import { CONSENT_TEXT, CONSENT_VERSION, isMinorByBirthDate } from "@/lib/consent";
 
 export default async function ConsentPage({
   params,
@@ -43,7 +43,11 @@ export default async function ConsentPage({
           <ShieldCheck className="size-4 text-mint" />
           La firma se almacena con hash del documento, IP y fecha como prueba legal (Ley 527).
         </div>
-        <ConsentForm action={action} defaultSignerName={patient.fullName} />
+        <ConsentForm
+          action={action}
+          defaultSignerName={patient.fullName}
+          isMinorByBirthDate={isMinorByBirthDate(patient.birthDate)}
+        />
       </div>
     </div>
   );

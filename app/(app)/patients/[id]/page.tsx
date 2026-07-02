@@ -191,11 +191,22 @@ export default async function PatientDetailPage({
           )}
         </div>
         {consent ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Firmado por <span className="text-navy">{consent.signerName}</span> el{" "}
-            {new Date(consent.signedAt).toLocaleDateString("es-CO")} · versión{" "}
-            {consent.documentVersion}.
-          </p>
+          <>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Firmado por{" "}
+              <span className="text-navy">
+                {consent.signerName}
+                {consent.isMinor && ` (representante legal — ${consent.representativeRelationship})`}
+              </span>{" "}
+              el {new Date(consent.signedAt).toLocaleDateString("es-CO")} · versión{" "}
+              {consent.documentVersion}.
+            </p>
+            {consent.isMinor && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Documento del representante: {consent.representativeDocument}
+              </p>
+            )}
+          </>
         ) : (
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">

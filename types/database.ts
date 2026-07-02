@@ -207,7 +207,10 @@ export type Database = {
           document_version: string
           id: string
           ip: string | null
+          is_minor: boolean
           patient_id: string
+          representative_document_enc: string | null
+          representative_relationship: string | null
           signature_path: string | null
           signed_at: string
           signer_name: string | null
@@ -220,7 +223,10 @@ export type Database = {
           document_version: string
           id?: string
           ip?: string | null
+          is_minor?: boolean
           patient_id: string
+          representative_document_enc?: string | null
+          representative_relationship?: string | null
           signature_path?: string | null
           signed_at?: string
           signer_name?: string | null
@@ -233,7 +239,10 @@ export type Database = {
           document_version?: string
           id?: string
           ip?: string | null
+          is_minor?: boolean
           patient_id?: string
+          representative_document_enc?: string | null
+          representative_relationship?: string | null
           signature_path?: string | null
           signed_at?: string
           signer_name?: string | null
