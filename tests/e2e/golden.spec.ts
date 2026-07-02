@@ -46,10 +46,25 @@ test("camino dorado: signup → dashboard → crear paciente → lista", async (
   await expect(page.getByText("9/27 · Leve")).toBeVisible();
 
   // El último resultado aparece también en la ficha del paciente
-  await page.goto(`/patients/${page.url().match(/patients\/([^/]+)/)![1]}`);
+  const patientId = page.url().match(/patients\/([^/]+)/)![1];
+  await page.goto(`/patients/${patientId}`);
   await expect(page.getByText(/Último: 9\/27 · Leve/)).toBeVisible();
 
-  // 6. Aparece en la lista
+  // 6. Plan de tratamiento: crear, agregar objetivo, marcarlo logrado
+  await page.fill('input[name="title"]', "Manejo de ansiedad social");
+  await page.getByRole("button", { name: /crear plan/i }).click();
+  await expect(page.getByText("Manejo de ansiedad social")).toBeVisible();
+
+  await page.fill('input[name="description"]', "Practicar respiración diafragmática a diario");
+  await page.getByRole("button", { name: /agregar/i }).click();
+  await expect(page.getByText("Practicar respiración diafragmática a diario")).toBeVisible();
+
+  await page.getByRole("button", { name: /cambiar estado/i }).click();
+  await expect(
+    page.getByText("Practicar respiración diafragmática a diario"),
+  ).toHaveClass(/line-through/);
+
+  // 7. Aparece en la lista
   await page.goto("/patients");
   await expect(page.getByRole("link", { name: "Juan Pérez E2E" })).toBeVisible();
 });

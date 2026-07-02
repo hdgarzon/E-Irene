@@ -18,7 +18,9 @@ import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
 import { listConsultationsForPatient } from "@/lib/db/consultations";
 import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { getActivePlanForPatient } from "@/lib/db/treatment-plans";
 import { ASSESSMENT_LABEL, ASSESSMENT_MAX_SCORE, type AssessmentType } from "@/lib/psychometrics";
+import { TreatmentPlanSection } from "@/components/treatment-plan-section";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -51,10 +53,11 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) notFound();
-  const [consent, consultations, assessments] = await Promise.all([
+  const [consent, consultations, assessments, treatmentPlan] = await Promise.all([
     getActiveConsent(id),
     listConsultationsForPatient(id),
     listAssessmentsForPatient(id),
+    getActivePlanForPatient(id),
   ]);
   const latestByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
     type,
@@ -171,6 +174,8 @@ export default async function PatientDetailPage({
           ))}
         </div>
       </div>
+
+      <TreatmentPlanSection patientId={id} plan={treatmentPlan} />
 
       {/* Consentimiento informado */}
       <div className="rounded-2xl border border-gray-line bg-card p-6">

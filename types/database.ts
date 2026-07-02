@@ -708,6 +708,115 @@ export type Database = {
           },
         ]
       }
+      treatment_plan_items: {
+        Row: {
+          clinic_id: string
+          completed_at: string | null
+          created_at: string
+          description_enc: string
+          id: string
+          order_index: number
+          plan_id: string
+          status: string
+          target_date: string | null
+          type: string
+        }
+        Insert: {
+          clinic_id: string
+          completed_at?: string | null
+          created_at?: string
+          description_enc: string
+          id?: string
+          order_index?: number
+          plan_id: string
+          status?: string
+          target_date?: string | null
+          type: string
+        }
+        Update: {
+          clinic_id?: string
+          completed_at?: string | null
+          created_at?: string
+          description_enc?: string
+          id?: string
+          order_index?: number
+          plan_id?: string
+          status?: string
+          target_date?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_plan_items_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_plan_items_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treatment_plans: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          patient_id: string
+          status: string
+          title_enc: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          patient_id: string
+          status?: string
+          title_enc: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          patient_id?: string
+          status?: string
+          title_enc?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_plans_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatment_plans_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           clinic_id: string
