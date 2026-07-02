@@ -12,10 +12,13 @@ import {
   TrendingUp,
   Siren,
   ClipboardList,
+  ClipboardCheck,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
 import { listConsultationsForPatient } from "@/lib/db/consultations";
+import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { ASSESSMENT_LABEL, ASSESSMENT_MAX_SCORE, type AssessmentType } from "@/lib/psychometrics";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -48,10 +51,15 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) notFound();
-  const [consent, consultations] = await Promise.all([
+  const [consent, consultations, assessments] = await Promise.all([
     getActiveConsent(id),
     listConsultationsForPatient(id),
+    listAssessmentsForPatient(id),
   ]);
+  const latestByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
+    type,
+    latest: [...assessments].reverse().find((a) => a.type === type) ?? null,
+  }));
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -123,6 +131,46 @@ export default async function PatientDetailPage({
           </div>
         </div>
       )}
+
+      {/* Escalas psicométricas */}
+      <div className="rounded-2xl border border-gray-line bg-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
+            <ClipboardCheck className="size-4 text-purple" />
+            Escalas psicométricas
+          </h2>
+          {assessments.length > 0 && (
+            <Link
+              href={`/patients/${id}/progress`}
+              className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+            >
+              <TrendingUp className="size-3.5" />
+              Ver evolución
+            </Link>
+          )}
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {latestByType.map(({ type, latest }) => (
+            <div key={type} className="rounded-xl border border-gray-line p-4">
+              <p className="text-sm font-medium text-navy">{ASSESSMENT_LABEL[type]}</p>
+              {latest ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Último: {latest.result.totalScore}/{ASSESSMENT_MAX_SCORE[type]} ·{" "}
+                  {latest.result.severity} · {new Date(latest.administeredAt).toLocaleDateString("es-CO")}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">Aún no aplicada.</p>
+              )}
+              <Link
+                href={`/patients/${id}/assessments/new?type=${type}`}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3")}
+              >
+                Aplicar {ASSESSMENT_LABEL[type].split(" ")[0]}
+              </Link>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Consentimiento informado */}
       <div className="rounded-2xl border border-gray-line bg-card p-6">

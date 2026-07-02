@@ -525,6 +525,61 @@ export type Database = {
           },
         ]
       }
+      psychometric_assessments: {
+        Row: {
+          administered_at: string
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          patient_id: string
+          payload_enc: string
+          type: string
+        }
+        Insert: {
+          administered_at?: string
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          patient_id: string
+          payload_enc: string
+          type: string
+        }
+        Update: {
+          administered_at?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          patient_id?: string
+          payload_enc?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "psychometric_assessments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychometric_assessments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychometric_assessments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           clinic_id: string

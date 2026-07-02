@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { listReportsForPatient } from "@/lib/db/reports";
+import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { ASSESSMENT_LABEL, ASSESSMENT_MAX_SCORE, type AssessmentType } from "@/lib/psychometrics";
 import {
   sentimentTrend,
   aggregateKeywords,
   averageSentiment,
 } from "@/lib/progress";
 import { SentimentTrendChart } from "@/components/sentiment-trend-chart";
+import { ScoreTrendChart } from "@/components/score-trend-chart";
 
 function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
@@ -23,7 +26,10 @@ export default async function ProgressPage({
   const patient = await getPatient(id);
   if (!patient) notFound();
 
-  const reports = await listReportsForPatient(id);
+  const [reports, assessments] = await Promise.all([
+    listReportsForPatient(id),
+    listAssessmentsForPatient(id),
+  ]);
   const sessions = reports.map((r) => ({ date: r.date, payload: r.payload, consultationId: r.consultationId }));
   const trend = sentimentTrend(sessions);
   const keywords = aggregateKeywords(sessions);
@@ -34,6 +40,13 @@ export default async function ProgressPage({
     trend.length >= 2 ? trend[trend.length - 1].score - trend[0].score : 0;
   const DeltaIcon = delta > 0.05 ? TrendingUp : delta < -0.05 ? TrendingDown : Minus;
   const deltaColor = delta > 0.05 ? "text-mint" : delta < -0.05 ? "text-destructive" : "text-muted-foreground";
+
+  const assessmentsByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
+    type,
+    points: assessments
+      .filter((a) => a.type === type)
+      .map((a) => ({ date: a.administeredAt, score: a.result.totalScore, severity: a.result.severity })),
+  }));
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -55,7 +68,7 @@ export default async function ProgressPage({
         </p>
       </div>
 
-      {reports.length === 0 ? (
+      {reports.length === 0 && assessments.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <TrendingUp className="size-6 text-purple" />
@@ -67,75 +80,106 @@ export default async function ProgressPage({
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-gray-line bg-card p-5">
-              <p className="text-xs text-muted-foreground">Sesiones</p>
-              <p className="font-heading text-2xl font-bold text-navy">{reports.length}</p>
-            </div>
-            <div className="rounded-2xl border border-gray-line bg-card p-5">
-              <p className="text-xs text-muted-foreground">Sentimiento promedio</p>
-              <p className="font-heading text-2xl font-bold text-navy">{avg.toFixed(2)}</p>
-            </div>
-            <div className="rounded-2xl border border-gray-line bg-card p-5">
-              <p className="text-xs text-muted-foreground">Tendencia</p>
-              <p className={`flex items-center gap-1.5 font-heading text-2xl font-bold ${deltaColor}`}>
-                <DeltaIcon className="size-5" />
-                {delta > 0 ? "+" : ""}
-                {delta.toFixed(2)}
-              </p>
-            </div>
-          </div>
+          {reports.length > 0 && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl border border-gray-line bg-card p-5">
+                  <p className="text-xs text-muted-foreground">Sesiones</p>
+                  <p className="font-heading text-2xl font-bold text-navy">{reports.length}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-line bg-card p-5">
+                  <p className="text-xs text-muted-foreground">Sentimiento promedio</p>
+                  <p className="font-heading text-2xl font-bold text-navy">{avg.toFixed(2)}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-line bg-card p-5">
+                  <p className="text-xs text-muted-foreground">Tendencia</p>
+                  <p className={`flex items-center gap-1.5 font-heading text-2xl font-bold ${deltaColor}`}>
+                    <DeltaIcon className="size-5" />
+                    {delta > 0 ? "+" : ""}
+                    {delta.toFixed(2)}
+                  </p>
+                </div>
+              </div>
 
-          <div className="rounded-2xl border border-gray-line bg-card p-6">
-            <h2 className="mb-4 font-heading font-semibold text-navy">
-              Evolución del sentimiento
-            </h2>
-            <SentimentTrendChart points={trend} />
-            <div className="mt-2 flex justify-between px-4 text-xs text-muted-foreground">
-              {trend.map((p, i) => (
-                <span key={i}>{shortDate(p.date)}</span>
-              ))}
-            </div>
-          </div>
+              <div className="rounded-2xl border border-gray-line bg-card p-6">
+                <h2 className="mb-4 font-heading font-semibold text-navy">
+                  Evolución del sentimiento
+                </h2>
+                <SentimentTrendChart points={trend} />
+                <div className="mt-2 flex justify-between px-4 text-xs text-muted-foreground">
+                  {trend.map((p, i) => (
+                    <span key={i}>{shortDate(p.date)}</span>
+                  ))}
+                </div>
+              </div>
 
-          <div className="rounded-2xl border border-gray-line bg-card p-6">
-            <h2 className="mb-4 font-heading font-semibold text-navy">
-              Temas recurrentes (todas las sesiones)
-            </h2>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              {keywords.map((k, i) => (
-                <span
-                  key={k.term}
-                  className="font-heading font-semibold"
-                  style={{
-                    fontSize: `${0.85 + (k.weight / maxWeight) * 0.9}rem`,
-                    color: ["#635bff", "#0a2540", "#00d4aa"][i % 3],
-                  }}
-                >
-                  {k.term}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-gray-line bg-card p-6">
-            <h2 className="mb-3 font-heading font-semibold text-navy">Sesiones</h2>
-            <ul className="divide-y divide-gray-line">
-              {sessions.map((s) => (
-                <li key={s.consultationId}>
-                  <Link
-                    href={`/consultations/${s.consultationId}`}
-                    className="flex items-center justify-between py-2.5 text-sm hover:text-purple"
-                  >
-                    <span className="text-navy">{shortDate(s.date)}</span>
-                    <span className="capitalize text-muted-foreground">
-                      {s.payload.sentiment.label} ({s.payload.sentiment.score.toFixed(2)})
+              <div className="rounded-2xl border border-gray-line bg-card p-6">
+                <h2 className="mb-4 font-heading font-semibold text-navy">
+                  Temas recurrentes (todas las sesiones)
+                </h2>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {keywords.map((k, i) => (
+                    <span
+                      key={k.term}
+                      className="font-heading font-semibold"
+                      style={{
+                        fontSize: `${0.85 + (k.weight / maxWeight) * 0.9}rem`,
+                        color: ["#635bff", "#0a2540", "#00d4aa"][i % 3],
+                      }}
+                    >
+                      {k.term}
                     </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-line bg-card p-6">
+                <h2 className="mb-3 font-heading font-semibold text-navy">Sesiones</h2>
+                <ul className="divide-y divide-gray-line">
+                  {sessions.map((s) => (
+                    <li key={s.consultationId}>
+                      <Link
+                        href={`/consultations/${s.consultationId}`}
+                        className="flex items-center justify-between py-2.5 text-sm hover:text-purple"
+                      >
+                        <span className="text-navy">{shortDate(s.date)}</span>
+                        <span className="capitalize text-muted-foreground">
+                          {s.payload.sentiment.label} ({s.payload.sentiment.score.toFixed(2)})
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+
+          {assessmentsByType.map(
+            ({ type, points }) =>
+              points.length > 0 && (
+                <div key={type} className="rounded-2xl border border-gray-line bg-card p-6">
+                  <h2 className="mb-4 font-heading font-semibold text-navy">
+                    Evolución {ASSESSMENT_LABEL[type]}
+                  </h2>
+                  <ScoreTrendChart points={points} max={ASSESSMENT_MAX_SCORE[type]} />
+                  <div className="mt-2 flex justify-between px-4 text-xs text-muted-foreground">
+                    {points.map((p, i) => (
+                      <span key={i}>{shortDate(p.date)}</span>
+                    ))}
+                  </div>
+                  <ul className="mt-4 divide-y divide-gray-line border-t border-gray-line">
+                    {points.map((p, i) => (
+                      <li key={i} className="flex items-center justify-between py-2 text-sm">
+                        <span className="text-navy">{shortDate(p.date)}</span>
+                        <span className="text-muted-foreground">
+                          {p.score}/{ASSESSMENT_MAX_SCORE[type]} · {p.severity}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+          )}
         </>
       )}
     </div>

@@ -32,7 +32,24 @@ test("camino dorado: signup → dashboard → crear paciente → lista", async (
   await expect(page.getByText("3011112222")).toBeVisible();
   await expect(page.getByText("Madre")).toBeVisible();
 
-  // 5. Aparece en la lista
+  // 5. Aplica el PHQ-9 (escala psicométrica)
+  await page.getByRole("link", { name: /Aplicar PHQ/i }).click();
+  await expect(page).toHaveURL(/assessments\/new\?type=phq9/);
+  const fieldsets = page.locator("fieldset");
+  await expect(fieldsets).toHaveCount(9);
+  for (let i = 0; i < 9; i++) {
+    await fieldsets.nth(i).locator('input[type="radio"][value="1"]').click();
+  }
+  await page.getByRole("button", { name: /guardar resultado/i }).click();
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(page.getByRole("heading", { name: "Evolución PHQ-9 (depresión)" })).toBeVisible();
+  await expect(page.getByText("9/27 · Leve")).toBeVisible();
+
+  // El último resultado aparece también en la ficha del paciente
+  await page.goto(`/patients/${page.url().match(/patients\/([^/]+)/)![1]}`);
+  await expect(page.getByText(/Último: 9\/27 · Leve/)).toBeVisible();
+
+  // 6. Aparece en la lista
   await page.goto("/patients");
   await expect(page.getByRole("link", { name: "Juan Pérez E2E" })).toBeVisible();
 });
