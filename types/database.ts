@@ -654,6 +654,77 @@ export type Database = {
           },
         ]
       }
+      soap_notes: {
+        Row: {
+          assessment_enc: string | null
+          clinic_id: string
+          consultation_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          objective_enc: string | null
+          patient_id: string
+          plan_enc: string | null
+          subjective_enc: string | null
+          updated_at: string
+        }
+        Insert: {
+          assessment_enc?: string | null
+          clinic_id: string
+          consultation_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          objective_enc?: string | null
+          patient_id: string
+          plan_enc?: string | null
+          subjective_enc?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assessment_enc?: string | null
+          clinic_id?: string
+          consultation_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          objective_enc?: string | null
+          patient_id?: string
+          plan_enc?: string | null
+          subjective_enc?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "soap_notes_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "soap_notes_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "soap_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "soap_notes_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcript_chunks: {
         Row: {
           clinic_id: string

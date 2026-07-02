@@ -7,6 +7,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import type { Report } from "@/lib/db/reports";
+import type { SoapNote } from "@/lib/db/soap-notes";
 
 export interface PdfData {
   report: Report;
@@ -15,6 +16,7 @@ export interface PdfData {
   doctorName: string;
   date: string;
   reason?: string | null;
+  soapNote?: SoapNote | null;
   transcript: string | null;
   validatedAt: string | null;
 }
@@ -99,7 +101,10 @@ const styles = StyleSheet.create({
 });
 
 function ReportDocument({ data }: { data: PdfData }) {
-  const { report, patientName, clinicName, doctorName, date, reason, transcript, validatedAt } = data;
+  const { report, patientName, clinicName, doctorName, date, reason, soapNote, transcript, validatedAt } = data;
+  const hasSoapContent = Boolean(
+    soapNote && (soapNote.subjective || soapNote.objective || soapNote.assessment || soapNote.plan),
+  );
   const p = report.payload;
   const activeRisks = p.riskFlags
     ? Object.entries(p.riskFlags).filter(([, v]) => v.level !== "ninguno")
@@ -195,6 +200,39 @@ function ReportDocument({ data }: { data: PdfData }) {
             <Text style={styles.sectionTitle}>Notas del profesional</Text>
             <View style={styles.doctorNotesBox}>
               <Text>{report.doctorNotes}</Text>
+            </View>
+          </>
+        )}
+
+        {/* Nota SOAP — formato clínico estándar, complementario, escrito por el doctor */}
+        {hasSoapContent && soapNote && (
+          <>
+            <Text style={styles.sectionTitle}>Nota SOAP</Text>
+            <View style={styles.doctorNotesBox}>
+              {soapNote.subjective && (
+                <Text style={{ marginBottom: 4 }}>
+                  <Text style={{ fontWeight: 700 }}>S — Subjetivo: </Text>
+                  {soapNote.subjective}
+                </Text>
+              )}
+              {soapNote.objective && (
+                <Text style={{ marginBottom: 4 }}>
+                  <Text style={{ fontWeight: 700 }}>O — Objetivo: </Text>
+                  {soapNote.objective}
+                </Text>
+              )}
+              {soapNote.assessment && (
+                <Text style={{ marginBottom: 4 }}>
+                  <Text style={{ fontWeight: 700 }}>A — Análisis: </Text>
+                  {soapNote.assessment}
+                </Text>
+              )}
+              {soapNote.plan && (
+                <Text>
+                  <Text style={{ fontWeight: 700 }}>P — Plan: </Text>
+                  {soapNote.plan}
+                </Text>
+              )}
             </View>
           </>
         )}

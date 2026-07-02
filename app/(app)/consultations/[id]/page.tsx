@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import { getConsultation, getTranscript } from "@/lib/db/consultations";
 import { getReportByConsultation } from "@/lib/db/reports";
+import { getSoapNoteByConsultation } from "@/lib/db/soap-notes";
 import { ReportView } from "@/components/report-view";
+import { SoapNoteEditor } from "@/components/soap-note-editor";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,9 +18,10 @@ export default async function ConsultationPage({
   const { id } = await params;
   const consultation = await getConsultation(id);
   if (!consultation) notFound();
-  const [transcript, report] = await Promise.all([
+  const [transcript, report, soapNote] = await Promise.all([
     getTranscript(id),
     getReportByConsultation(id),
+    getSoapNoteByConsultation(id),
   ]);
 
   return (
@@ -64,6 +67,8 @@ export default async function ConsultationPage({
       )}
 
       {report && <ReportView report={report} consultationId={id} />}
+
+      <SoapNoteEditor consultationId={id} patientId={consultation.patientId} note={soapNote} />
 
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <h2 className="mb-3 flex items-center gap-2 font-heading font-semibold text-navy">

@@ -76,8 +76,17 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
     );
   }).toPass({ timeout: 15_000 });
 
+  // Nota SOAP (formato complementario, no generado por IA)
+  await page.fill('textarea[name="subjective"]', "Refiere sentirse más ansioso antes de reuniones.");
+  await page.fill('textarea[name="objective"]', "Habla pausado, contacto visual adecuado.");
+  await page.fill('textarea[name="assessment"]', "Ansiedad situacional relacionada con el trabajo.");
+  await page.fill('textarea[name="plan"]', "Practicar respiración diafragmática antes de reuniones.");
+  await page.getByRole("button", { name: /guardar nota soap/i }).click();
+  await expect(page.getByText("Guardado").last()).toBeVisible();
+
   await page.getByRole("button", { name: /validar y firmar/i }).click();
   await expect(page.getByText(/Reporte validado el/)).toBeVisible();
+  await expect(page.getByText(/Refiere sentirse más ansioso antes de reuniones/)).toBeVisible();
 
   // Transcripción presente
   await expect(page.getByText("Transcripción")).toBeVisible();

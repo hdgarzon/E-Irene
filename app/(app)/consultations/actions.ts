@@ -12,6 +12,7 @@ import {
   markConsultationAnalyzed,
 } from "@/lib/db/consultations";
 import { createReport, updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
+import { upsertSoapNote } from "@/lib/db/soap-notes";
 import { getAnalysisProvider } from "@/lib/providers";
 import { getPatient } from "@/lib/db/patients";
 import { recordNotification } from "@/lib/db/notifications";
@@ -101,6 +102,42 @@ export async function updateDoctorNotesAction(
     });
   } catch {
     return { error: "No se pudieron guardar las notas." };
+  }
+  revalidatePath(`/consultations/${consultationId}`);
+  return { ok: true };
+}
+
+export type SoapNoteState = { ok?: boolean; error?: string };
+
+export async function saveSoapNoteAction(
+  consultationId: string,
+  patientId: string,
+  _prev: SoapNoteState,
+  formData: FormData,
+): Promise<SoapNoteState> {
+  const user = await requireUser();
+  const clean = (v: FormDataEntryValue | null) => {
+    const s = String(v ?? "").trim();
+    return s || null;
+  };
+  try {
+    await upsertSoapNote(user.clinicId, user.id, {
+      consultationId,
+      patientId,
+      subjective: clean(formData.get("subjective")),
+      objective: clean(formData.get("objective")),
+      assessment: clean(formData.get("assessment")),
+      plan: clean(formData.get("plan")),
+    });
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "soap_note.saved",
+      entityType: "consultation",
+      entityId: consultationId,
+    });
+  } catch {
+    return { error: "No se pudo guardar la nota SOAP." };
   }
   revalidatePath(`/consultations/${consultationId}`);
   return { ok: true };
