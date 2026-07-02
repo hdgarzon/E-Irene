@@ -13,6 +13,7 @@ import {
   Siren,
   ClipboardList,
   ClipboardCheck,
+  FileDown,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
@@ -81,12 +82,23 @@ export default async function PatientDetailPage({
             Registrado el {new Date(patient.createdAt).toLocaleDateString("es-CO")}
           </p>
         </div>
-        <Link
-          href={`/patients/${patient.id}/edit`}
-          className="text-sm font-medium text-purple hover:underline"
-        >
-          Editar
-        </Link>
+        <div className="flex items-center gap-4">
+          <a
+            href={`/patients/${patient.id}/expediente`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            <FileDown className="size-4" />
+            Exportar expediente
+          </a>
+          <Link
+            href={`/patients/${patient.id}/edit`}
+            className="text-sm font-medium text-purple hover:underline"
+          >
+            Editar
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 rounded-2xl border border-gray-line bg-card p-6 sm:grid-cols-2">

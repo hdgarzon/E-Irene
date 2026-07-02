@@ -101,6 +101,16 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
 
   // Historial comparativo (Fase 2)
   await page.getByRole("link", { name: /volver a la ficha del paciente/i }).click();
+  await expect(page).toHaveURL(/\/patients\/[^/]+$/);
+
+  // Exportar expediente completo (incluye reporte, SOAP y motivo de la sesión)
+  const patientId = page.url().match(/patients\/([^/]+)/)![1];
+  const record = await page.request.get(`/patients/${patientId}/expediente`);
+  expect(record.ok()).toBeTruthy();
+  expect(record.headers()["content-type"]).toContain("application/pdf");
+  const recordBody = await record.body();
+  expect(recordBody.subarray(0, 4).toString()).toBe("%PDF");
+
   await page.getByRole("link", { name: /ver evolución/i }).click();
   await expect(page).toHaveURL(/\/progress$/);
   await expect(page.getByText(/Evolución del sentimiento/)).toBeVisible();

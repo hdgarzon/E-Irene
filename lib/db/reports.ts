@@ -147,15 +147,22 @@ export async function listReports(): Promise<ReportListItem[]> {
   return items;
 }
 
+export interface PatientSessionReport {
+  consultationId: string;
+  date: string;
+  payload: ReportPayload;
+  doctorNotes: string | null;
+  validatedAt: string | null;
+}
+
 /** Reportes del paciente (descifrados) con la fecha de su consulta, cronológico. */
-export async function listReportsForPatient(
-  patientId: string,
-): Promise<{ consultationId: string; date: string; payload: ReportPayload }[]> {
+export async function listReportsForPatient(patientId: string): Promise<PatientSessionReport[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("reports")
     .select(
-      "consultation_id, payload_enc, created_at, consultations!reports_consultation_id_fkey(started_at)",
+      "consultation_id, payload_enc, doctor_notes_enc, validated_at, created_at, " +
+        "consultations!reports_consultation_id_fkey(started_at)",
     )
     .eq("patient_id", patientId)
     .order("created_at", { ascending: true });
@@ -164,6 +171,8 @@ export async function listReportsForPatient(
     data as unknown as {
       consultation_id: string;
       payload_enc: string;
+      doctor_notes_enc: string | null;
+      validated_at: string | null;
       created_at: string;
       consultations: { started_at: string } | null;
     }[]
@@ -171,6 +180,8 @@ export async function listReportsForPatient(
     consultationId: r.consultation_id,
     date: r.consultations?.started_at ?? r.created_at,
     payload: reportSchema.parse(JSON.parse(decrypt(r.payload_enc))),
+    doctorNotes: r.doctor_notes_enc ? decrypt(r.doctor_notes_enc) : null,
+    validatedAt: r.validated_at,
   }));
 }
 

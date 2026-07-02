@@ -53,6 +53,22 @@ export async function getSoapNoteByConsultation(consultationId: string): Promise
   return data ? mapRow(data as unknown as SoapNoteRow) : null;
 }
 
+/** Todas las notas SOAP del paciente, indexadas por consultation_id. */
+export async function listSoapNotesForPatient(patientId: string): Promise<Map<string, SoapNote>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("soap_notes")
+    .select(COLS)
+    .eq("patient_id", patientId);
+  if (error) throw error;
+  const map = new Map<string, SoapNote>();
+  for (const row of data as unknown as SoapNoteRow[]) {
+    const note = mapRow(row);
+    map.set(note.consultationId, note);
+  }
+  return map;
+}
+
 /** Crea o actualiza (upsert por consultation_id) la nota SOAP de la consulta. */
 export async function upsertSoapNote(
   clinicId: string,
