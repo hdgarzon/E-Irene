@@ -1,5 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Carga .env.local en process.env del test runner (no del webServer, que ya
+// lo hace Next.js por su cuenta) — algunos specs necesitan SUPABASE_SERVICE_ROLE_KEY
+// directamente (p. ej. para preparar datos de prueba fuera del flujo normal de la app).
+try {
+  process.loadEnvFile(".env.local");
+} catch {
+  // Si no existe .env.local (p. ej. en CI, donde las env vars ya vienen del workflow), se ignora.
+}
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,

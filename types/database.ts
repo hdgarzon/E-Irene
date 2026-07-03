@@ -534,6 +534,21 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       psychometric_assessments: {
         Row: {
           administered_at: string
@@ -949,6 +964,20 @@ export type Database = {
         Args: { clinic_name: string; full_name: string }
         Returns: string
       }
+      get_platform_clinic_overview: {
+        Args: never
+        Returns: {
+          clinic_id: string
+          clinic_name: string
+          consultation_count: number
+          created_at: string
+          doctor_count: number
+          patient_count: number
+          plan: string
+          slug: string
+        }[]
+      }
+      is_platform_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       appointment_status:

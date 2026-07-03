@@ -57,3 +57,23 @@ export async function requireRole(roles: UserRole[]): Promise<SessionUser> {
   if (!roles.includes(user.role)) redirect("/dashboard");
   return user;
 }
+
+/**
+ * true si el usuario actual es super-admin de plataforma (acceso de solo
+ * negocio a todas las clínicas — ver platform_admins / is_platform_admin()
+ * en la base de datos). No hay forma de auto-otorgarse este rol desde la
+ * app; se concede insertando directamente en la tabla.
+ */
+export const isPlatformAdmin = cache(async (): Promise<boolean> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("is_platform_admin");
+  if (error) return false;
+  return data === true;
+});
+
+/** Exige que el usuario sea super-admin de plataforma; si no, redirige a /dashboard. */
+export async function requirePlatformAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!(await isPlatformAdmin())) redirect("/dashboard");
+  return user;
+}
