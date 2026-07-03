@@ -179,6 +179,7 @@ export type Database = {
           name: string
           plan: Database["public"]["Enums"]["clinic_plan"]
           slug: string
+          suspended_at: string | null
           updated_at: string
         }
         Insert: {
@@ -187,6 +188,7 @@ export type Database = {
           name: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
           slug: string
+          suspended_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -195,6 +197,7 @@ export type Database = {
           name?: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
           slug?: string
+          suspended_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -964,20 +967,39 @@ export type Database = {
         Args: { clinic_name: string; full_name: string }
         Returns: string
       }
+      get_platform_appointment_status: {
+        Args: never
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
       get_platform_clinic_overview: {
         Args: never
         Returns: {
+          appointment_count: number
           clinic_id: string
           clinic_name: string
           consultation_count: number
           created_at: string
           doctor_count: number
+          notifications_sent: number
           patient_count: number
           plan: string
+          report_count: number
           slug: string
+          suspended_at: string
         }[]
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      platform_set_clinic_plan: {
+        Args: { new_plan: string; target_clinic: string }
+        Returns: undefined
+      }
+      platform_set_clinic_suspended: {
+        Args: { suspend: boolean; target_clinic: string }
+        Returns: undefined
+      }
     }
     Enums: {
       appointment_status:

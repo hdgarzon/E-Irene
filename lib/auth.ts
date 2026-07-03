@@ -11,6 +11,7 @@ export interface SessionUser {
   role: UserRole;
   clinicId: string;
   clinicName: string;
+  clinicSuspended: boolean;
 }
 
 /**
@@ -28,7 +29,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   // clinic_doctors), así que fijamos la FK directa por su nombre.
   const { data: profile } = await supabase
     .from("users")
-    .select("role, full_name, email, clinic_id, clinic:clinics!users_clinic_id_fkey(name)")
+    .select("role, full_name, email, clinic_id, clinic:clinics!users_clinic_id_fkey(name, suspended_at)")
     .eq("id", user.id)
     .single();
 
@@ -41,13 +42,19 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     role: profile.role,
     clinicId: profile.clinic_id,
     clinicName: profile.clinic?.name ?? "",
+    clinicSuspended: Boolean(profile.clinic?.suspended_at),
   };
 });
 
-/** Exige sesión; redirige a /login si no hay. */
+/**
+ * Exige sesión; redirige a /login si no hay. Si la clínica está suspendida,
+ * bloquea el acceso a la app (redirige a /suspendida) — salvo que el usuario
+ * sea platform admin, que siempre puede entrar para reactivarla.
+ */
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  if (user.clinicSuspended && !(await isPlatformAdmin())) redirect("/suspendida");
   return user;
 }
 
