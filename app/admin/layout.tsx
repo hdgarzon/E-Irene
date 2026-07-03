@@ -1,22 +1,32 @@
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { AdminNav } from "@/components/admin-nav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requirePlatformAdmin();
 
   return (
-    <div className="min-h-dvh bg-cloud">
-      <header className="flex h-16 items-center justify-between border-b border-gray-line bg-navy px-6">
-        <Link href="/admin" className="flex items-center gap-2 font-heading font-semibold text-white">
+    <div className="flex min-h-dvh flex-col bg-cloud md:flex-row">
+      <aside className="flex shrink-0 flex-col bg-sidebar text-sidebar-foreground md:w-60">
+        <Link
+          href="/admin"
+          className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5 font-heading font-semibold text-white"
+        >
           <ShieldCheck className="size-5 text-mint" />
-          E-Irene · Admin de plataforma
+          Admin de plataforma
         </Link>
-        <Link href="/dashboard" className="text-sm text-white/70 hover:text-white">
-          Volver a mi clínica
+        <div className="flex-1">
+          <AdminNav />
+        </div>
+        <Link
+          href="/dashboard"
+          className="border-t border-sidebar-border px-5 py-4 text-sm text-sidebar-foreground/70 hover:text-white"
+        >
+          ← Volver a mi clínica
         </Link>
-      </header>
-      <main className="mx-auto max-w-5xl p-6">{children}</main>
+      </aside>
+      <main className="min-w-0 flex-1 overflow-y-auto p-6">{children}</main>
     </div>
   );
 }

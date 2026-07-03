@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "@/lib/auth";
 
 export type AuthState = {
   error?: string;
@@ -79,8 +80,13 @@ export async function signInAction(
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return { error: "Correo o contraseña incorrectos" };
 
-  const redirectTo = String(formData.get("redirect") || "/dashboard");
-  redirect(redirectTo.startsWith("/") ? redirectTo : "/dashboard");
+  // Respeta un destino explícito distinto del default; si no, el platform
+  // admin entra directo a su consola y el resto a su dashboard.
+  const requested = String(formData.get("redirect") || "");
+  if (requested.startsWith("/") && requested !== "/dashboard") {
+    redirect(requested);
+  }
+  redirect((await isPlatformAdmin()) ? "/admin" : "/dashboard");
 }
 
 export async function signOutAction() {

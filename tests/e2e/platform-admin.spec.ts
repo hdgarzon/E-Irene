@@ -31,11 +31,12 @@ test("admin de plataforma: no accesible por defecto, solo tras concederlo direct
   // Se concede el rol directamente en la tabla (sin ningún endpoint de la app).
   await grantPlatformAdmin(email);
 
-  // Ahora sí ve el panel — con datos de negocio, no clínicos
+  // Ahora sí ve la consola — con datos de negocio, no clínicos
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin/);
-  await expect(page.getByRole("heading", { name: "Panel de plataforma" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Resumen de la plataforma" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Uso de plataforma" })).toBeVisible();
+  await page.goto("/admin/clinicas");
   await expect(page.getByText(clinicName)).toBeVisible();
 });
 
@@ -67,11 +68,11 @@ test("admin de plataforma: suspender una clínica bloquea su acceso y es reversi
   });
   await expect(targetPage).toHaveURL(/\/dashboard/);
 
-  // El maestro suspende la clínica objetivo desde su fila.
-  await adminPage.goto("/admin");
-  const row = adminPage.locator("li", { hasText: targetClinic });
-  await row.getByRole("button", { name: /suspender/i }).click();
-  await expect(row.getByText("Suspendida")).toBeVisible();
+  // El maestro suspende la clínica objetivo desde su tarjeta.
+  await adminPage.goto("/admin/clinicas");
+  const card = adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic });
+  await card.getByRole("button", { name: /suspender/i }).click();
+  await expect(card.getByText("Suspendida")).toBeVisible();
 
   // La clínica objetivo queda bloqueada al intentar entrar a la app.
   await targetPage.goto("/dashboard");
@@ -79,25 +80,25 @@ test("admin de plataforma: suspender una clínica bloquea su acceso y es reversi
   await expect(targetPage.getByRole("heading", { name: "Cuenta suspendida" })).toBeVisible();
 
   // El maestro la reactiva.
-  await adminPage.goto("/admin");
-  const rowAgain = adminPage.locator("li", { hasText: targetClinic });
-  await rowAgain.getByRole("button", { name: /reactivar/i }).click();
-  await expect(rowAgain.getByRole("button", { name: /suspender/i })).toBeVisible();
+  await adminPage.goto("/admin/clinicas");
+  const cardAgain = adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic });
+  await cardAgain.getByRole("button", { name: /reactivar/i }).click();
+  await expect(cardAgain.getByRole("button", { name: /suspender/i })).toBeVisible();
 
   // Vuelve a tener acceso.
   await targetPage.goto("/dashboard");
   await expect(targetPage).toHaveURL(/\/dashboard/);
 
   // El maestro cambia el plan de la clínica objetivo y persiste tras recargar.
-  await adminPage.goto("/admin");
-  const rowPlan = adminPage.locator("li", { hasText: targetClinic });
+  await adminPage.goto("/admin/clinicas");
+  const cardPlan = adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic });
   await Promise.all([
-    adminPage.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin")),
-    rowPlan.locator("select").selectOption("pro"),
+    adminPage.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin/clinicas")),
+    cardPlan.locator("select").selectOption("pro"),
   ]);
-  await adminPage.goto("/admin");
+  await adminPage.goto("/admin/clinicas");
   await expect(
-    adminPage.locator("li", { hasText: targetClinic }).locator("select"),
+    adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic }).locator("select"),
   ).toHaveValue("pro");
 
   await adminCtx.close();

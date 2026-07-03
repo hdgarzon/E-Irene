@@ -3,7 +3,6 @@ import {
   getPlatformClinicOverview,
   getPlatformAppointmentStatus,
 } from "@/lib/db/platform-admin";
-import { AdminClinicRow } from "@/components/admin-clinic-row";
 
 const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
   scheduled: "Agendadas",
@@ -13,82 +12,77 @@ const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
   no_show: "No asistió",
 };
 
-function KpiCard({
+function StatCard({
   icon: Icon,
   label,
   value,
+  accent,
+  delay,
 }: {
   icon: typeof Users;
   label: string;
   value: number;
+  accent: string;
+  delay: number;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-line bg-card p-5">
-      <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Icon className="size-3.5" />
-        {label}
+    <div
+      className="animate-in fade-in slide-in-from-bottom-3 rounded-2xl border border-gray-line bg-card p-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md fill-mode-both"
+      style={{ animationDelay: `${delay}ms`, animationDuration: "500ms" }}
+    >
+      <div className={`mb-3 grid size-9 place-items-center rounded-xl ${accent}`}>
+        <Icon className="size-4" />
       </div>
-      <p className="font-heading text-2xl font-bold text-navy">{value}</p>
+      <p className="font-heading text-3xl font-bold text-navy tabular-nums">{value}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-export default async function AdminDashboardPage() {
+export default async function AdminResumenPage() {
   const [clinics, appointmentStatus] = await Promise.all([
     getPlatformClinicOverview(),
     getPlatformAppointmentStatus(),
   ]);
 
-  const totalPatients = clinics.reduce((s, c) => s + c.patientCount, 0);
-  const totalConsultations = clinics.reduce((s, c) => s + c.consultationCount, 0);
-  const totalReports = clinics.reduce((s, c) => s + c.reportCount, 0);
-  const totalAppointments = clinics.reduce((s, c) => s + c.appointmentCount, 0);
-  const totalNotifications = clinics.reduce((s, c) => s + c.notificationsSent, 0);
+  const total = (key: keyof (typeof clinics)[number]) =>
+    clinics.reduce((s, c) => s + (c[key] as number), 0);
+
+  const totals = {
+    clinics: clinics.length,
+    patients: total("patientCount"),
+    reports: total("reportCount"),
+    consultations: total("consultationCount"),
+    appointments: total("appointmentCount"),
+    notifications: total("notificationsSent"),
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Panel de plataforma</h1>
+        <h1 className="font-heading text-2xl font-bold text-navy">Resumen de la plataforma</h1>
         <p className="text-sm text-muted-foreground">
-          Vista de negocio — conteos agregados, sin acceso a datos clínicos de pacientes.
+          Información de negocio agregada — sin acceso a contenido clínico de pacientes.
         </p>
       </div>
 
-      {/* KPIs globales */}
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={Building2} label="Clínicas" value={clinics.length} />
-        <KpiCard icon={Users} label="Pacientes" value={totalPatients} />
-        <KpiCard icon={FileText} label="Reportes" value={totalReports} />
-        <KpiCard icon={Mic} label="Consultas" value={totalConsultations} />
-        <KpiCard icon={CalendarDays} label="Citas" value={totalAppointments} />
+        <StatCard icon={Building2} label="Clínicas" value={totals.clinics} accent="bg-purple/15 text-purple" delay={0} />
+        <StatCard icon={Users} label="Pacientes" value={totals.patients} accent="bg-mint/20 text-[#04342a]" delay={60} />
+        <StatCard icon={FileText} label="Reportes" value={totals.reports} accent="bg-navy/10 text-navy" delay={120} />
+        <StatCard icon={Mic} label="Consultas" value={totals.consultations} accent="bg-coral/15 text-destructive" delay={180} />
+        <StatCard icon={CalendarDays} label="Citas" value={totals.appointments} accent="bg-purple/15 text-purple" delay={240} />
       </div>
 
-      {/* Uso de plataforma / APIs */}
       <section className="space-y-3">
         <h2 className="font-heading font-semibold text-navy">Uso de plataforma</h2>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-gray-line bg-card p-5">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <BrainCircuit className="size-3.5" /> Análisis de IA (OpenAI)
-            </div>
-            <p className="font-heading text-2xl font-bold text-navy">{totalReports}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-line bg-card p-5">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Radio className="size-3.5" /> Transcripciones (Deepgram)
-            </div>
-            <p className="font-heading text-2xl font-bold text-navy">{totalConsultations}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-line bg-card p-5">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Send className="size-3.5" /> Notificaciones enviadas
-            </div>
-            <p className="font-heading text-2xl font-bold text-navy">{totalNotifications}</p>
-          </div>
+          <StatCard icon={BrainCircuit} label="Análisis de IA (OpenAI)" value={totals.reports} accent="bg-purple/15 text-purple" delay={0} />
+          <StatCard icon={Radio} label="Transcripciones (Deepgram)" value={totals.consultations} accent="bg-coral/15 text-destructive" delay={60} />
+          <StatCard icon={Send} label="Notificaciones enviadas" value={totals.notifications} accent="bg-mint/20 text-[#04342a]" delay={120} />
         </div>
       </section>
 
-      {/* Citas por estado */}
       <section className="space-y-3">
         <h2 className="font-heading font-semibold text-navy">Citas por estado</h2>
         {appointmentStatus.length === 0 ? (
@@ -96,10 +90,7 @@ export default async function AdminDashboardPage() {
         ) : (
           <div className="flex flex-wrap gap-3">
             {appointmentStatus.map((s) => (
-              <div
-                key={s.status}
-                className="rounded-xl border border-gray-line bg-card px-4 py-2 text-sm"
-              >
+              <div key={s.status} className="rounded-xl border border-gray-line bg-card px-4 py-2 text-sm">
                 <span className="text-muted-foreground">
                   {APPOINTMENT_STATUS_LABEL[s.status] ?? s.status}:{" "}
                 </span>
@@ -108,24 +99,6 @@ export default async function AdminDashboardPage() {
             ))}
           </div>
         )}
-      </section>
-
-      {/* Clínicas + gestión */}
-      <section className="space-y-3">
-        <h2 className="font-heading font-semibold text-navy">
-          Clínicas ({clinics.length})
-        </h2>
-        <div className="rounded-2xl border border-gray-line bg-card p-6">
-          {clinics.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aún no hay clínicas registradas.</p>
-          ) : (
-            <ul className="divide-y divide-gray-line">
-              {clinics.map((c) => (
-                <AdminClinicRow key={c.clinicId} clinic={c} />
-              ))}
-            </ul>
-          )}
-        </div>
       </section>
     </div>
   );

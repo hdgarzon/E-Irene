@@ -537,6 +537,33 @@ export type Database = {
           },
         ]
       }
+      plan_configs: {
+        Row: {
+          description: string
+          label: string
+          plan: Database["public"]["Enums"]["clinic_plan"]
+          price: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          description?: string
+          label: string
+          plan: Database["public"]["Enums"]["clinic_plan"]
+          price?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          description?: string
+          label?: string
+          plan?: Database["public"]["Enums"]["clinic_plan"]
+          price?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       platform_admins: {
         Row: {
           created_at: string
@@ -998,6 +1025,15 @@ export type Database = {
       }
       platform_set_clinic_suspended: {
         Args: { suspend: boolean; target_clinic: string }
+        Returns: undefined
+      }
+      platform_set_plan_config: {
+        Args: {
+          p_description: string
+          p_label: string
+          p_plan: string
+          p_price: string
+        }
         Returns: undefined
       }
     }
