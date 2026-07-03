@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -38,11 +39,13 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>
-          <p className="font-medium">{user.fullName}</p>
-          <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
-          <p className="mt-1 text-xs font-normal text-purple">{ROLE_LABEL[user.role]}</p>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <p className="font-medium">{user.fullName}</p>
+            <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
+            <p className="mt-1 text-xs font-normal text-purple">{ROLE_LABEL[user.role]}</p>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <form action={signOutAction}>
           <DropdownMenuItem

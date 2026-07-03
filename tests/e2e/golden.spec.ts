@@ -12,6 +12,13 @@ test("camino dorado: signup → dashboard → crear paciente → lista", async (
   await expect(page.getByText(/Hola,/)).toBeVisible();
   await expect(page.getByText("Clínica E2E").first()).toBeVisible();
 
+  // 2b. Menú de usuario (avatar) abre sin errores y muestra los datos de sesión
+  await page.getByRole("button", { name: /DP/ }).click();
+  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByText("Administrador")).toBeVisible();
+  await expect(page.getByText("Cerrar sesión")).toBeVisible();
+  await page.keyboard.press("Escape");
+
   // 3. Crea un paciente, con antecedentes y contacto de emergencia
   await page.goto("/patients/new");
   await page.fill("#fullName", "Juan Pérez E2E");
