@@ -19,6 +19,12 @@ async function signConsent(page: import("@playwright/test").Page) {
 }
 
 test("consulta: consentimiento → grabar → transcribir → finalizar", async ({ page }) => {
+  // El test más largo de la suite (signup, consulta completa, SOAP, dos PDFs
+  // generados con react-pdf, más 3 páginas de verificación al final) — en
+  // hardware de CI más lento que en local supera holgadamente los 30s por
+  // defecto de Playwright.
+  test.setTimeout(60_000);
+
   const email = `cons_${Date.now()}@e-irene.test`;
   await signUpAndActivate(page, { clinicName: "Clínica Consulta", fullName: "Dra. Live", email });
 
