@@ -22,7 +22,7 @@ export default async function AdminCitasPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-gray-line text-xs text-muted-foreground">
-                  <th className="pb-2 pr-3 font-medium">Paciente</th>
+                  <th className="pb-2 pr-3 font-medium">Profesional / Clínica</th>
                   <th className="px-3 pb-2 font-medium">Fecha y hora</th>
                   <th className="px-3 pb-2 font-medium">Estado</th>
                   <th className="pb-2 pl-3 text-right font-medium">Acciones</th>

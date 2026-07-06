@@ -1,16 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encrypt, encryptNullable, decrypt, decryptNullable } from "@/lib/crypto";
+import { getPlatformClinicOverview } from "@/lib/db/platform-admin";
 import type { UserRole } from "@/lib/auth";
-
-function safeName(enc: string | null | undefined): string {
-  if (!enc) return "—";
-  try {
-    return decrypt(enc);
-  } catch {
-    return "(no disponible)";
-  }
-}
 
 // ============================ Doctores / personal ===========================
 
@@ -79,128 +70,14 @@ export async function deleteStaff(id: string): Promise<{ ok: boolean; error?: st
   return { ok: true };
 }
 
-// ================================ Pacientes =================================
-
-export interface AdminPatient {
-  id: string;
-  fullName: string;
-  document: string | null;
-  phone: string | null;
-  email: string | null;
-  birthDate: string | null;
-  gender: string | null;
-  emergencyContactName: string | null;
-  emergencyContactPhone: string | null;
-  emergencyContactRelationship: string | null;
-  clinicId: string;
-  clinicName: string;
-}
-
-const PATIENT_COLS =
-  "id, full_name_enc, document_enc, phone_enc, email_enc, birth_date, gender, " +
-  "emergency_contact_name_enc, emergency_contact_phone_enc, emergency_contact_relationship_enc, " +
-  "clinic_id, clinics:clinics!patients_clinic_id_fkey(name)";
-
-interface AdminPatientRow {
-  id: string;
-  full_name_enc: string;
-  document_enc: string | null;
-  phone_enc: string | null;
-  email_enc: string | null;
-  birth_date: string | null;
-  gender: string | null;
-  emergency_contact_name_enc: string | null;
-  emergency_contact_phone_enc: string | null;
-  emergency_contact_relationship_enc: string | null;
-  clinic_id: string;
-  clinics: { name: string } | null;
-}
-
-function mapAdminPatient(r: AdminPatientRow): AdminPatient {
-  return {
-    id: r.id,
-    fullName: safeName(r.full_name_enc),
-    document: decryptNullable(r.document_enc),
-    phone: decryptNullable(r.phone_enc),
-    email: decryptNullable(r.email_enc),
-    birthDate: r.birth_date,
-    gender: r.gender,
-    emergencyContactName: decryptNullable(r.emergency_contact_name_enc),
-    emergencyContactPhone: decryptNullable(r.emergency_contact_phone_enc),
-    emergencyContactRelationship: decryptNullable(r.emergency_contact_relationship_enc),
-    clinicId: r.clinic_id,
-    clinicName: r.clinics?.name ?? "—",
-  };
-}
-
-export async function listAllPatients(): Promise<AdminPatient[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("patients")
-    .select(PATIENT_COLS)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as unknown as AdminPatientRow[]).map(mapAdminPatient);
-}
-
-export async function getAdminPatient(id: string): Promise<AdminPatient | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("patients")
-    .select(PATIENT_COLS)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? mapAdminPatient(data as unknown as AdminPatientRow) : null;
-}
-
-export interface AdminPatientInput {
-  fullName: string;
-  document: string | null;
-  phone: string | null;
-  email: string | null;
-  birthDate: string | null;
-  gender: string | null;
-  emergencyContactName: string | null;
-  emergencyContactPhone: string | null;
-  emergencyContactRelationship: string | null;
-}
-
-/**
- * Actualiza SOLO identidad/contacto del paciente. NUNCA toca notes_enc ni
- * history_enc (contenido clínico que el maestro no debe ver ni sobrescribir).
- */
-export async function updatePatientAdmin(id: string, input: AdminPatientInput): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("patients")
-    .update({
-      full_name_enc: encrypt(input.fullName),
-      document_enc: encryptNullable(input.document),
-      phone_enc: encryptNullable(input.phone),
-      email_enc: encryptNullable(input.email),
-      birth_date: input.birthDate,
-      gender: input.gender,
-      emergency_contact_name_enc: encryptNullable(input.emergencyContactName),
-      emergency_contact_phone_enc: encryptNullable(input.emergencyContactPhone),
-      emergency_contact_relationship_enc: encryptNullable(input.emergencyContactRelationship),
-    })
-    .eq("id", id);
-  if (error) throw error;
-}
-
-/** Elimina el paciente y, por cascade, TODO su historial (irreversible). */
-export async function deletePatientAdmin(id: string): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("patients").delete().eq("id", id);
-  if (error) throw error;
-}
-
 // ================================== Citas ===================================
+//
+// El super-admin gestiona la AGENDA (reagendar/cambiar estado/cancelar) como
+// herramienta de soporte de negocio, pero NUNCA ve la identidad del paciente:
+// la consulta no trae `full_name_enc` — solo profesional, clínica y horario.
 
 export interface AdminAppointment {
   id: string;
-  patientName: string;
   doctorName: string;
   clinicName: string;
   scheduledAt: string;
@@ -215,7 +92,6 @@ export async function listAllAppointments(): Promise<AdminAppointment[]> {
     .from("appointments")
     .select(
       "id, scheduled_at, duration_min, status, notes, " +
-        "patients:patients!appointments_patient_id_fkey(full_name_enc), " +
         "doctor:users!appointments_doctor_id_fkey(full_name), " +
         "clinics:clinics!appointments_clinic_id_fkey(name)",
     )
@@ -228,13 +104,11 @@ export async function listAllAppointments(): Promise<AdminAppointment[]> {
       duration_min: number;
       status: string;
       notes: string | null;
-      patients: { full_name_enc: string } | null;
       doctor: { full_name: string } | null;
       clinics: { name: string } | null;
     }[]
   ).map((r) => ({
     id: r.id,
-    patientName: safeName(r.patients?.full_name_enc),
     doctorName: r.doctor?.full_name ?? "—",
     clinicName: r.clinics?.name ?? "—",
     scheduledAt: r.scheduled_at,
@@ -324,18 +198,29 @@ export interface ClinicMapEntry {
   patientCount: number;
 }
 
-/** Clínicas con sus doctores y conteo de pacientes (el "mapa"). */
+/**
+ * Clínicas con sus doctores y conteo de pacientes (el "mapa").
+ *
+ * El conteo de pacientes viene de get_platform_clinic_overview() (SECURITY
+ * DEFINER, solo count, sin PII) — NO de leer filas de `patients`, a las que el
+ * super-admin ya no tiene acceso vía RLS (ver migración 0015).
+ */
 export async function getClinicMap(): Promise<ClinicMapEntry[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("clinics")
-    .select(
-      "id, name, plan, suspended_at, " +
-        "users:users!users_clinic_id_fkey(id, full_name, email, role), " +
-        "patients:patients!patients_clinic_id_fkey(id)",
-    )
-    .order("created_at", { ascending: false });
+  const [{ data, error }, overview] = await Promise.all([
+    supabase
+      .from("clinics")
+      .select(
+        "id, name, plan, suspended_at, " +
+          "users:users!users_clinic_id_fkey(id, full_name, email, role)",
+      )
+      .order("created_at", { ascending: false }),
+    getPlatformClinicOverview(),
+  ]);
   if (error) throw error;
+
+  const patientCountByClinic = new Map(overview.map((o) => [o.clinicId, o.patientCount]));
+
   return (
     data as unknown as {
       id: string;
@@ -343,7 +228,6 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
       plan: string;
       suspended_at: string | null;
       users: { id: string; full_name: string; email: string; role: UserRole }[];
-      patients: { id: string }[];
     }[]
   ).map((c) => ({
     clinicId: c.id,
@@ -353,6 +237,6 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
     doctors: (c.users ?? [])
       .filter((u) => u.role !== "paciente")
       .map((u) => ({ id: u.id, fullName: u.full_name, email: u.email, role: u.role })),
-    patientCount: (c.patients ?? []).length,
+    patientCount: patientCountByClinic.get(c.id) ?? 0,
   }));
 }

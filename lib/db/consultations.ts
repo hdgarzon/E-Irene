@@ -6,6 +6,7 @@ export type ConsultationStatus = Database["public"]["Enums"]["consultation_statu
 
 export interface Consultation {
   id: string;
+  clinicId: string;
   patientId: string;
   patientName: string;
   doctorId: string;
@@ -18,6 +19,7 @@ export interface Consultation {
 
 interface ConsultationRow {
   id: string;
+  clinic_id: string;
   patient_id: string;
   doctor_id: string;
   status: ConsultationStatus;
@@ -29,13 +31,14 @@ interface ConsultationRow {
 }
 
 const SELECT =
-  "id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
+  "id, clinic_id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
   "patients!consultations_patient_id_fkey(full_name_enc), " +
   "doctor:users!consultations_doctor_id_fkey(full_name)";
 
 function mapRow(r: ConsultationRow): Consultation {
   return {
     id: r.id,
+    clinicId: r.clinic_id,
     patientId: r.patient_id,
     patientName: safeDecryptName(r.patients?.full_name_enc),
     doctorId: r.doctor_id,

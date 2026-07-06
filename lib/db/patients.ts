@@ -9,7 +9,7 @@ import {
 } from "./patient-mappers";
 
 const COLUMNS =
-  "id, full_name_enc, document_enc, phone_enc, email_enc, notes_enc, birth_date, gender, created_at, " +
+  "id, clinic_id, full_name_enc, document_enc, phone_enc, email_enc, notes_enc, birth_date, gender, created_at, " +
   "emergency_contact_name_enc, emergency_contact_phone_enc, emergency_contact_relationship_enc, history_enc";
 
 /** Lista los pacientes de la clínica del usuario (RLS scoped). */
