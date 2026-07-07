@@ -29,7 +29,13 @@ export default defineConfig({
     // Fuerza los proveedores mock para la suite de regresión: determinista,
     // sin red ni costo, sin importar si .env.local trae API keys reales.
     // (Process env tiene prioridad sobre .env.local en Next.js.)
-    env: { ANALYSIS_PROVIDER: "mock", TRANSCRIPTION_PROVIDER: "mock" },
+    // RATE_LIMITING_DISABLED: todos los tests hacen signup/login desde la
+    // misma IP y agotarían el límite por IP; se desactiva solo aquí.
+    env: {
+      ANALYSIS_PROVIDER: "mock",
+      TRANSCRIPTION_PROVIDER: "mock",
+      RATE_LIMITING_DISABLED: "true",
+    },
     // Sin esto, Playwright silencia la salida del dev server salvo que
     // falle el arranque — errores de Server Actions en runtime (console.error
     // dentro de una request) no llegarían a los logs de CI.

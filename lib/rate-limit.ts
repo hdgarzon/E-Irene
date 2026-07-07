@@ -19,12 +19,19 @@ export async function getClientIp(): Promise<string> {
  * Fail-open: si la BD falla, se permite la acción (el rate limiting es un
  * control secundario; no debe bloquear el login por un problema de infraestructura).
  * El fallo se registra para poder investigarlo.
+ *
+ * `RATE_LIMITING_DISABLED=true` desactiva el límite: se usa SOLO en la suite
+ * E2E (misma idea que forzar los proveedores mock por env), donde todos los
+ * tests hacen signup/login desde la misma IP del runner y agotarían el límite.
+ * Nunca debe activarse en producción.
  */
 export async function checkRateLimit(
   key: string,
   max: number,
   windowSeconds: number,
 ): Promise<boolean> {
+  if (process.env.RATE_LIMITING_DISABLED === "true") return true;
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("check_rate_limit", {
     p_key: key,
