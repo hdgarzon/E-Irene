@@ -64,6 +64,23 @@ export async function getActiveConsent(patientId: string): Promise<Consent | nul
   return data ? mapRow(data as ConsentRow) : null;
 }
 
+/**
+ * Nº de pacientes de la clínica SIN consentimiento vigente (versión actual).
+ * Se comparan solo ids (no PII): trae los ids de pacientes y los ids con
+ * consentimiento vigente, y calcula la diferencia.
+ */
+export async function countPatientsWithoutConsent(): Promise<number> {
+  const supabase = await createClient();
+  const [patientsRes, consentsRes] = await Promise.all([
+    supabase.from("patients").select("id"),
+    supabase.from("consents").select("patient_id").eq("document_version", CONSENT_VERSION),
+  ]);
+  if (patientsRes.error) throw patientsRes.error;
+  if (consentsRes.error) throw consentsRes.error;
+  const consented = new Set((consentsRes.data ?? []).map((c) => c.patient_id));
+  return (patientsRes.data ?? []).filter((p) => !consented.has(p.id)).length;
+}
+
 export async function createConsent(input: {
   clinicId: string;
   patientId: string;

@@ -5,6 +5,7 @@ import { getConsultation, getTranscript } from "@/lib/db/consultations";
 import { getReportByConsultation } from "@/lib/db/reports";
 import { getSoapNoteByConsultation } from "@/lib/db/soap-notes";
 import { ReportView } from "@/components/report-view";
+import { AnalysisStatusBanner } from "@/components/analysis-status";
 import { SoapNoteEditor } from "@/components/soap-note-editor";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -66,7 +67,17 @@ export default async function ConsultationPage({
         </div>
       )}
 
-      {report && <ReportView report={report} consultationId={id} />}
+      {report ? (
+        <ReportView report={report} consultationId={id} />
+      ) : (
+        consultation.analysisStatus && (
+          <AnalysisStatusBanner
+            consultationId={id}
+            status={consultation.analysisStatus}
+            error={consultation.analysisError}
+          />
+        )
+      )}
 
       <SoapNoteEditor consultationId={id} patientId={consultation.patientId} note={soapNote} />
 

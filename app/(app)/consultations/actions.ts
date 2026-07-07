@@ -2,22 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getActiveConsent } from "@/lib/db/consents";
-import {
-  startConsultation,
-  appendChunk,
-  endConsultation,
-  getConsultation,
-  markConsultationAnalyzed,
-} from "@/lib/db/consultations";
-import { createReport, updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
+import { startConsultation, appendChunk, endConsultation, setAnalysisStatus } from "@/lib/db/consultations";
+import { updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
 import { upsertSoapNote } from "@/lib/db/soap-notes";
-import { getAnalysisProvider } from "@/lib/providers";
-import { getPatient } from "@/lib/db/patients";
-import { recordNotification } from "@/lib/db/notifications";
-import { getEmailProvider } from "@/lib/email/providers";
-import { buildReportReadyEmail } from "@/lib/email/templates";
+import { runConsultationAnalysis } from "@/lib/consultation-analysis";
 import { logAudit } from "@/lib/db/audit";
 
 export async function startConsultationAction(
@@ -167,50 +158,24 @@ export async function endConsultationAction(consultationId: string): Promise<voi
     entityId: consultationId,
   });
 
-  // Análisis IA (mock por defecto; OpenAI si hay key) → reporte cifrado.
-  const consultation = await getConsultation(consultationId);
-  if (consultation && transcript) {
-    const payload = await getAnalysisProvider().analyze(transcript);
-    const report = await createReport(user.clinicId, {
-      consultationId,
-      patientId: consultation.patientId,
-      payload,
-    });
-    await markConsultationAnalyzed(consultationId);
-    await logAudit({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      action: "report.generated",
-      entityType: "report",
-      entityId: report.id,
-      metadata: { consultationId },
-    });
-
-    // Aviso "reporte listo" al paciente (sin contenido clínico).
-    const patient = await getPatient(consultation.patientId);
-    if (patient?.email) {
-      try {
-        await getEmailProvider().send(
-          buildReportReadyEmail({
-            to: patient.email,
-            patientName: patient.fullName,
-            clinicName: user.clinicName,
-          }),
-        );
-        await recordNotification(user.clinicId, {
-          patientId: consultation.patientId,
-          type: "report_ready",
-          status: "sent",
-        });
-      } catch {
-        await recordNotification(user.clinicId, {
-          patientId: consultation.patientId,
-          type: "report_ready",
-          status: "failed",
-        });
-      }
-    }
+  if (transcript) {
+    // El análisis de IA puede tardar (llamada real a OpenAI) o fallar; correrlo
+    // síncrono aquí bloquearía el cierre de la sesión sin ningún reintento.
+    // `after()` lo programa para después de enviar la respuesta (se ejecuta
+    // igual aunque a continuación llamemos a `redirect()`), y el estado queda
+    // en `consultations.analysis_status` para que la UI haga polling.
+    await setAnalysisStatus(consultationId, "pending");
+    const { clinicId, id: actorId, clinicName } = user;
+    after(() => runConsultationAnalysis({ consultationId, clinicId, actorId, clinicName }));
   }
 
   redirect(`/consultations/${consultationId}`);
+}
+
+export async function retryAnalysisAction(consultationId: string): Promise<void> {
+  const user = await requireUser();
+  await setAnalysisStatus(consultationId, "pending");
+  const { clinicId, id: actorId, clinicName } = user;
+  after(() => runConsultationAnalysis({ consultationId, clinicId, actorId, clinicName }));
+  revalidatePath(`/consultations/${consultationId}`);
 }
