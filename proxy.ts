@@ -3,7 +3,8 @@ import { createServerClient } from "@supabase/ssr";
 
 /**
  * proxy.ts (Next.js 16; reemplaza a middleware.ts).
- * Refresca la sesión de Supabase en cada request y protege las rutas de la app.
+ * Refresca la sesión de Supabase en cada request, protege las rutas de la app
+ * y genera el nonce de la Content-Security-Policy.
  *
  * Modelo DENY-BY-DEFAULT: toda ruta cubierta por el matcher exige sesión,
  * salvo las explícitamente públicas de abajo. Así, cualquier ruta nueva
@@ -24,8 +25,46 @@ function isPublicPath(path: string): boolean {
   return PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
 }
 
+/**
+ * CSP con nonce por request (ver docs/app/guides/content-security-policy).
+ * `script-src 'self' 'nonce-…' 'strict-dynamic'` permite que Next.js aplique
+ * el nonce automáticamente a sus propios scripts (runtime, RSC streaming,
+ * swap de Suspense) sin recurrir a `'unsafe-inline'` — que dejaría pasar
+ * cualquier script inline y anularía la protección contra XSS. Como TODA
+ * página de la app ya es dinámica (lee sesión en cada request), no se pierde
+ * optimización estática al exigir nonce.
+ */
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    // 'unsafe-eval' solo en dev: React lo usa para reconstruir stack traces
+    // del servidor en el navegador; no se usa en producción.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    // Next.js no aplica el nonce a estilos (Tailwind/CSS-in-JS inline); mantenemos
+    // 'unsafe-inline' aquí, que es el rango de riesgo estándar aceptado para style-src.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildCsp(nonce);
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +76,8 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response.headers.set("Content-Security-Policy", csp);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );
@@ -66,7 +106,9 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", path);
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    redirectResponse.headers.set("Content-Security-Policy", csp);
+    return redirectResponse;
   }
 
   return response;
