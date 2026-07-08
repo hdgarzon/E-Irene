@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto";
+import { dayKey } from "@/lib/dates";
 import type { Database } from "@/types/database";
 
 export type AppointmentStatus = Database["public"]["Enums"]["appointment_status"];
@@ -61,6 +62,27 @@ export async function listAppointments(): Promise<Appointment[]> {
   const { data, error } = await supabase
     .from("appointments")
     .select(SELECT)
+    .order("scheduled_at", { ascending: true });
+  if (error) throw error;
+  return (data as unknown as RawRow[]).map(mapRow);
+}
+
+/**
+ * Citas de HOY (zona Bogotá, UTC-5 sin DST) que no estén canceladas, para la
+ * agenda del día en el dashboard. Consulta acotada por rango de fecha (no trae
+ * toda la agenda).
+ */
+export async function listTodayAppointments(): Promise<Appointment[]> {
+  const supabase = await createClient();
+  const key = dayKey(new Date());
+  const from = new Date(`${key}T00:00:00-05:00`).toISOString();
+  const to = new Date(`${key}T23:59:59-05:00`).toISOString();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(SELECT)
+    .gte("scheduled_at", from)
+    .lte("scheduled_at", to)
+    .neq("status", "cancelled")
     .order("scheduled_at", { ascending: true });
   if (error) throw error;
   return (data as unknown as RawRow[]).map(mapRow);

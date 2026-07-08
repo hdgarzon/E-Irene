@@ -31,7 +31,12 @@ export function ConsultationsList({ consultations }: { consultations: Consultati
       ) : (
         <div className="divide-y divide-gray-line overflow-hidden rounded-2xl border border-gray-line bg-card">
           {filtered.map((c) => {
-            const meta = STATUS_META[c.status] ?? STATUS_META.ended;
+            const meta =
+              c.analysisStatus === "failed"
+                ? { label: "Análisis fallido", className: "bg-destructive/15 text-destructive" }
+                : c.analysisStatus === "pending" || c.analysisStatus === "processing"
+                  ? { label: "Analizando…", className: "bg-secondary text-secondary-foreground" }
+                  : (STATUS_META[c.status] ?? STATUS_META.ended);
             return (
               <Link
                 key={c.id}

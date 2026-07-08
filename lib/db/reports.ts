@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { encrypt, decrypt } from "@/lib/crypto";
-import { reportSchema, type ReportPayload } from "@/lib/providers/types";
+import { reportSchema, type ReportPayload, type RiskLevel } from "@/lib/providers/types";
 
 export interface Report {
   id: string;
@@ -233,4 +233,95 @@ export async function setReportPdfPath(reportId: string, path: string): Promise<
   const supabase = await createClient();
   const { error } = await supabase.from("reports").update({ pdf_path: path }).eq("id", reportId);
   if (error) throw error;
+}
+
+/** Nº de reportes de la clínica aún sin validar (firma del profesional). */
+export async function countPendingReports(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("reports")
+    .select("*", { count: "exact", head: true })
+    .is("validated_at", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export interface RiskAlert {
+  consultationId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+  categories: { key: keyof NonNullable<ReportPayload["riskFlags"]>; level: RiskLevel }[];
+}
+
+const RISK_ALERT_LEVELS = new Set<RiskLevel>(["moderado", "alto"]);
+
+/**
+ * Alertas de riesgo abiertas: reportes recientes cuyo análisis de IA marcó al
+ * menos una categoría (ideación suicida, autolesión, consumo, riesgo a
+ * terceros) en nivel "moderado" o "alto". Apoyo a la detección temprana para
+ * el profesional — NUNCA un diagnóstico. Los reportes previos a esta versión
+ * no tienen riskFlags y simplemente no generan alerta.
+ */
+export async function listRiskAlerts(limit = 50): Promise<RiskAlert[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      "consultation_id, patient_id, payload_enc, created_at, " +
+        "patients!reports_patient_id_fkey(full_name_enc), " +
+        "consultations!reports_consultation_id_fkey(started_at)",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const rows = data as unknown as {
+    consultation_id: string;
+    patient_id: string;
+    payload_enc: string;
+    created_at: string;
+    patients: { full_name_enc: string } | null;
+    consultations: { started_at: string } | null;
+  }[];
+
+  const alerts: RiskAlert[] = [];
+  for (const r of rows) {
+    let payload: ReportPayload;
+    try {
+      payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
+    } catch {
+      continue; // payload ilegible (clave rotada) → se omite, no rompe la lista
+    }
+    if (!payload.riskFlags) continue;
+
+    const categories = (
+      Object.entries(payload.riskFlags) as [
+        keyof NonNullable<ReportPayload["riskFlags"]>,
+        { level: RiskLevel },
+      ][]
+    )
+      .filter(([, v]) => RISK_ALERT_LEVELS.has(v.level))
+      .map(([key, v]) => ({ key, level: v.level }));
+
+    if (categories.length === 0) continue;
+
+    let patientName = "(nombre no disponible)";
+    if (r.patients?.full_name_enc) {
+      try {
+        patientName = decrypt(r.patients.full_name_enc);
+      } catch {
+        // se mantiene el placeholder
+      }
+    }
+
+    alerts.push({
+      consultationId: r.consultation_id,
+      patientId: r.patient_id,
+      patientName,
+      date: r.consultations?.started_at ?? r.created_at,
+      categories,
+    });
+  }
+  return alerts;
 }

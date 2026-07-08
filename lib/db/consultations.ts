@@ -3,6 +3,7 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import type { Database } from "@/types/database";
 
 export type ConsultationStatus = Database["public"]["Enums"]["consultation_status"];
+export type AnalysisStatus = "pending" | "processing" | "done" | "failed";
 
 export interface Consultation {
   id: string;
@@ -15,6 +16,8 @@ export interface Consultation {
   startedAt: string;
   endedAt: string | null;
   reason: string | null;
+  analysisStatus: AnalysisStatus | null;
+  analysisError: string | null;
 }
 
 interface ConsultationRow {
@@ -26,12 +29,15 @@ interface ConsultationRow {
   started_at: string;
   ended_at: string | null;
   reason_enc: string | null;
+  analysis_status: string | null;
+  analysis_error: string | null;
   patients: { full_name_enc: string } | null;
   doctor: { full_name: string } | null;
 }
 
 const SELECT =
   "id, clinic_id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
+  "analysis_status, analysis_error, " +
   "patients!consultations_patient_id_fkey(full_name_enc), " +
   "doctor:users!consultations_doctor_id_fkey(full_name)";
 
@@ -47,6 +53,8 @@ function mapRow(r: ConsultationRow): Consultation {
     startedAt: r.started_at,
     endedAt: r.ended_at,
     reason: r.reason_enc ? decrypt(r.reason_enc) : null,
+    analysisStatus: (r.analysis_status as AnalysisStatus | null) ?? null,
+    analysisError: r.analysis_error,
   };
 }
 
@@ -169,6 +177,20 @@ export async function markConsultationAnalyzed(consultationId: string): Promise<
     .update({ status: "analyzed" })
     .eq("id", consultationId);
   if (error) throw error;
+}
+
+/** Actualiza el estado del análisis de IA en background (ver lib/consultation-analysis.ts). */
+export async function setAnalysisStatus(
+  consultationId: string,
+  status: AnalysisStatus,
+  error?: string | null,
+): Promise<void> {
+  const supabase = await createClient();
+  const { error: dbError } = await supabase
+    .from("consultations")
+    .update({ analysis_status: status, analysis_error: error ?? null })
+    .eq("id", consultationId);
+  if (dbError) throw dbError;
 }
 
 export async function getTranscript(consultationId: string): Promise<string | null> {

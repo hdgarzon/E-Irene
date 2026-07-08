@@ -49,7 +49,8 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
   await expect(page.getByText(/momentos aparece/)).toBeVisible();
 
-  // Finalizar → genera reporte IA
+  // Finalizar → el análisis de IA corre en background (no bloquea el redirect);
+  // la página hace polling cada 3s hasta que el reporte aparece.
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
 
@@ -57,8 +58,8 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await expect(page.getByRole("heading", { name: "Motivo de la consulta" })).toBeVisible();
   await expect(page.getByText(/Episodios de ansiedad antes de reuniones/)).toBeVisible();
 
-  // Reporte IA con sus secciones + disclaimer
-  await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible();
+  // Reporte IA con sus secciones + disclaimer (puede tardar un par de ciclos de polling)
+  await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Resumen ejecutivo" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Análisis de sentimiento" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Nube de palabras/ })).toBeVisible();

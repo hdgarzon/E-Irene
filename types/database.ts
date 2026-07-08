@@ -270,6 +270,8 @@ export type Database = {
       }
       consultations: {
         Row: {
+          analysis_error: string | null
+          analysis_status: string | null
           appointment_id: string | null
           clinic_id: string
           consent_id: string | null
@@ -285,6 +287,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          analysis_error?: string | null
+          analysis_status?: string | null
           appointment_id?: string | null
           clinic_id: string
           consent_id?: string | null
@@ -300,6 +304,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          analysis_error?: string | null
+          analysis_status?: string | null
           appointment_id?: string | null
           clinic_id?: string
           consent_id?: string | null
