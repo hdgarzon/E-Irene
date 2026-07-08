@@ -10,6 +10,7 @@ import { updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/re
 import { upsertSoapNote } from "@/lib/db/soap-notes";
 import { runConsultationAnalysis } from "@/lib/consultation-analysis";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 
 export async function startConsultationAction(
   patientId: string,
@@ -65,7 +66,13 @@ export async function updateSuggestionAction(
       entityType: "report",
       entityId: reportId,
     });
-  } catch {
+  } catch (error) {
+    logger.error("report.suggestion_edit_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      reportId,
+      error,
+    });
     return { error: "No se pudo guardar la sugerencia." };
   }
   revalidatePath(`/consultations/${consultationId}`);
@@ -91,7 +98,13 @@ export async function updateDoctorNotesAction(
       entityType: "report",
       entityId: reportId,
     });
-  } catch {
+  } catch (error) {
+    logger.error("report.doctor_notes_edit_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      reportId,
+      error,
+    });
     return { error: "No se pudieron guardar las notas." };
   }
   revalidatePath(`/consultations/${consultationId}`);
@@ -127,7 +140,13 @@ export async function saveSoapNoteAction(
       entityType: "consultation",
       entityId: consultationId,
     });
-  } catch {
+  } catch (error) {
+    logger.error("soap_note.save_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      consultationId,
+      error,
+    });
     return { error: "No se pudo guardar la nota SOAP." };
   }
   revalidatePath(`/consultations/${consultationId}`);

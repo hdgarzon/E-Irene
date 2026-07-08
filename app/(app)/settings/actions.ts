@@ -7,6 +7,7 @@ import { addMember } from "@/lib/db/team";
 import { getClinicOverview, setClinicPlan } from "@/lib/db/clinic";
 import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 
 export type MemberState = {
   ok?: boolean;
@@ -61,7 +62,12 @@ export async function addMemberAction(
       metadata: { role: parsed.data.role },
     });
   } catch (error) {
-    console.error("[settings] no se pudo crear el miembro:", error);
+    logger.error("member.add_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      role: parsed.data.role,
+      error,
+    });
     return { error: "No se pudo crear el miembro. ¿El correo ya está registrado?" };
   }
 

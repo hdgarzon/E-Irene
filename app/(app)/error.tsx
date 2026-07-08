@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { logger } from "@/lib/logger";
 
 /**
  * Error boundary para las rutas autenticadas. No muestra el detalle técnico al
@@ -16,7 +17,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[app] error de ruta:", error);
+    logger.error("app.route_error", { digest: error.digest, error });
   }, [error]);
 
   return (

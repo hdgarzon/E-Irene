@@ -11,6 +11,7 @@ import { getAnalysisProvider } from "@/lib/providers";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildReportReadyEmail } from "@/lib/email/templates";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 
 /**
  * Analiza la transcripción de una consulta finalizada y genera el reporte
@@ -81,7 +82,8 @@ export async function runConsultationAnalysis(params: {
           type: "report_ready",
           status: "sent",
         });
-      } catch {
+      } catch (error) {
+        logger.warn("report_ready_email.send_failed", { clinicId, consultationId, error });
         await recordNotification(clinicId, {
           patientId: consultation.patientId,
           type: "report_ready",
@@ -91,7 +93,7 @@ export async function runConsultationAnalysis(params: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error desconocido al analizar la consulta.";
-    console.error(`[analysis] fallo al analizar la consulta ${consultationId}:`, error);
+    logger.error("consultation.analysis_failed", { clinicId, actorId, consultationId, error });
     await setAnalysisStatus(consultationId, "failed", message).catch(() => {});
     await logAudit({
       clinicId,

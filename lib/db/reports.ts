@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { reportSchema, type ReportPayload, type RiskLevel } from "@/lib/providers/types";
+import { logger } from "@/lib/logger";
 
 export interface Report {
   id: string;
@@ -122,7 +123,7 @@ export async function listReports(): Promise<ReportListItem[]> {
     try {
       payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
     } catch (error) {
-      console.error(`[reports] no se pudo descifrar el reporte ${r.id}:`, error);
+      logger.error("report.decrypt_failed", { reportId: r.id, error });
       continue;
     }
     let patientName = "(nombre no disponible)";
@@ -290,8 +291,10 @@ export async function listRiskAlerts(limit = 50): Promise<RiskAlert[]> {
     let payload: ReportPayload;
     try {
       payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
-    } catch {
-      continue; // payload ilegible (clave rotada) → se omite, no rompe la lista
+    } catch (error) {
+      // payload ilegible (p. ej. clave rotada) → se omite, no rompe la lista.
+      logger.warn("risk_alert.payload_decrypt_failed", { consultationId: r.consultation_id, error });
+      continue;
     }
     if (!payload.riskFlags) continue;
 

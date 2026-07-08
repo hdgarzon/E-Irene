@@ -1,4 +1,5 @@
 import { encrypt, decrypt, encryptNullable, decryptNullable } from "@/lib/crypto";
+import { logger } from "@/lib/logger";
 
 export interface PatientInput {
   fullName: string;
@@ -85,7 +86,7 @@ export function tryDecryptPatient(row: PatientRow): Patient | null {
   try {
     return decryptPatient(row);
   } catch (error) {
-    console.error(`[patients] no se pudo descifrar el paciente ${row.id}:`, error);
+    logger.error("patient.decrypt_failed", { patientId: row.id, error });
     return null;
   }
 }
