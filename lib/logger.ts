@@ -16,6 +16,13 @@ type LogContext = Record<string, unknown> & { error?: unknown };
 function serializeError(error: unknown): { message: string; stack?: string } | undefined {
   if (error === undefined) return undefined;
   if (error instanceof Error) return { message: error.message, stack: error.stack };
+  // Errores de Supabase (PostgrestError, etc.) son objetos planos con
+  // `.message`, no instancias de Error — sin esto, String(error) colapsa a
+  // "[object Object]" y se pierde el detalle real.
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === "string") return { message };
+  }
   return { message: String(error) };
 }
 

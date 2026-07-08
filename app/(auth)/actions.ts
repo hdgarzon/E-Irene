@@ -5,8 +5,11 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 
 const TOO_MANY = "Demasiados intentos. Espera unos minutos e intenta de nuevo.";
+const SIGNUP_FAILED =
+  "No pudimos enviar el enlace de activación. Intenta de nuevo en unos minutos.";
 
 export type AuthState = {
   error?: string;
@@ -72,7 +75,10 @@ export async function signUpAction(
       },
     },
   });
-  if (error) return { error: error.message };
+  if (error) {
+    logger.error("signup.otp_failed", { email, error });
+    return { error: SIGNUP_FAILED };
+  }
 
   return { success: true, email: parsed.data.email };
 }
