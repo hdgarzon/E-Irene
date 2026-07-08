@@ -19,6 +19,12 @@ export async function GET(
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) return new Response("No encontrado", { status: 404 });
+  // Defensa en profundidad: además de RLS, exige que el paciente pertenezca a
+  // la clínica del usuario. Bloquea la descarga del expediente cross-tenant
+  // (incl. platform admins, cuyo RLS extendido no debe alcanzar PHI en PDF).
+  if (patient.clinicId !== user.clinicId) {
+    return new Response("No encontrado", { status: 404 });
+  }
 
   const [consent, consultations, reports, soapNotes, assessments, treatmentPlan] = await Promise.all([
     getActiveConsent(id),

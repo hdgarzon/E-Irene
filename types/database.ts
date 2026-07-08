@@ -634,6 +634,24 @@ export type Database = {
           },
         ]
       }
+      rate_limits: {
+        Row: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          window_start?: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           clinic_id: string
@@ -989,6 +1007,10 @@ export type Database = {
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      check_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number }
+        Returns: boolean
       }
       create_clinic_and_admin: {
         Args: { clinic_name: string; full_name: string }

@@ -20,6 +20,12 @@ export async function GET(
     getSoapNoteByConsultation(id),
   ]);
   if (!consultation || !report) return new Response("No encontrado", { status: 404 });
+  // Defensa en profundidad: además de RLS, exige que la consulta pertenezca a
+  // la clínica del usuario. Bloquea el acceso cross-tenant (incl. platform
+  // admins, cuyo RLS extendido no debe alcanzar contenido clínico en PDF).
+  if (consultation.clinicId !== user.clinicId) {
+    return new Response("No encontrado", { status: 404 });
+  }
 
   const buffer = await renderReportPdf({
     report,

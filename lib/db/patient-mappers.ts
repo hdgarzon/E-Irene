@@ -16,12 +16,14 @@ export interface PatientInput {
 
 export interface Patient extends PatientInput {
   id: string;
+  clinicId: string;
   createdAt: string;
 }
 
 /** Fila de la tabla `patients` (columnas sensibles cifradas). */
 export interface PatientRow {
   id: string;
+  clinic_id: string;
   full_name_enc: string;
   document_enc: string | null;
   phone_enc: string | null;
@@ -57,6 +59,7 @@ export function encryptPatient(input: PatientInput) {
 export function decryptPatient(row: PatientRow): Patient {
   return {
     id: row.id,
+    clinicId: row.clinic_id,
     fullName: decrypt(row.full_name_enc),
     document: decryptNullable(row.document_enc),
     phone: decryptNullable(row.phone_enc),

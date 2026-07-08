@@ -27,10 +27,8 @@ export function AdminAppointmentRow({ appt }: { appt: AdminAppointment }) {
   return (
     <tr className="border-b border-gray-line last:border-0 align-top">
       <td className="py-3 pr-3">
-        <p className="font-medium text-navy">{appt.patientName}</p>
-        <p className="text-xs text-muted-foreground">
-          {appt.doctorName} · {appt.clinicName}
-        </p>
+        <p className="font-medium text-navy">{appt.doctorName}</p>
+        <p className="text-xs text-muted-foreground">{appt.clinicName}</p>
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
