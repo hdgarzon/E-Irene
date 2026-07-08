@@ -488,6 +488,7 @@ export type Database = {
           id: string
           notes_enc: string | null
           phone_enc: string | null
+          search_trigrams: string[]
           updated_at: string
         }
         Insert: {
@@ -506,6 +507,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_trigrams?: string[]
           updated_at?: string
         }
         Update: {
@@ -524,6 +526,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_trigrams?: string[]
           updated_at?: string
         }
         Relationships: [
