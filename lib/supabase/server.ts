@@ -14,6 +14,14 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // PKCE (default) exige que el magic link se abra en el mismo navegador/
+      // dispositivo donde se inició el signup (requiere el code_verifier
+      // guardado en cookie ahí) — no aplica cuando el usuario confirma desde
+      // el correo en otro dispositivo. La app no usa OAuth, así que implicit
+      // es seguro aquí: el link de confirmación no depende de esa cookie.
+      auth: {
+        flowType: "implicit",
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll();

@@ -6,6 +6,7 @@ import { signUpAction, type AuthState } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { VerifyCodeForm } from "@/components/auth/verify-code-form";
 
 export function SignupForm() {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -13,14 +14,17 @@ export function SignupForm() {
     {},
   );
 
-  if (state.success) {
+  if (state.success && state.email) {
     return (
-      <div className="space-y-3 text-center">
-        <h2 className="text-lg font-semibold">Revisa tu correo</h2>
-        <p className="text-sm text-muted-foreground">
-          Enviamos un enlace de activación a <strong>{state.email}</strong>. Ábrelo para
-          confirmar tu cuenta y elegir una contraseña.
-        </p>
+      <div className="space-y-4 text-center">
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-semibold">Revisa tu correo</h2>
+          <p className="text-sm text-muted-foreground">
+            Enviamos un código de 6 dígitos a <strong>{state.email}</strong>. Ingrésalo para
+            confirmar tu cuenta y elegir una contraseña.
+          </p>
+        </div>
+        <VerifyCodeForm email={state.email} />
       </div>
     );
   }
