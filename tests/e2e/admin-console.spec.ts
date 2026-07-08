@@ -15,16 +15,18 @@ async function grantPlatformAdmin(email: string) {
   expect(error).toBeNull();
 }
 
-test("consola de admin: tabs, gestión de pacientes/citas/planes y acceso directo", async ({
+test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI)", async ({
   page,
 }) => {
   test.setTimeout(60_000);
   const stamp = Date.now();
   const email = `console_${stamp}@e-irene.test`;
   const clinicName = `Clínica Console ${stamp}`;
-  await signUpAndActivate(page, { clinicName, fullName: "Dra. Console", email });
+  const doctorName = `Dra. Console ${stamp}`;
+  await signUpAndActivate(page, { clinicName, fullName: doctorName, email });
 
-  // Datos: un paciente y una cita.
+  // Datos: un paciente y una cita (creados por el admin de la clínica, no por
+  // el super-admin, que ya no tiene acceso a pacientes — ver migración 0015).
   await page.goto("/patients/new");
   await page.fill("#fullName", "Paciente Console");
   await page.fill("#phone", "3001112222");
@@ -45,33 +47,35 @@ test("consola de admin: tabs, gestión de pacientes/citas/planes y acceso direct
   await expect(page.getByRole("heading", { name: "Resumen de la plataforma" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Uso de plataforma" })).toBeVisible();
 
-  // Clínicas: la clínica y su doctora en el mapa.
+  // Clínicas: la clínica y su doctora en el mapa (dentro de su propia tarjeta,
+  // para no depender de datos de otras clínicas en la BD local).
   await page.goto("/admin/clinicas");
-  await expect(page.getByText(clinicName)).toBeVisible();
-  await expect(page.getByText("Dra. Console")).toBeVisible();
+  const card = page.locator('[data-testid="clinic-card"]', { hasText: clinicName });
+  await expect(card).toBeVisible();
+  await expect(card.getByText(doctorName)).toBeVisible();
 
   // Doctores: editar el nombre.
   await page.goto("/admin/doctores");
-  await expect(page.getByText("Dra. Console")).toBeVisible();
-  await page.getByRole("button", { name: /editar/i }).first().click();
-  await page.locator('input[name="fullName"]').fill("Dra. Console Editada");
+  const doctorRow = page.locator("tr", { hasText: doctorName });
+  await expect(doctorRow).toBeVisible();
+  await doctorRow.getByRole("button", { name: /editar/i }).click();
+  await page.locator('input[name="fullName"]').fill(`${doctorName} Editada`);
   await page.getByRole("button", { name: /guardar/i }).click();
-  await expect(page.getByText("Dra. Console Editada")).toBeVisible();
+  await expect(page.getByText(`${doctorName} Editada`)).toBeVisible();
 
-  // Pacientes: editar teléfono.
-  await page.goto("/admin/pacientes");
-  await expect(page.getByText("Paciente Console")).toBeVisible();
-  await page.getByRole("link", { name: /editar/i }).first().click();
-  await expect(page).toHaveURL(/\/admin\/pacientes\/[^/]+$/);
-  await page.fill("#phone", "3009998888");
-  await page.getByRole("button", { name: /guardar cambios/i }).click();
-  await expect(page).toHaveURL(/\/admin\/pacientes$/);
+  // La sección /admin/pacientes ya NO existe: el super-admin no gestiona
+  // pacientes (cumplimiento Habeas Data). No debe haber enlace en la nav.
+  await expect(page.getByRole("link", { name: "Pacientes" })).toHaveCount(0);
 
-  // Citas: la cita aparece; cambiar estado a Completada.
+  // Citas: la cita aparece y se puede cambiar de estado, PERO sin exponer el
+  // nombre del paciente (PHI). Se identifica por la fila de la cita, no por el
+  // paciente.
   await page.goto("/admin/citas");
-  await expect(page.getByText("Paciente Console")).toBeVisible();
-  await page.locator("tbody select").first().selectOption("completed");
-  await expect(page.locator("tbody select").first()).toHaveValue("completed");
+  const apptRow = page.locator("tbody tr").first();
+  await expect(apptRow).toBeVisible();
+  await expect(page.getByText("Paciente Console")).toHaveCount(0);
+  await apptRow.locator("select").selectOption("completed");
+  await expect(apptRow.locator("select")).toHaveValue("completed");
 
   // Planes: editar el precio del plan Free.
   await page.goto("/admin/planes");
