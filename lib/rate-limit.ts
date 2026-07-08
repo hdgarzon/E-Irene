@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 /**
  * IP del cliente a partir de las cabeceras de proxy (Vercel/Supabase ponen
@@ -39,7 +40,7 @@ export async function checkRateLimit(
     p_window_seconds: windowSeconds,
   });
   if (error) {
-    console.error("[rate-limit] no se pudo verificar el límite:", error);
+    logger.error("rate_limit.check_failed", { key, error });
     return true;
   }
   return data === true;

@@ -8,6 +8,7 @@ import { createPatient, updatePatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { canAddPatient, limitLabel, PLANS } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 import type { PatientInput } from "@/lib/db/patient-mappers";
 
 export type PatientFormState = {
@@ -99,7 +100,8 @@ export async function createPatientAction(
       entityType: "patient",
       entityId: patient.id,
     });
-  } catch {
+  } catch (error) {
+    logger.error("patient.create_failed", { clinicId: user.clinicId, actorId: user.id, error });
     return { error: "No se pudo crear el paciente. Intenta de nuevo." };
   }
 
@@ -125,7 +127,13 @@ export async function updatePatientAction(
       entityType: "patient",
       entityId: patientId,
     });
-  } catch {
+  } catch (error) {
+    logger.error("patient.update_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      patientId,
+      error,
+    });
     return { error: "No se pudo actualizar el paciente." };
   }
 

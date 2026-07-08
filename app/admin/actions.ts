@@ -11,6 +11,7 @@ import {
   setPlanConfig,
 } from "@/lib/db/platform-console";
 import type { UserRole } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 const PLANS = ["free", "pro", "clinica", "enterprise"] as const;
 const ROLES: UserRole[] = ["admin", "doctor", "secretaria"];
@@ -40,14 +41,15 @@ export async function updateStaffAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
   const fullName = String(formData.get("fullName") ?? "").trim();
   const role = String(formData.get("role") ?? "") as UserRole;
   if (fullName.length < 2) return { error: "Nombre demasiado corto." };
   if (!ROLES.includes(role)) return { error: "Rol inválido." };
   try {
     await updateStaff(id, { fullName, role });
-  } catch {
+  } catch (error) {
+    logger.error("admin.staff_update_failed", { actorId: admin.id, staffId: id, error });
     return { error: "No se pudo actualizar el profesional." };
   }
   revalidatePath("/admin/doctores");
@@ -91,14 +93,15 @@ export async function setPlanConfigAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
   const label = String(formData.get("label") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const price = String(formData.get("price") ?? "").trim();
   if (label.length < 1) return { error: "El título es obligatorio." };
   try {
     await setPlanConfig(plan, { label, description, price });
-  } catch {
+  } catch (error) {
+    logger.error("admin.plan_config_save_failed", { actorId: admin.id, plan, error });
     return { error: "No se pudo guardar el plan." };
   }
   revalidatePath("/admin/planes");

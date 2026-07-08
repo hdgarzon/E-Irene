@@ -19,6 +19,7 @@ import { buildReminderEmail } from "@/lib/email/templates";
 import { getWhatsAppProvider, buildReminderWhatsApp } from "@/lib/whatsapp/providers";
 import { PLANS } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 import { fromInputDateTime, formatFullDate, formatTime } from "@/lib/dates";
 
 export type AppointmentFormState = {
@@ -82,7 +83,8 @@ export async function createAppointmentAction(
       entityType: "appointment",
       entityId: appt.id,
     });
-  } catch {
+  } catch (error) {
+    logger.error("appointment.create_failed", { clinicId: user.clinicId, actorId: user.id, error });
     return { error: "No se pudo crear la cita. Intenta de nuevo." };
   }
 
@@ -108,7 +110,13 @@ export async function updateAppointmentAction(
       entityType: "appointment",
       entityId: appointmentId,
     });
-  } catch {
+  } catch (error) {
+    logger.error("appointment.update_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      appointmentId,
+      error,
+    });
     return { error: "No se pudo actualizar la cita." };
   }
 
@@ -197,7 +205,14 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
         ? `Recordatorio por ${channelLabel}${mode === "log" ? " simulado (modo demo)" : " enviado"}.`
         : `Recordatorio enviado por ${channelLabel}.`;
     return { ok: true, message };
-  } catch {
+  } catch (error) {
+    logger.error("reminder.send_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      appointmentId,
+      channel,
+      error,
+    });
     await recordNotification(user.clinicId, {
       patientId: appt.patientId,
       appointmentId,

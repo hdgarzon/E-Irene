@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createConsent } from "@/lib/db/consents";
 import { CONSENT_VERSION, CONSENT_HASH } from "@/lib/consent";
 import { logAudit } from "@/lib/db/audit";
+import { logger } from "@/lib/logger";
 
 export type ConsentState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -72,7 +73,7 @@ export async function signConsentAction(
       metadata: { patientId },
     });
   } catch (error) {
-    console.error("[consent] no se pudo registrar el consentimiento:", error);
+    logger.error("consent.sign_failed", { clinicId: user.clinicId, actorId: user.id, patientId, error });
     return { error: "No se pudo registrar el consentimiento. Intenta de nuevo." };
   }
 
