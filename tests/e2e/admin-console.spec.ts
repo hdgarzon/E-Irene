@@ -54,11 +54,13 @@ test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI
   await expect(card).toBeVisible();
   await expect(card.getByText(doctorName)).toBeVisible();
 
-  // Doctores: editar el nombre.
+  // Doctores: editar el nombre. Las filas de personal son <li> (no <tr>); se
+  // acota a la fila del doctor de esta clínica (nombre único por corrida). El
+  // input de edición solo existe en la fila que está en modo edición, así que
+  // se puede localizar sin ambigüedad tras hacer clic en "Editar".
   await page.goto("/admin/doctores");
-  const doctorRow = page.locator("tr", { hasText: doctorName });
-  await expect(doctorRow).toBeVisible();
-  await doctorRow.getByRole("button", { name: /editar/i }).click();
+  await expect(page.getByText(doctorName)).toBeVisible();
+  await page.locator("li", { hasText: doctorName }).getByRole("button", { name: /editar/i }).click();
   await page.locator('input[name="fullName"]').fill(`${doctorName} Editada`);
   await page.getByRole("button", { name: /guardar/i }).click();
   await expect(page.getByText(`${doctorName} Editada`)).toBeVisible();
