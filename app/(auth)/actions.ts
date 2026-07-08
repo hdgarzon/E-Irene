@@ -8,8 +8,8 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 
 const TOO_MANY = "Demasiados intentos. Espera unos minutos e intenta de nuevo.";
-const SIGNUP_FAILED =
-  "No pudimos enviar el enlace de activación. Intenta de nuevo en unos minutos.";
+const SIGNUP_FAILED = "No pudimos enviar el código de activación. Intenta de nuevo en unos minutos.";
+const INVALID_CODE = "Código incorrecto o expirado. Verifica el correo o pide uno nuevo.";
 
 export type AuthState = {
   error?: string;
@@ -63,9 +63,13 @@ export async function signUpAction(
 
   const supabase = await createClient();
 
-  // Envía un magic link para confirmar el correo. clinic_name/full_name viajan
-  // como metadata del usuario solo para prellenar el paso de "fijar contraseña"
-  // tras la activación — no se usan para decisiones de autorización.
+  // Envía un código de 6 dígitos (no un link clickeable): un link de un solo
+  // uso puede ser consumido por escáneres de seguridad del correo antes de
+  // que el usuario lo abra, y el flujo PKCE de @supabase/ssr solo funciona si
+  // se confirma desde el mismo navegador/dispositivo donde se llenó este
+  // formulario — el código evita ambos problemas. clinic_name/full_name
+  // viajan como metadata del usuario solo para prellenar el paso de "fijar
+  // contraseña" tras la activación — no se usan para decisiones de autorización.
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
     options: {
@@ -81,6 +85,26 @@ export async function signUpAction(
   }
 
   return { success: true, email: parsed.data.email };
+}
+
+export async function verifyEmailCodeAction(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").toLowerCase();
+  const code = String(formData.get("code") ?? "").trim();
+  if (!email || !code) {
+    return { error: INVALID_CODE };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+  if (error) {
+    logger.error("signup.verify_code_failed", { email, error });
+    return { error: INVALID_CODE };
+  }
+
+  redirect("/auth/set-password");
 }
 
 export async function signInAction(
