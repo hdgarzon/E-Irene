@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isJoinWindowOpen } from "@/lib/video/join-token";
 
-const MIN = 60_000;
-
 describe("isJoinWindowOpen", () => {
   const scheduledAt = "2026-07-08T15:00:00.000Z"; // 3:00pm UTC, duración 50min
 
