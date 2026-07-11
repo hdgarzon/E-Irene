@@ -21,11 +21,15 @@ export type Database = {
           doctor_id: string
           duration_min: number
           id: string
+          modality: string
           notes: string | null
           patient_id: string
           scheduled_at: string
           status: Database["public"]["Enums"]["appointment_status"]
           updated_at: string
+          video_join_token: string | null
+          video_room_name: string | null
+          video_room_url: string | null
         }
         Insert: {
           clinic_id: string
@@ -33,11 +37,15 @@ export type Database = {
           doctor_id: string
           duration_min?: number
           id?: string
+          modality?: string
           notes?: string | null
           patient_id: string
           scheduled_at: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
+          video_join_token?: string | null
+          video_room_name?: string | null
+          video_room_url?: string | null
         }
         Update: {
           clinic_id?: string
@@ -45,11 +53,15 @@ export type Database = {
           doctor_id?: string
           duration_min?: number
           id?: string
+          modality?: string
           notes?: string | null
           patient_id?: string
           scheduled_at?: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
+          video_join_token?: string | null
+          video_room_name?: string | null
+          video_room_url?: string | null
         }
         Relationships: [
           {
