@@ -25,6 +25,7 @@ interface Defaults {
   scheduledAt?: string; // "YYYY-MM-DDTHH:mm"
   durationMin?: number;
   notes?: string | null;
+  modality?: "in_person" | "video";
 }
 
 const selectClass =
@@ -81,6 +82,19 @@ export function AppointmentForm({
         {state.fieldErrors?.doctorId && (
           <p className="text-sm text-destructive">{state.fieldErrors.doctorId}</p>
         )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="modality">Modalidad</Label>
+        <select
+          id="modality"
+          name="modality"
+          defaultValue={d.modality ?? "in_person"}
+          className={selectClass}
+        >
+          <option value="in_person">Presencial</option>
+          <option value="video">Video</option>
+        </select>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
