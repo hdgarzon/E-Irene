@@ -1,6 +1,7 @@
 // lib/db/appointments.ts
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 import { dayKey } from "@/lib/dates";
 import { getVideoProvider } from "@/lib/video";
@@ -119,10 +120,16 @@ export async function getAppointment(id: string): Promise<Appointment | null> {
 
 /**
  * Busca una cita por su token de acceso a videollamada (para /join/[token]).
- * No requiere sesión — el token ES la autorización (ver spec §5/§8).
+ * No requiere sesión — el token ES la autorización (ver spec §5/§8). Por eso
+ * usa el cliente admin/service-role (bypass RLS): la política RLS de
+ * `appointments` exige `auth_clinic_id()`, que depende de `auth.uid()`, y en
+ * este flujo público no hay JWT de usuario — con el cliente normal la
+ * consulta siempre devolvería 0 filas (o "permission denied" para `anon`).
+ * Validación puntual y acotada, mismo patrón que `lib/db/team.ts` y
+ * `lib/db/platform-console.ts`.
  */
 export async function getAppointmentByJoinToken(token: string): Promise<Appointment | null> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("appointments")
     .select(SELECT)
@@ -208,14 +215,36 @@ export async function ensureVideoRoom(
 
   const room = await getVideoProvider().createRoom(appointmentId);
   const joinToken = randomUUID();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("appointments")
     .update({
       video_room_name: room.roomName,
       video_room_url: room.roomUrl,
       video_join_token: joinToken,
     })
-    .eq("id", appointmentId);
+    .eq("id", appointmentId)
+    .is("video_room_name", null)
+    .select("id");
   if (error) throw error;
+
+  if (!data || data.length === 0) {
+    // Otra invocación concurrente (recordatorio automático vs. botón manual,
+    // p.ej.) ya ganó la carrera y persistió su propia sala primero. Limpiamos
+    // la sala huérfana que acabamos de crear y devolvemos los datos ganadores.
+    await getVideoProvider().deleteRoom(room.roomName);
+    const winner = await getAppointment(appointmentId);
+    if (!winner || !winner.videoRoomName || !winner.videoRoomUrl || !winner.videoJoinToken) {
+      throw new Error(
+        `ensureVideoRoom: condición de carrera detectada para ${appointmentId}, pero no se ` +
+          "pudo leer la sala ganadora tras el reintento",
+      );
+    }
+    return {
+      roomName: winner.videoRoomName,
+      roomUrl: winner.videoRoomUrl,
+      joinToken: winner.videoJoinToken,
+    };
+  }
+
   return { roomName: room.roomName, roomUrl: room.roomUrl, joinToken };
 }
