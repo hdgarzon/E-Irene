@@ -49,6 +49,7 @@ export default async function EditAppointmentPage({
             scheduledAt: toInputDateTime(appt.scheduledAt),
             durationMin: appt.durationMin,
             notes: appt.notes,
+            modality: appt.modality,
           }}
           submitLabel="Guardar cambios"
         />
