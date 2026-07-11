@@ -15,7 +15,7 @@ alter table appointments add column video_room_name text;
 -- una URL simulada) — se guarda para no tener que reconstruirla a mano en
 -- cada request (ver ensureVideoRoom en un task posterior del plan).
 alter table appointments add column video_room_url text;
-alter table appointments add column video_join_token text unique;
+alter table appointments add column video_join_token text;
 
-create index appointments_video_join_token_idx on appointments(video_join_token)
+create unique index appointments_video_join_token_idx on appointments(video_join_token)
   where video_join_token is not null;
