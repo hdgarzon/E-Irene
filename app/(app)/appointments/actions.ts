@@ -9,6 +9,7 @@ import {
   updateAppointment,
   setAppointmentStatus,
   getAppointment,
+  ensureVideoRoom,
   type AppointmentInput,
 } from "@/lib/db/appointments";
 import { getPatient } from "@/lib/db/patients";
@@ -134,6 +135,12 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
   const appt = await getAppointment(appointmentId);
   if (!appt) return { ok: false, message: "Cita no encontrada." };
 
+  let videoJoinUrl: string | undefined;
+  if (appt.modality === "video") {
+    const { joinToken } = await ensureVideoRoom(appointmentId);
+    videoJoinUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/join/${joinToken}`;
+  }
+
   const [patient, overview] = await Promise.all([
     getPatient(appt.patientId),
     getClinicOverview(),
@@ -168,6 +175,7 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
           clinicName: user.clinicName,
           dateLabel,
           timeLabel,
+          videoJoinUrl,
         }),
       });
       mode = wa.mode;
@@ -180,6 +188,7 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
           clinicName: user.clinicName,
           dateLabel,
           timeLabel,
+          videoJoinUrl,
         }),
       );
       mode = email.mode;
