@@ -18,8 +18,12 @@ export function buildReminderEmail(input: {
   clinicName: string;
   dateLabel: string;
   timeLabel: string;
+  videoJoinUrl?: string;
 }): EmailMessage {
-  const text = `Hola ${input.patientName}, te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.`;
+  const videoLine = input.videoJoinUrl
+    ? ` Es una consulta por video — entra desde este enlace a la hora de tu cita: ${input.videoJoinUrl}`
+    : "";
+  const text = `Hola ${input.patientName}, te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.${videoLine}`;
   return {
     to: input.to,
     subject: `Recordatorio de tu cita · ${input.dateLabel}`,
@@ -31,6 +35,12 @@ export function buildReminderEmail(input: {
        <p style="background:#f6f9fc;border-radius:8px;padding:12px;font-size:16px">
          📅 ${input.dateLabel} · 🕐 ${input.timeLabel}
        </p>
+       ${
+         input.videoJoinUrl
+           ? `<p>Esta es una consulta por <strong>video</strong>. Entra desde este enlace a la hora de tu cita (no necesitas cuenta ni contraseña):</p>
+       <p><a href="${input.videoJoinUrl}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Entrar a la videollamada</a></p>`
+           : ""
+       }
        <p>Si necesitas reprogramar, por favor contáctanos.</p>`,
     ),
   };
