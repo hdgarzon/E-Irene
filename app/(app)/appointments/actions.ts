@@ -35,6 +35,7 @@ const schema = z.object({
   scheduledAt: z.string().min(1, "Selecciona fecha y hora"),
   durationMin: z.coerce.number().int().min(10).max(240),
   notes: z.string().optional(),
+  modality: z.enum(["in_person", "video"]).default("in_person"),
 });
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -53,6 +54,7 @@ function parse(formData: FormData) {
     scheduledAt: formData.get("scheduledAt"),
     durationMin: formData.get("durationMin"),
     notes: formData.get("notes"),
+    modality: formData.get("modality"),
   });
 }
 
@@ -63,6 +65,7 @@ function toInput(data: z.infer<typeof schema>): AppointmentInput {
     scheduledAt: fromInputDateTime(data.scheduledAt),
     durationMin: data.durationMin,
     notes: data.notes && data.notes.trim() !== "" ? data.notes.trim() : null,
+    modality: data.modality,
   };
 }
 
