@@ -22,7 +22,7 @@ export function isMinorByBirthDate(birthDate: string | null | undefined): boolea
 }
 
 /** Versión del documento de consentimiento. Cambiar al modificar el texto. */
-export const CONSENT_VERSION = "2026-06-v1";
+export const CONSENT_VERSION = "2026-07-v2";
 
 /** Texto del consentimiento informado (salud mental, Colombia). */
 export const CONSENT_TEXT = `CONSENTIMIENTO INFORMADO PARA LA ATENCIÓN PSICOLÓGICA Y EL TRATAMIENTO DE DATOS
@@ -30,9 +30,12 @@ export const CONSENT_TEXT = `CONSENTIMIENTO INFORMADO PARA LA ATENCIÓN PSICOLÓ
 1. Naturaleza del servicio. Declaro que recibo atención psicológica profesional de carácter
 voluntario y comprendo que sus resultados dependen de múltiples factores.
 
-2. Grabación y transcripción. Autorizo que mis sesiones sean transcritas en tiempo real para
-fines clínicos. El audio NO se almacena: únicamente se conserva la transcripción en texto,
-cifrada. Puedo revocar esta autorización en cualquier momento.
+2. Grabación y transcripción. Autorizo que mis sesiones —presenciales o por videollamada— sean
+transcritas en tiempo real para fines clínicos. El audio y el video NO se almacenan ni se
+graban en ningún momento: únicamente se conserva la transcripción en texto, cifrada. Cuando la
+sesión es por videollamada, la conexión se realiza a través de un proveedor externo especializado
+en videoconferencia, que únicamente transmite la llamada en vivo sin guardar ninguna copia.
+Puedo revocar esta autorización en cualquier momento.
 
 3. Análisis asistido por inteligencia artificial. Entiendo que la transcripción puede analizarse
 con herramientas de IA para apoyar al profesional (resumen, sentimiento, patrones). Dichas
