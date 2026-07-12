@@ -169,6 +169,18 @@ export function LiveConsultation({
       wsRef.current = null;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      // Modo video: también hay que cerrar la conexión remota del paciente si
+      // el componente se desmonta sin pasar por finalize() (navegación, cierre
+      // de pestaña, error de React) — si no, el socket a Deepgram y el
+      // MediaRecorder sobre el audio del paciente quedarían abiertos.
+      if (remoteRecorderRef.current && remoteRecorderRef.current.state !== "inactive") {
+        remoteRecorderRef.current.stop();
+      }
+      remoteRecorderRef.current = null;
+      if (remoteWsRef.current?.readyState === WebSocket.OPEN) {
+        remoteWsRef.current.close();
+      }
+      remoteWsRef.current = null;
     };
   }, [transcriptionMode, sessionToken, consultationId]);
 
@@ -176,7 +188,9 @@ export function LiveConsultation({
   // ── tageada "Paciente" directamente (no hace falta diarización: cada
   // ── pista ya sabe de quién es). Requiere sessionToken propio del doctor
   // ── (el mismo `sessionToken` que llega por props sirve para ambas
-  // ── conexiones — Deepgram no limita cuántos sockets abre una key efímera).
+  // ── conexiones — se asume que Deepgram no limita cuántos sockets abre una
+  // ── key efímera; esto no está verificado contra el plan/facturación real
+  // ── y debería confirmarse antes de producción con tráfico real).
   // Si el paciente se reconecta a mitad de la consulta, Daily.co puede volver
   // a emitir esta pista — reemplazamos la conexión anterior en vez de
   // ignorarla o acumularla (ver contrato documentado en components/video-call.tsx).
