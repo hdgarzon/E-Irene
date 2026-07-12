@@ -7,7 +7,9 @@
 create extension if not exists pg_cron;
 
 create or replace function purge_expired_transcripts() returns void
-language plpgsql security definer as $$
+language plpgsql security definer
+set search_path = public
+as $$
 begin
   delete from transcript_chunks
   where consultation_id in (
@@ -24,6 +26,8 @@ begin
     and transcript_enc is not null;
 end;
 $$;
+
+revoke execute on function purge_expired_transcripts() from public, anon, authenticated;
 
 select cron.schedule(
   'purge-expired-transcripts',
