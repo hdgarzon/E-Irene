@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Plan } from "@/lib/plans";
 
 export interface DoctorOption {
@@ -49,4 +50,28 @@ export async function listDoctors(): Promise<DoctorOption[]> {
     .order("full_name", { ascending: true });
   if (error) throw error;
   return (data ?? []).map((u) => ({ id: u.id, fullName: u.full_name }));
+}
+
+export interface DoctorContact {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+/**
+ * Como `listDoctors`, pero para el flujo de link público sin sesión: usa el
+ * cliente service-role y recibe `clinicId` explícito (no hay `auth_clinic_id()`
+ * disponible sin JWT de usuario). Incluye `email` porque se usa para enviar
+ * alertas, a diferencia de `listDoctors` (solo para selectores en la UI).
+ */
+export async function listDoctorsPublic(clinicId: string): Promise<DoctorContact[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("id, full_name, email")
+    .eq("clinic_id", clinicId)
+    .in("role", ["admin", "doctor"])
+    .order("full_name", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((u) => ({ id: u.id, fullName: u.full_name, email: u.email }));
 }
