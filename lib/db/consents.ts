@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptNullable, decryptNullable } from "@/lib/crypto";
 import { CONSENT_VERSION } from "@/lib/consent";
 
@@ -100,6 +101,48 @@ export async function createConsent(input: {
     .insert({
       clinic_id: input.clinicId,
       patient_id: input.patientId,
+      document_version: input.documentVersion,
+      document_hash: input.documentHash,
+      signature_path: input.signaturePath,
+      signer_name: input.signerName,
+      ip: input.ip,
+      user_agent: input.userAgent,
+      is_minor: input.isMinor,
+      representative_document_enc: encryptNullable(input.representativeDocument ?? null),
+      representative_relationship: input.representativeRelationship ?? null,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapRow(data as ConsentRow);
+}
+
+/**
+ * Igual que `createConsent`, pero para el flujo de link público sin sesión:
+ * usa el cliente service-role (bypassa RLS). SOLO debe invocarse después de
+ * revalidar el token en `patient_links` — nunca desde una ruta autenticada.
+ */
+export async function createConsentViaLink(input: {
+  clinicId: string;
+  patientId: string;
+  linkId: string;
+  documentVersion: string;
+  documentHash: string;
+  signaturePath: string | null;
+  signerName: string;
+  ip: string | null;
+  userAgent: string | null;
+  isMinor: boolean;
+  representativeDocument?: string | null;
+  representativeRelationship?: string | null;
+}): Promise<Consent> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("consents")
+    .insert({
+      clinic_id: input.clinicId,
+      patient_id: input.patientId,
+      link_id: input.linkId,
       document_version: input.documentVersion,
       document_hash: input.documentHash,
       signature_path: input.signaturePath,

@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -41,11 +21,15 @@ export type Database = {
           doctor_id: string
           duration_min: number
           id: string
+          modality: string
           notes: string | null
           patient_id: string
           scheduled_at: string
           status: Database["public"]["Enums"]["appointment_status"]
           updated_at: string
+          video_join_token: string | null
+          video_room_name: string | null
+          video_room_url: string | null
         }
         Insert: {
           clinic_id: string
@@ -53,11 +37,15 @@ export type Database = {
           doctor_id: string
           duration_min?: number
           id?: string
+          modality?: string
           notes?: string | null
           patient_id: string
           scheduled_at: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
+          video_join_token?: string | null
+          video_room_name?: string | null
+          video_room_url?: string | null
         }
         Update: {
           clinic_id?: string
@@ -65,11 +53,15 @@ export type Database = {
           doctor_id?: string
           duration_min?: number
           id?: string
+          modality?: string
           notes?: string | null
           patient_id?: string
           scheduled_at?: string
           status?: Database["public"]["Enums"]["appointment_status"]
           updated_at?: string
+          video_join_token?: string | null
+          video_room_name?: string | null
+          video_room_url?: string | null
         }
         Relationships: [
           {
@@ -211,6 +203,7 @@ export type Database = {
           id: string
           ip: string | null
           is_minor: boolean
+          link_id: string | null
           patient_id: string
           representative_document_enc: string | null
           representative_relationship: string | null
@@ -227,6 +220,7 @@ export type Database = {
           id?: string
           ip?: string | null
           is_minor?: boolean
+          link_id?: string | null
           patient_id: string
           representative_document_enc?: string | null
           representative_relationship?: string | null
@@ -243,6 +237,7 @@ export type Database = {
           id?: string
           ip?: string | null
           is_minor?: boolean
+          link_id?: string | null
           patient_id?: string
           representative_document_enc?: string | null
           representative_relationship?: string | null
@@ -257,6 +252,13 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consents_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "patient_links"
             referencedColumns: ["id"]
           },
           {
@@ -412,6 +414,67 @@ export type Database = {
           },
           {
             foreignKeyName: "notifications_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_links: {
+        Row: {
+          assessment_type: string | null
+          clinic_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          patient_id: string
+          purpose: string
+          token_hash: string
+        }
+        Insert: {
+          assessment_type?: string | null
+          clinic_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          expires_at: string
+          id?: string
+          patient_id: string
+          purpose: string
+          token_hash: string
+        }
+        Update: {
+          assessment_type?: string | null
+          clinic_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          patient_id?: string
+          purpose?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_links_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_links_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
@@ -595,6 +658,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          link_id: string | null
           patient_id: string
           payload_enc: string
           type: string
@@ -605,6 +669,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          link_id?: string | null
           patient_id: string
           payload_enc: string
           type: string
@@ -615,6 +680,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          link_id?: string | null
           patient_id?: string
           payload_enc?: string
           type?: string
@@ -632,6 +698,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychometric_assessments_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "patient_links"
             referencedColumns: ["id"]
           },
           {
@@ -1205,9 +1278,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       appointment_status: [
@@ -1225,4 +1295,3 @@ export const Constants = {
     },
   },
 } as const
-

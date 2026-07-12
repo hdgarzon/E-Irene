@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "@/lib/crypto";
 import type { AssessmentType, AssessmentResult } from "@/lib/psychometrics";
 
@@ -42,6 +43,31 @@ export async function createAssessment(
       clinic_id: clinicId,
       created_by: createdBy,
       patient_id: input.patientId,
+      type: input.type,
+      payload_enc: encrypt(JSON.stringify(input.result)),
+    })
+    .select(COLS)
+    .single();
+  if (error) throw error;
+  return mapRow(data as unknown as AssessmentRow);
+}
+
+/**
+ * Igual que `createAssessment`, pero para el flujo de link público sin
+ * sesión: usa el cliente service-role, sin `created_by` (nadie del personal
+ * lo administró) y registrando `link_id` para trazabilidad.
+ */
+export async function createAssessmentViaLink(
+  clinicId: string,
+  input: { patientId: string; type: AssessmentType; result: AssessmentResult; linkId: string },
+): Promise<Assessment> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("psychometric_assessments")
+    .insert({
+      clinic_id: clinicId,
+      patient_id: input.patientId,
+      link_id: input.linkId,
       type: input.type,
       payload_enc: encrypt(JSON.stringify(input.result)),
     })

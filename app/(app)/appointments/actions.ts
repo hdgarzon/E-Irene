@@ -9,8 +9,11 @@ import {
   updateAppointment,
   setAppointmentStatus,
   getAppointment,
+  ensureVideoRoom,
   type AppointmentInput,
 } from "@/lib/db/appointments";
+import { getActiveConsent } from "@/lib/db/consents";
+import { startConsultation, getInProgressConsultationByAppointment } from "@/lib/db/consultations";
 import { getPatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { recordNotification } from "@/lib/db/notifications";
@@ -35,6 +38,7 @@ const schema = z.object({
   scheduledAt: z.string().min(1, "Selecciona fecha y hora"),
   durationMin: z.coerce.number().int().min(10).max(240),
   notes: z.string().optional(),
+  modality: z.enum(["in_person", "video"]).default("in_person"),
 });
 
 function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -53,6 +57,7 @@ function parse(formData: FormData) {
     scheduledAt: formData.get("scheduledAt"),
     durationMin: formData.get("durationMin"),
     notes: formData.get("notes"),
+    modality: formData.get("modality"),
   });
 }
 
@@ -63,6 +68,7 @@ function toInput(data: z.infer<typeof schema>): AppointmentInput {
     scheduledAt: fromInputDateTime(data.scheduledAt),
     durationMin: data.durationMin,
     notes: data.notes && data.notes.trim() !== "" ? data.notes.trim() : null,
+    modality: data.modality,
   };
 }
 
@@ -155,6 +161,15 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
   }
 
   try {
+    let videoJoinUrl: string | undefined;
+    if (appt.modality === "video") {
+      if (!process.env.NEXT_PUBLIC_SITE_URL) {
+        throw new Error("NEXT_PUBLIC_SITE_URL no está configurada; no se puede generar el link de videollamada");
+      }
+      const { joinToken } = await ensureVideoRoom(appointmentId);
+      videoJoinUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/join/${joinToken}`;
+    }
+
     let mode: string;
     if (channel === "whatsapp") {
       const wa = getWhatsAppProvider();
@@ -165,6 +180,7 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
           clinicName: user.clinicName,
           dateLabel,
           timeLabel,
+          videoJoinUrl,
         }),
       });
       mode = wa.mode;
@@ -177,6 +193,7 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
           clinicName: user.clinicName,
           dateLabel,
           timeLabel,
+          videoJoinUrl,
         }),
       );
       mode = email.mode;
@@ -240,4 +257,62 @@ export async function setStatusAction(formData: FormData): Promise<void> {
     metadata: { status },
   });
   revalidatePath("/appointments");
+}
+
+/**
+ * Inicia una videollamada desde una cita ya agendada: garantiza la sala (si
+ * el recordatorio nunca se envió, aquí se crea por primera vez), crea la
+ * consulta enlazada (o reutiliza una in_progress ya existente para esta cita,
+ * evitando duplicados por doble clic o dos pestañas), y lleva al doctor a
+ * /consultations/[id]/live.
+ */
+export async function startVideoConsultationAction(
+  appointmentId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const user = await requireUser();
+  const appt = await getAppointment(appointmentId);
+  if (!appt || appt.modality !== "video") {
+    return { ok: false, message: "Esta cita no es de modalidad video." };
+  }
+  if (appt.status === "cancelled" || appt.status === "completed") {
+    return { ok: false, message: "Esta cita ya no admite iniciar una videollamada." };
+  }
+
+  const consent = await getActiveConsent(appt.patientId);
+  if (!consent) redirect(`/patients/${appt.patientId}/consent`);
+
+  let redirectTo: string;
+  try {
+    const existing = await getInProgressConsultationByAppointment(appointmentId);
+    if (existing) {
+      redirectTo = `/consultations/${existing.id}/live`;
+    } else {
+      await ensureVideoRoom(appointmentId);
+      const consultationId = await startConsultation(user.clinicId, {
+        patientId: appt.patientId,
+        doctorId: appt.doctorId,
+        consentId: consent!.id,
+        appointmentId,
+      });
+      await logAudit({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        action: "consultation.started",
+        entityType: "consultation",
+        entityId: consultationId,
+        metadata: { patientId: appt.patientId, appointmentId, modality: "video" },
+      });
+      redirectTo = `/consultations/${consultationId}/live`;
+    }
+  } catch (error) {
+    logger.error("consultation.start_video_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      appointmentId,
+      error,
+    });
+    return { ok: false, message: "No se pudo iniciar la videollamada. Intenta de nuevo." };
+  }
+
+  redirect(redirectTo);
 }

@@ -18,8 +18,12 @@ export function buildReminderEmail(input: {
   clinicName: string;
   dateLabel: string;
   timeLabel: string;
+  videoJoinUrl?: string;
 }): EmailMessage {
-  const text = `Hola ${input.patientName}, te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.`;
+  const videoLine = input.videoJoinUrl
+    ? ` Es una consulta por video — entra desde este enlace a la hora de tu cita: ${input.videoJoinUrl}`
+    : "";
+  const text = `Hola ${input.patientName}, te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.${videoLine}`;
   return {
     to: input.to,
     subject: `Recordatorio de tu cita · ${input.dateLabel}`,
@@ -31,6 +35,12 @@ export function buildReminderEmail(input: {
        <p style="background:#f6f9fc;border-radius:8px;padding:12px;font-size:16px">
          📅 ${input.dateLabel} · 🕐 ${input.timeLabel}
        </p>
+       ${
+         input.videoJoinUrl
+           ? `<p>Esta es una consulta por <strong>video</strong>. Entra desde este enlace a la hora de tu cita (no necesitas cuenta ni contraseña):</p>
+       <p><a href="${input.videoJoinUrl}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Entrar a la videollamada</a></p>`
+           : ""
+       }
        <p>Si necesitas reprogramar, por favor contáctanos.</p>`,
     ),
   };
@@ -51,6 +61,40 @@ export function buildReportReadyEmail(input: {
       `<p>Hola <strong>${input.patientName}</strong>,</p>
        <p>Tu profesional de <strong>${input.clinicName}</strong> ha registrado el resumen de tu última sesión en tu historia clínica.</p>
        <p>Por tu privacidad, el contenido clínico no se envía por correo.</p>`,
+    ),
+  };
+}
+
+export function buildPatientLinkEmail(input: {
+  to: string;
+  patientName: string;
+  clinicName: string;
+  url: string;
+  purpose: "consent" | "assessment";
+}): EmailMessage {
+  const isConsent = input.purpose === "consent";
+  const subject = isConsent
+    ? "Firma tu consentimiento informado"
+    : "Completa tu cuestionario de seguimiento";
+  const actionLabel = isConsent ? "Firmar consentimiento" : "Responder cuestionario";
+  const intro = isConsent
+    ? "tu profesional de salud mental te pide firmar el consentimiento informado antes de tu próxima sesión."
+    : "tu profesional de salud mental te pide completar un breve cuestionario de seguimiento.";
+  const text = `Hola ${input.patientName}, ${intro} Abre este enlace para continuar: ${input.url} (válido por 7 días).`;
+  return {
+    to: input.to,
+    subject,
+    text,
+    html: wrap(
+      subject,
+      `<p>Hola <strong>${input.patientName}</strong>,</p>
+       <p>De parte de <strong>${input.clinicName}</strong>: ${intro}</p>
+       <p style="margin:20px 0">
+         <a href="${input.url}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+           ${actionLabel}
+         </a>
+       </p>
+       <p style="font-size:13px;color:#5b6b7c">Este enlace es personal y vence en 7 días. Si no esperabas este correo, puedes ignorarlo.</p>`,
     ),
   };
 }

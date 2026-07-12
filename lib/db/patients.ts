@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { computeTrigrams, isSearchableQuery, patientSearchText } from "@/lib/search-index";
 import { normalizeSearchText } from "@/lib/text-normalize";
 import {
@@ -46,6 +47,22 @@ export async function listPatients(): Promise<Patient[]> {
 export async function getPatient(id: string): Promise<Patient | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
+    .from("patients")
+    .select(COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? tryDecryptPatient(data as unknown as PatientRow) : null;
+}
+
+/**
+ * Obtiene un paciente para el flujo de link público (sin sesión), con el
+ * cliente service-role. SOLO debe invocarse después de validar un token en
+ * `patient_links` — nunca expone datos de paciente sin esa verificación previa.
+ */
+export async function getPatientForLink(id: string): Promise<Patient | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("patients")
     .select(COLUMNS)
     .eq("id", id)

@@ -21,7 +21,7 @@ export function SetPasswordForm({
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="clinicName">Nombre de la clínica o consulta</Label>
+        <Label htmlFor="clinicName">Nombre de la clínica</Label>
         <Input id="clinicName" name="clinicName" required defaultValue={clinicName} />
         {state.fieldErrors?.clinicName && (
           <p className="text-sm text-destructive">{state.fieldErrors.clinicName}</p>

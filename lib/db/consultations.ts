@@ -74,7 +74,13 @@ function safeDecryptName(fullNameEnc: string | null | undefined): string {
 
 export async function startConsultation(
   clinicId: string,
-  input: { patientId: string; doctorId: string; consentId: string | null; reason?: string | null },
+  input: {
+    patientId: string;
+    doctorId: string;
+    consentId: string | null;
+    reason?: string | null;
+    appointmentId?: string | null;
+  },
 ): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -84,6 +90,7 @@ export async function startConsultation(
       patient_id: input.patientId,
       doctor_id: input.doctorId,
       consent_id: input.consentId,
+      appointment_id: input.appointmentId ?? null,
       status: "in_progress",
       reason_enc: input.reason ? encrypt(input.reason) : null,
     })
@@ -98,6 +105,26 @@ export async function getConsultation(id: string): Promise<Consultation | null> 
   const { data, error } = await supabase.from("consultations").select(SELECT).eq("id", id).maybeSingle();
   if (error) throw error;
   return data ? mapRow(data as unknown as ConsultationRow) : null;
+}
+
+/**
+ * Busca una consulta `in_progress` ya existente para esta cita, si la hay —
+ * evita crear una segunda consulta duplicada si `startVideoConsultationAction`
+ * se invoca dos veces para la misma cita (doble clic, dos pestañas).
+ */
+export async function getInProgressConsultationByAppointment(
+  appointmentId: string,
+): Promise<Consultation | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("consultations")
+    .select(SELECT)
+    .eq("appointment_id", appointmentId)
+    .eq("status", "in_progress")
+    .order("started_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data && data.length > 0 ? mapRow(data[0] as unknown as ConsultationRow) : null;
 }
 
 /** Todas las consultas de la clínica del usuario (RLS scoped), más recientes primero. */
