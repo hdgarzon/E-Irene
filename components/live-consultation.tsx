@@ -12,6 +12,7 @@ import {
   endConsultationAction,
 } from "@/app/(app)/consultations/actions";
 import { Button } from "@/components/ui/button";
+import { VideoCall } from "@/components/video-call";
 
 function mmss(total: number) {
   const m = Math.floor(total / 60);
@@ -29,12 +30,17 @@ export function LiveConsultation({
   patientName,
   transcriptionMode,
   sessionToken,
+  videoRoomUrl,
+  videoToken,
 }: {
   consultationId: string;
   patientName: string;
-  /** "deepgram" usa streaming real navegador→Deepgram; "mock" reproduce un guion de demo. */
-  transcriptionMode: "mock" | "deepgram";
+  /** "deepgram"/"mock" = modo texto (in-person, como hoy). "video" = telehealth:
+   *  embebe Daily.co y transcribe doctor+paciente por separado, sin diarización. */
+  transcriptionMode: "mock" | "deepgram" | "video";
   sessionToken?: string;
+  videoRoomUrl?: string;
+  videoToken?: string;
 }) {
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
   const [done, setDone] = useState(false);
@@ -44,7 +50,10 @@ export function LiveConsultation({
   const streamRef = useRef<MediaStream | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const remoteWsRef = useRef<WebSocket | null>(null);
+  const remoteRecorderRef = useRef<MediaRecorder | null>(null);
   const seqRef = useRef(0);
+  const remoteSeqRef = useRef(0);
   const speakerLabelsRef = useRef<Map<number, string>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -90,7 +99,7 @@ export function LiveConsultation({
 
   // ── Modo real: micrófono → MediaRecorder → WebSocket directo a Deepgram ──
   useEffect(() => {
-    if (transcriptionMode !== "deepgram" || !sessionToken) return;
+    if ((transcriptionMode !== "deepgram" && transcriptionMode !== "video") || !sessionToken) return;
 
     const clock = setInterval(() => setElapsed((e) => e + 1), 1000);
     let cancelled = false;
@@ -114,11 +123,15 @@ export function LiveConsultation({
             const alt = data.channel?.alternatives?.[0];
             const text = alt?.transcript?.trim();
             if (data.is_final && text) {
-              const speakerIndex = majoritySpeaker(alt?.words ?? []);
               const speaker =
-                speakerIndex !== undefined
-                  ? labelForSpeaker(speakerIndex, speakerLabelsRef.current)
-                  : "Transcripción";
+                transcriptionMode === "video"
+                  ? "Doctor"
+                  : (() => {
+                      const speakerIndex = majoritySpeaker(alt?.words ?? []);
+                      return speakerIndex !== undefined
+                        ? labelForSpeaker(speakerIndex, speakerLabelsRef.current)
+                        : "Transcripción";
+                    })();
               const seq = seqRef.current++;
               setChunks((prev) => [...prev, { speaker, text }]);
               void appendChunkAction(consultationId, { seq, speaker, text }).catch(() => {});
@@ -159,6 +172,42 @@ export function LiveConsultation({
     };
   }, [transcriptionMode, sessionToken, consultationId]);
 
+  // ── Modo video: pista remota del paciente → segunda conexión Deepgram,
+  // ── tageada "Paciente" directamente (no hace falta diarización: cada
+  // ── pista ya sabe de quién es). Requiere sessionToken propio del doctor
+  // ── (el mismo `sessionToken` que llega por props sirve para ambas
+  // ── conexiones — Deepgram no limita cuántos sockets abre una key efímera).
+  function handleRemoteAudioTrack(track: MediaStreamTrack) {
+    if (transcriptionMode !== "video" || !sessionToken || remoteWsRef.current) return;
+
+    const stream = new MediaStream([track]);
+    const ws = new WebSocket(DEEPGRAM_LISTEN_URL, ["token", sessionToken]);
+    remoteWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data: DeepgramResult = JSON.parse(event.data as string);
+        const text = data.channel?.alternatives?.[0]?.transcript?.trim();
+        if (data.is_final && text) {
+          const seq = remoteSeqRef.current++;
+          setChunks((prev) => [...prev, { speaker: "Paciente", text }]);
+          void appendChunkAction(consultationId, { seq, speaker: "Paciente", text }).catch(() => {});
+        }
+      } catch {
+        // mensaje no-JSON; se ignora.
+      }
+    };
+
+    ws.onopen = () => {
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      remoteRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+      };
+      recorder.start(250);
+    };
+  }
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [chunks]);
@@ -172,6 +221,13 @@ export function LiveConsultation({
       wsRef.current.close();
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    if (remoteRecorderRef.current && remoteRecorderRef.current.state !== "inactive") {
+      remoteRecorderRef.current.stop();
+    }
+    if (remoteWsRef.current?.readyState === WebSocket.OPEN) {
+      remoteWsRef.current.send(JSON.stringify({ type: "CloseStream" }));
+      remoteWsRef.current.close();
+    }
     setDone(true);
     startTransition(() => endConsultationAction(consultationId));
   }
@@ -189,7 +245,9 @@ export function LiveConsultation({
                 <span className="inline-block size-2 animate-pulse rounded-full bg-destructive" />
                 {transcriptionMode === "deepgram"
                   ? "Grabando · identificando Doctor y Paciente"
-                  : "Grabando · transcribiendo en vivo"}
+                  : transcriptionMode === "video"
+                    ? "Videollamada en curso · transcribiendo"
+                    : "Grabando · transcribiendo en vivo"}
               </>
             )}
           </p>
@@ -202,6 +260,15 @@ export function LiveConsultation({
           <MicOff className="size-3.5" />
           Sin acceso al micrófono — la sesión continúa en modo demostración.
         </p>
+      )}
+
+      {transcriptionMode === "video" && videoRoomUrl && videoToken && (
+        <VideoCall
+          roomUrl={videoRoomUrl}
+          token={videoToken}
+          userName="Doctor"
+          onRemoteAudioTrack={handleRemoteAudioTrack}
+        />
       )}
 
       <div
