@@ -107,6 +107,26 @@ export async function getConsultation(id: string): Promise<Consultation | null> 
   return data ? mapRow(data as unknown as ConsultationRow) : null;
 }
 
+/**
+ * Busca una consulta `in_progress` ya existente para esta cita, si la hay —
+ * evita crear una segunda consulta duplicada si `startVideoConsultationAction`
+ * se invoca dos veces para la misma cita (doble clic, dos pestañas).
+ */
+export async function getInProgressConsultationByAppointment(
+  appointmentId: string,
+): Promise<Consultation | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("consultations")
+    .select(SELECT)
+    .eq("appointment_id", appointmentId)
+    .eq("status", "in_progress")
+    .order("started_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data && data.length > 0 ? mapRow(data[0] as unknown as ConsultationRow) : null;
+}
+
 /** Todas las consultas de la clínica del usuario (RLS scoped), más recientes primero. */
 export async function listConsultations(): Promise<Consultation[]> {
   const supabase = await createClient();

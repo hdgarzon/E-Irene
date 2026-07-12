@@ -13,7 +13,7 @@ import {
   type AppointmentInput,
 } from "@/lib/db/appointments";
 import { getActiveConsent } from "@/lib/db/consents";
-import { startConsultation } from "@/lib/db/consultations";
+import { startConsultation, getInProgressConsultationByAppointment } from "@/lib/db/consultations";
 import { getPatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { recordNotification } from "@/lib/db/notifications";
@@ -262,34 +262,57 @@ export async function setStatusAction(formData: FormData): Promise<void> {
 /**
  * Inicia una videollamada desde una cita ya agendada: garantiza la sala (si
  * el recordatorio nunca se envió, aquí se crea por primera vez), crea la
- * consulta enlazada, y lleva al doctor a /consultations/[id]/live — donde
- * Task 14 detecta la modalidad video y embebe la llamada.
+ * consulta enlazada (o reutiliza una in_progress ya existente para esta cita,
+ * evitando duplicados por doble clic o dos pestañas), y lleva al doctor a
+ * /consultations/[id]/live.
  */
-export async function startVideoConsultationAction(appointmentId: string): Promise<void> {
+export async function startVideoConsultationAction(
+  appointmentId: string,
+): Promise<{ ok: boolean; message?: string }> {
   const user = await requireUser();
   const appt = await getAppointment(appointmentId);
   if (!appt || appt.modality !== "video") {
-    return;
+    return { ok: false, message: "Esta cita no es de modalidad video." };
+  }
+  if (appt.status === "cancelled" || appt.status === "completed") {
+    return { ok: false, message: "Esta cita ya no admite iniciar una videollamada." };
   }
 
   const consent = await getActiveConsent(appt.patientId);
   if (!consent) redirect(`/patients/${appt.patientId}/consent`);
 
-  await ensureVideoRoom(appointmentId);
+  let redirectTo: string;
+  try {
+    const existing = await getInProgressConsultationByAppointment(appointmentId);
+    if (existing) {
+      redirectTo = `/consultations/${existing.id}/live`;
+    } else {
+      await ensureVideoRoom(appointmentId);
+      const consultationId = await startConsultation(user.clinicId, {
+        patientId: appt.patientId,
+        doctorId: appt.doctorId,
+        consentId: consent!.id,
+        appointmentId,
+      });
+      await logAudit({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        action: "consultation.started",
+        entityType: "consultation",
+        entityId: consultationId,
+        metadata: { patientId: appt.patientId, appointmentId, modality: "video" },
+      });
+      redirectTo = `/consultations/${consultationId}/live`;
+    }
+  } catch (error) {
+    logger.error("consultation.start_video_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      appointmentId,
+      error,
+    });
+    return { ok: false, message: "No se pudo iniciar la videollamada. Intenta de nuevo." };
+  }
 
-  const consultationId = await startConsultation(user.clinicId, {
-    patientId: appt.patientId,
-    doctorId: appt.doctorId,
-    consentId: consent!.id,
-    appointmentId,
-  });
-  await logAudit({
-    clinicId: user.clinicId,
-    actorId: user.id,
-    action: "consultation.started",
-    entityType: "consultation",
-    entityId: consultationId,
-    metadata: { patientId: appt.patientId, appointmentId, modality: "video" },
-  });
-  redirect(`/consultations/${consultationId}/live`);
+  redirect(redirectTo);
 }
