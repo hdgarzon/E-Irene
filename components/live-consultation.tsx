@@ -177,8 +177,20 @@ export function LiveConsultation({
   // ── pista ya sabe de quién es). Requiere sessionToken propio del doctor
   // ── (el mismo `sessionToken` que llega por props sirve para ambas
   // ── conexiones — Deepgram no limita cuántos sockets abre una key efímera).
+  // Si el paciente se reconecta a mitad de la consulta, Daily.co puede volver
+  // a emitir esta pista — reemplazamos la conexión anterior en vez de
+  // ignorarla o acumularla (ver contrato documentado en components/video-call.tsx).
   function handleRemoteAudioTrack(track: MediaStreamTrack) {
-    if (transcriptionMode !== "video" || !sessionToken || remoteWsRef.current) return;
+    if (transcriptionMode !== "video" || !sessionToken) return;
+
+    if (remoteRecorderRef.current && remoteRecorderRef.current.state !== "inactive") {
+      remoteRecorderRef.current.stop();
+    }
+    remoteRecorderRef.current = null;
+    if (remoteWsRef.current?.readyState === WebSocket.OPEN) {
+      remoteWsRef.current.close();
+    }
+    remoteWsRef.current = null;
 
     const stream = new MediaStream([track]);
     const ws = new WebSocket(DEEPGRAM_LISTEN_URL, ["token", sessionToken]);
