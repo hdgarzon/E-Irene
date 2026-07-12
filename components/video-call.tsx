@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Daily, { type DailyCall } from "@daily-co/daily-js";
 import { MicOff } from "lucide-react";
 
@@ -10,6 +10,11 @@ import { MicOff } from "lucide-react";
  * en crudo apenas está disponible — el padre (LiveConsultation) la usa para
  * alimentar una segunda conexión Deepgram tageada "Paciente" (ver spec §6:
  * sin esto no hay forma de transcribir lo que dice el paciente).
+ *
+ * `onRemoteAudioTrack` puede dispararse más de una vez durante la misma
+ * llamada si el paciente se reconecta (red inestable) — el padre debe
+ * REEMPLAZAR la conexión de Deepgram anterior por la nueva pista, nunca
+ * acumular ambas (evita duplicar/entrelazar la transcripción de PHI).
  */
 export function VideoCall({
   roomUrl,
@@ -24,8 +29,16 @@ export function VideoCall({
 }) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  // Reservado para controles futuros (mute, cámara) — no se lee todavía.
   const callRef = useRef<DailyCall | null>(null);
   const [joinError, setJoinError] = useState(false);
+
+  // El efecto de abajo corre una sola vez por montaje; useEffectEvent evita
+  // que el handler de track-started quede atado a una versión obsoleta del
+  // callback si el padre pasa una función nueva en cada render sin memoizarla.
+  const handleRemoteAudioTrack = useEffectEvent((track: MediaStreamTrack) => {
+    onRemoteAudioTrack(track);
+  });
 
   useEffect(() => {
     const call = Daily.createCallObject();
@@ -39,9 +52,13 @@ export function VideoCall({
         if (el) el.srcObject = new MediaStream([track]);
       }
       if (type === "audio" && !participant?.local) {
-        onRemoteAudioTrack(track);
+        handleRemoteAudioTrack(track);
       }
     });
+
+    // Errores fatales a mitad de la llamada (red caída, expulsión, etc.) —
+    // sin esto, el doctor no tendría ningún indicio de que la sesión se cortó.
+    call.on("error", () => setJoinError(true));
 
     call.join({ url: roomUrl, token, userName }).catch(() => setJoinError(true));
 
@@ -64,8 +81,21 @@ export function VideoCall({
 
   return (
     <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-2xl bg-navy">
-      <video ref={localVideoRef} autoPlay playsInline muted className="aspect-video w-full rounded-xl object-cover" />
-      <video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded-xl object-cover" />
+      <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        aria-label="Tu video"
+        className="aspect-video w-full rounded-xl object-cover"
+      />
+      <video
+        ref={remoteVideoRef}
+        autoPlay
+        playsInline
+        aria-label="Video del paciente"
+        className="aspect-video w-full rounded-xl object-cover"
+      />
     </div>
   );
 }
