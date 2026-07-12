@@ -7,6 +7,7 @@ export type AnalysisStatus = "pending" | "processing" | "done" | "failed";
 
 export interface Consultation {
   id: string;
+  appointmentId: string | null;
   clinicId: string;
   patientId: string;
   patientName: string;
@@ -22,6 +23,7 @@ export interface Consultation {
 
 interface ConsultationRow {
   id: string;
+  appointment_id: string | null;
   clinic_id: string;
   patient_id: string;
   doctor_id: string;
@@ -36,7 +38,7 @@ interface ConsultationRow {
 }
 
 const SELECT =
-  "id, clinic_id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
+  "id, appointment_id, clinic_id, patient_id, doctor_id, status, started_at, ended_at, reason_enc, " +
   "analysis_status, analysis_error, " +
   "patients!consultations_patient_id_fkey(full_name_enc), " +
   "doctor:users!consultations_doctor_id_fkey(full_name)";
@@ -44,6 +46,7 @@ const SELECT =
 function mapRow(r: ConsultationRow): Consultation {
   return {
     id: r.id,
+    appointmentId: r.appointment_id,
     clinicId: r.clinic_id,
     patientId: r.patient_id,
     patientName: safeDecryptName(r.patients?.full_name_enc),
