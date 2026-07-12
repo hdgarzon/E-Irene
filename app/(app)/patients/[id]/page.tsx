@@ -22,9 +22,11 @@ import { listAssessmentsForPatient } from "@/lib/db/assessments";
 import { getActivePlanForPatient } from "@/lib/db/treatment-plans";
 import { ASSESSMENT_LABEL, ASSESSMENT_MAX_SCORE, type AssessmentType } from "@/lib/psychometrics";
 import { TreatmentPlanSection } from "@/components/treatment-plan-section";
+import { GeneratePatientLinkButton } from "@/components/generate-patient-link-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { generateConsentLinkAction, generateAssessmentLinkAction } from "./actions";
 
 function InfoRow({
   icon: Icon,
@@ -182,6 +184,12 @@ export default async function PatientDetailPage({
               >
                 Aplicar {ASSESSMENT_LABEL[type].split(" ")[0]}
               </Link>
+              <div className="mt-2">
+                <GeneratePatientLinkButton
+                  action={generateAssessmentLinkAction.bind(null, id, type)}
+                  label={`Generar link de ${ASSESSMENT_LABEL[type].split(" ")[0]}`}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -224,12 +232,18 @@ export default async function PatientDetailPage({
             <p className="text-sm text-muted-foreground">
               Requerido antes de iniciar una consulta.
             </p>
-            <Link
-              href={`/patients/${id}/consent`}
-              className={cn(buttonVariants({ size: "sm" }))}
-            >
-              Capturar consentimiento
-            </Link>
+            <div className="flex items-center gap-3">
+              <GeneratePatientLinkButton
+                action={generateConsentLinkAction.bind(null, id)}
+                label="Generar link de consentimiento"
+              />
+              <Link
+                href={`/patients/${id}/consent`}
+                className={cn(buttonVariants({ size: "sm" }))}
+              >
+                Capturar consentimiento
+              </Link>
+            </div>
           </div>
         )}
       </div>
