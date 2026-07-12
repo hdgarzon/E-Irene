@@ -5,6 +5,7 @@ import { getTranscriptionProvider } from "@/lib/providers";
 import { getVideoProvider } from "@/lib/video";
 import { DailyVideoProvider } from "@/lib/video/daily";
 import { requireUser } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 import { LiveConsultation } from "@/components/live-consultation";
 
 export default async function LiveConsultationPage({
@@ -33,27 +34,42 @@ export default async function LiveConsultationPage({
     ? await transcriptionProvider.createSession(id)
     : null;
 
+  // Si Daily.co falla al acuñar el token (red caída, key inválida), no debe
+  // tumbar toda la página — el doctor debe poder seguir con la transcripción
+  // de texto aunque el video no esté disponible. Por eso videoRoomUrl solo se
+  // setea DESPUÉS de que createMeetingToken resuelve con éxito, y transcriptionMode
+  // se deriva de si el video realmente quedó listo, no solo de la modalidad.
   let videoRoomUrl: string | undefined;
   let videoToken: string | undefined;
   if (isVideo && appointment?.videoRoomName && appointment.videoRoomUrl) {
-    const videoProvider = getVideoProvider();
-    videoRoomUrl = appointment.videoRoomUrl;
-    videoToken =
-      videoProvider instanceof DailyVideoProvider
-        ? await videoProvider.createMeetingToken({
-            roomName: appointment.videoRoomName,
-            userName: user.fullName,
-            isOwner: true,
-            expiresInSeconds: (appointment.durationMin + 30) * 60,
-          })
-        : "mock-token"; // MockVideoProvider: VideoCall renderiza sin conexión real.
+    try {
+      const videoProvider = getVideoProvider();
+      videoToken =
+        videoProvider instanceof DailyVideoProvider
+          ? await videoProvider.createMeetingToken({
+              roomName: appointment.videoRoomName,
+              userName: user.fullName,
+              isOwner: true,
+              expiresInSeconds: (appointment.durationMin + 30) * 60,
+            })
+          : "mock-token"; // MockVideoProvider: VideoCall renderiza sin conexión real.
+      videoRoomUrl = appointment.videoRoomUrl;
+    } catch (error) {
+      logger.error("video.meeting_token_failed", {
+        clinicId: user.clinicId,
+        actorId: user.id,
+        appointmentId: appointment.id,
+        error,
+      });
+    }
   }
+  const videoReady = Boolean(videoRoomUrl && videoToken);
 
   return (
     <LiveConsultation
       consultationId={id}
       patientName={consultation.patientName}
-      transcriptionMode={isVideo ? "video" : transcriptionProvider.mode === "deepgram" ? "deepgram" : "mock"}
+      transcriptionMode={videoReady ? "video" : transcriptionProvider.mode === "deepgram" ? "deepgram" : "mock"}
       sessionToken={session?.sessionToken}
       videoRoomUrl={videoRoomUrl}
       videoToken={videoToken}
