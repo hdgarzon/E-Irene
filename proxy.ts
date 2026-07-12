@@ -16,9 +16,10 @@ import { createServerClient } from "@supabase/ssr";
  */
 
 // Rutas accesibles SIN sesión.
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
-// Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…).
-const PUBLIC_PREFIXES = ["/auth"];
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad"]);
+// Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
+// /enlace: links de paciente con token, ver app/enlace/[token]).
+const PUBLIC_PREFIXES = ["/auth", "/enlace"];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;
