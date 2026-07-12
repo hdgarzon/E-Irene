@@ -36,7 +36,11 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
   await page.goto("/appointments/new");
   await page.selectOption("#patientId", { label: "Paciente Tele" });
   await page.selectOption("#modality", "video");
-  await page.fill("#scheduledAt", new Date(Date.now() - 5 * 60_000).toISOString().slice(0, 16));
+  // Fecha fija: startVideoConsultationAction no valida ventana horaria (eso
+  // solo aplica a /join/[token], del lado paciente), así que no hace falta
+  // que la cita esté "ahora" — un literal fijo evita el desfase de zona
+  // horaria de construirla a mano con Date.now().
+  await page.fill("#scheduledAt", "2030-01-15T14:30");
   await page.getByRole("button", { name: /agendar cita/i }).click();
   await expect(page).toHaveURL(/\/appointments$/);
 
