@@ -80,7 +80,8 @@ export async function alertOnRiskyAssessment(params: {
     }
 
     const patientName = patient?.fullName ?? "(nombre no disponible)";
-    const patientUrl = `${process.env.NEXT_PUBLIC_APP_URL}/patients/${params.patientId}`;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
+    const patientUrl = `${appUrl}/patients/${params.patientId}`;
 
     for (const doctor of recipients) {
       try {
@@ -93,18 +94,47 @@ export async function alertOnRiskyAssessment(params: {
             patientUrl,
           }),
         );
-        await recordNotificationPublic(params.clinicId, {
-          patientId: params.patientId,
-          type: "risk_alert",
-          status: "sent",
-        });
+        try {
+          await recordNotificationPublic(params.clinicId, {
+            patientId: params.patientId,
+            type: "risk_alert",
+            status: "sent",
+          });
+        } catch (recordError) {
+          logger.warn("risk_alert.record_notification_failed", {
+            clinicId: params.clinicId,
+            patientId: params.patientId,
+            assessmentId: params.assessmentId,
+            doctorId: doctor.id,
+            status: "sent",
+            error: recordError,
+          });
+        }
       } catch (error) {
-        logger.warn("risk_alert.send_failed", { clinicId: params.clinicId, patientId: params.patientId, error });
-        await recordNotificationPublic(params.clinicId, {
+        logger.warn("risk_alert.send_failed", {
+          clinicId: params.clinicId,
           patientId: params.patientId,
-          type: "risk_alert",
-          status: "failed",
+          assessmentId: params.assessmentId,
+          doctorId: doctor.id,
+          to: doctor.email,
+          error,
         });
+        try {
+          await recordNotificationPublic(params.clinicId, {
+            patientId: params.patientId,
+            type: "risk_alert",
+            status: "failed",
+          });
+        } catch (recordError) {
+          logger.warn("risk_alert.record_notification_failed", {
+            clinicId: params.clinicId,
+            patientId: params.patientId,
+            assessmentId: params.assessmentId,
+            doctorId: doctor.id,
+            status: "failed",
+            error: recordError,
+          });
+        }
       }
     }
 
@@ -118,6 +148,11 @@ export async function alertOnRiskyAssessment(params: {
   } catch (error) {
     // Resolución de destinatario (query a appointments/patients) falló —
     // no debe bloquear el guardado de la escala, que ya ocurrió.
-    logger.error("risk_alert.resolution_failed", { clinicId: params.clinicId, patientId: params.patientId, error });
+    logger.error("risk_alert.resolution_failed", {
+      clinicId: params.clinicId,
+      patientId: params.patientId,
+      assessmentId: params.assessmentId,
+      error,
+    });
   }
 }
