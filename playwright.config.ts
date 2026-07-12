@@ -34,6 +34,7 @@ export default defineConfig({
     env: {
       ANALYSIS_PROVIDER: "mock",
       TRANSCRIPTION_PROVIDER: "mock",
+      VIDEO_PROVIDER: "mock",
       RATE_LIMITING_DISABLED: "true",
     },
     // Sin esto, Playwright silencia la salida del dev server salvo que
