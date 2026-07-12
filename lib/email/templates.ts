@@ -64,3 +64,37 @@ export function buildReportReadyEmail(input: {
     ),
   };
 }
+
+export function buildPatientLinkEmail(input: {
+  to: string;
+  patientName: string;
+  clinicName: string;
+  url: string;
+  purpose: "consent" | "assessment";
+}): EmailMessage {
+  const isConsent = input.purpose === "consent";
+  const subject = isConsent
+    ? "Firma tu consentimiento informado"
+    : "Completa tu cuestionario de seguimiento";
+  const actionLabel = isConsent ? "Firmar consentimiento" : "Responder cuestionario";
+  const intro = isConsent
+    ? "tu profesional de salud mental te pide firmar el consentimiento informado antes de tu próxima sesión."
+    : "tu profesional de salud mental te pide completar un breve cuestionario de seguimiento.";
+  const text = `Hola ${input.patientName}, ${intro} Abre este enlace para continuar: ${input.url} (válido por 7 días).`;
+  return {
+    to: input.to,
+    subject,
+    text,
+    html: wrap(
+      subject,
+      `<p>Hola <strong>${input.patientName}</strong>,</p>
+       <p>De parte de <strong>${input.clinicName}</strong>: ${intro}</p>
+       <p style="margin:20px 0">
+         <a href="${input.url}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+           ${actionLabel}
+         </a>
+       </p>
+       <p style="font-size:13px;color:#5b6b7c">Este enlace es personal y vence en 7 días. Si no esperabas este correo, puedes ignorarlo.</p>`,
+    ),
+  };
+}
