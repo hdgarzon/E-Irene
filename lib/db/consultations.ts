@@ -74,7 +74,13 @@ function safeDecryptName(fullNameEnc: string | null | undefined): string {
 
 export async function startConsultation(
   clinicId: string,
-  input: { patientId: string; doctorId: string; consentId: string | null; reason?: string | null },
+  input: {
+    patientId: string;
+    doctorId: string;
+    consentId: string | null;
+    reason?: string | null;
+    appointmentId?: string | null;
+  },
 ): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -84,6 +90,7 @@ export async function startConsultation(
       patient_id: input.patientId,
       doctor_id: input.doctorId,
       consent_id: input.consentId,
+      appointment_id: input.appointmentId ?? null,
       status: "in_progress",
       reason_enc: input.reason ? encrypt(input.reason) : null,
     })

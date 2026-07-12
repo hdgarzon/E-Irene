@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AppointmentStatusMenu } from "@/components/appointment-status";
 import { ReminderButton } from "@/components/reminder-button";
+import { StartVideoButton } from "@/components/start-video-button";
 
 export default async function AppointmentsPage() {
   const appointments = await listAppointments();
@@ -71,6 +72,12 @@ export default async function AppointmentsPage() {
                     <AppointmentStatusMenu id={appt.id} status={appt.status} />
 
                     <ReminderButton appointmentId={appt.id} />
+
+                    {appt.modality === "video" &&
+                      appt.status !== "cancelled" &&
+                      appt.status !== "completed" && (
+                        <StartVideoButton appointmentId={appt.id} />
+                      )}
 
                     <Link
                       href={`/appointments/${appt.id}/edit`}

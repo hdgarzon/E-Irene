@@ -12,6 +12,8 @@ import {
   ensureVideoRoom,
   type AppointmentInput,
 } from "@/lib/db/appointments";
+import { getActiveConsent } from "@/lib/db/consents";
+import { startConsultation } from "@/lib/db/consultations";
 import { getPatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { recordNotification } from "@/lib/db/notifications";
@@ -255,4 +257,39 @@ export async function setStatusAction(formData: FormData): Promise<void> {
     metadata: { status },
   });
   revalidatePath("/appointments");
+}
+
+/**
+ * Inicia una videollamada desde una cita ya agendada: garantiza la sala (si
+ * el recordatorio nunca se envió, aquí se crea por primera vez), crea la
+ * consulta enlazada, y lleva al doctor a /consultations/[id]/live — donde
+ * Task 14 detecta la modalidad video y embebe la llamada.
+ */
+export async function startVideoConsultationAction(appointmentId: string): Promise<void> {
+  const user = await requireUser();
+  const appt = await getAppointment(appointmentId);
+  if (!appt || appt.modality !== "video") {
+    return;
+  }
+
+  const consent = await getActiveConsent(appt.patientId);
+  if (!consent) redirect(`/patients/${appt.patientId}/consent`);
+
+  await ensureVideoRoom(appointmentId);
+
+  const consultationId = await startConsultation(user.clinicId, {
+    patientId: appt.patientId,
+    doctorId: appt.doctorId,
+    consentId: consent!.id,
+    appointmentId,
+  });
+  await logAudit({
+    clinicId: user.clinicId,
+    actorId: user.id,
+    action: "consultation.started",
+    entityType: "consultation",
+    entityId: consultationId,
+    metadata: { patientId: appt.patientId, appointmentId, modality: "video" },
+  });
+  redirect(`/consultations/${consultationId}/live`);
 }
