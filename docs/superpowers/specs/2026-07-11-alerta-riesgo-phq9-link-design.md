@@ -24,18 +24,25 @@ pública donde el paciente llena el formulario (`app/enlace/[token]/page.tsx`) t
 Este diseño se implementa junto con esa página, no después.
 
 Este diseño agrega: (1) detección del umbral de riesgo al guardar, (2) un correo de alerta al
-personal relevante, (3) un banner persistente en el dashboard como fuente de verdad
-independiente del correo, y (4) recursos de crisis mostrados directamente al paciente si su
-respuesta activó el umbral.
+personal relevante, (3) que las respuestas de riesgo aparezcan en la sección "Alertas de
+riesgo" que **ya existe** en el dashboard (`listRiskAlerts()`, alimentada hoy solo por el
+análisis de IA de consultas — ver "Banner en el dashboard"), y (4) recursos de crisis
+mostrados directamente al paciente si su respuesta activó el umbral.
+
+**Nota de revisión (post-aprobación inicial):** al explorar el dashboard para escribir el plan
+de implementación se encontró que ya existe un mecanismo de "Alertas de riesgo" (`lib/db/
+reports.ts`, `listRiskAlerts()`) que calcula la alerta **al leer** — descifra `payload_enc` de
+reportes recientes y filtra por categorías de riesgo con nivel `moderado`/`alto` — sin columnas
+de estado persistidas ni "marcar como atendido". Las secciones "Modelo de datos" y "Banner en
+el dashboard" de este documento se revisaron para seguir ese mismo patrón en vez de introducir
+uno nuevo y paralelo.
 
 ## Alcance
 
 Aplica **solo** a escalas PHQ-9 completadas vía link público (`psychometric_assessments.link_id
 is not null`). Las administradas por personal en consulta quedan fuera del correo/banner de
 alerta — el personal ya está presente en ese caso y puede actuar directamente sobre la
-respuesta. (El campo `risk_flag`, sección "Modelo de datos", sí se calcula para cualquier
-PHQ-9 riesgoso, por ser un reflejo fiel del dato, pero el correo y el banner filtran por
-`link_id is not null`.)
+respuesta.
 
 Fuera de alcance: SMS/WhatsApp (no hay proveedor implementado hoy — solo `getEmailProvider()`);
 un concepto de "profesional asignado" persistente en `patients` (no existe en el modelo de
@@ -56,24 +63,9 @@ export function isPhq9SelfHarmRisk(type: AssessmentType, answers: number[]): boo
 
 ## Modelo de datos
 
-Nueva migración agregando dos columnas a `psychometric_assessments`:
-
-```sql
-alter table psychometric_assessments
-  add column risk_flag boolean not null default false,
-  add column risk_acknowledged_at timestamptz;
-```
-
-- `risk_flag`: calculado en el momento de guardar (`createAssessment` y
-  `createAssessmentViaLink`) vía `isPhq9SelfHarmRisk`. Se guarda en texto plano (no cifrado,
-  a diferencia de `payload_enc`) para que el banner del dashboard pueda filtrar por índice sin
-  descifrar cada fila.
-- `risk_acknowledged_at`: nullable, se llena cuando el personal marca la alerta como atendida
-  desde el banner. Sin esto la alerta quedaría visible indefinidamente.
-
-Ambas funciones de guardado (`createAssessment` en `lib/db/assessments.ts` y
-`createAssessmentViaLink`) pasan a setear `risk_flag: isPhq9SelfHarmRisk(input.type,
-input.result.answers)` en el insert.
+Sin cambios de esquema. Igual que `listRiskAlerts()` (que no persiste ningún flag de riesgo de
+consulta — lo recalcula al leer, descifrando `payload_enc`), la señal de riesgo del PHQ-9 se
+recalcula al leer con `isPhq9SelfHarmRisk`, sin columna nueva en `psychometric_assessments`.
 
 ## Resolución del destinatario del correo
 
@@ -84,8 +76,9 @@ async function getNextAppointmentDoctor(patientId: string): Promise<{ id: string
 ```
 
 Usa el cliente admin (la resolución corre desde un contexto sin sesión). Busca la cita futura
-más próxima del paciente (`starts_at > now()`, no cancelada), ordenada ascendente, y devuelve el
-doctor asociado (`appointments.doctor_id` → `users`).
+más próxima del paciente (`scheduled_at > now()`, `status <> 'cancelled'`), ordenada ascendente
+por `scheduled_at`, y devuelve el doctor asociado (`appointments.doctor_id` → `users`, incluyendo
+`email`).
 
 Si no hay cita futura: fallback a **todos** los usuarios `admin`/`doctor` de la clínica. Se
 agrega una variante admin-client de `listDoctors()` (la actual, en `lib/db/clinic.ts`, usa
@@ -96,7 +89,8 @@ async function listDoctorsPublic(clinicId: string): Promise<DoctorOption[]>
 ```
 
 Si ni siquiera hay doctores/admins en la clínica (caso borde), no se envía correo — se registra
-igual el `audit_log` y el `risk_flag`/banner siguen siendo la red de seguridad.
+igual el `audit_log`, y la escala sigue apareciendo en el banner del dashboard (sección
+siguiente) como red de seguridad.
 
 ## Envío y trazabilidad
 
@@ -136,17 +130,45 @@ antes de intentar alertar.
 
 ## Banner en el dashboard
 
-`app/(app)/dashboard/page.tsx` agrega una consulta (sesión de personal, RLS normal) por escalas
-con `risk_flag = true AND risk_acknowledged_at IS NULL AND link_id IS NOT NULL`, scoped a la
-clínica del usuario automáticamente por RLS.
+`app/(app)/dashboard/page.tsx` ya tiene una sección "Alertas de riesgo" (solo visible para
+`isClinician`) alimentada por `listRiskAlerts()` (`lib/db/reports.ts`), que lista reportes de
+consulta recientes con categorías de riesgo IA en nivel `moderado`/`alto`. En vez de crear una
+sección paralela, la extendemos para que también muestre escalas PHQ-9 riesgosas vía link.
 
-Cada fila del banner muestra el paciente y un botón "Marcar como atendido" → nueva Server Action
-que setea `risk_acknowledged_at = now()` y registra `logAudit` (`action:
-'assessment.risk_acknowledged'`, `entityId: assessmentId`).
+Nueva función en `lib/db/assessments.ts`, mismo patrón de `listRiskAlerts()` (query + decrypt +
+filtro al leer, sin columna de estado):
 
-Este banner es la **fuente de verdad independiente** del correo: como consulta la tabla
-directamente (no el log de `notifications`), sigue mostrando la alerta aunque el envío de correo
-haya fallado silenciosamente.
+```ts
+export interface Phq9RiskAlert {
+  assessmentId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+}
+
+export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]>
+```
+
+Consulta `psychometric_assessments` (sesión de personal, RLS normal — scoped a la clínica
+automáticamente) filtrando `type = 'phq9' AND link_id IS NOT NULL`, ordenada por
+`administered_at` descendente, limitada a `limit`. Para cada fila descifra `payload_enc` y
+conserva solo las que cumplen `isPhq9SelfHarmRisk`, igual que `listRiskAlerts` descarta reportes
+sin `riskFlags` o con nivel bajo. Un fallo de descifrado en una fila se loguea
+(`logger.warn("phq9_risk_alert.payload_decrypt_failed", ...)`) y se omite esa fila sin romper
+la lista completa (mismo manejo que `listRiskAlerts`).
+
+En `DashboardPage`, se llama `listPhq9RiskAlerts()` junto a `listRiskAlerts()` (ambas solo si
+`isClinician`) y se renderiza una segunda lista dentro de la misma sección `<section>` de
+"Alertas de riesgo" (mismo estilo de tarjeta/Badge), con cada fila enlazando a
+`/patients/${patientId}` (no `/consultations/${id}`, porque no hay consulta asociada) y una
+etiqueta fija "Autolesión · PHQ-9" en vez de las categorías/niveles de IA — para distinguir
+visualmente el origen del dato (autorreporte directo del paciente vs. inferencia de IA sobre la
+consulta) sin implicar el mismo tipo de "nivel".
+
+Como no hay estado de "atendido" —tampoco lo tienen hoy las alertas de consulta—, la alerta deja
+de aparecer naturalmente al salir de la ventana de `limit` conforme se acumulan más registros
+recientes. Esto es consistente con el comportamiento actual del dashboard, no una limitación
+nueva introducida por este diseño.
 
 ## Respuesta inmediata al paciente
 
@@ -164,7 +186,8 @@ de link único: no se inventa contenido clínico sin validación explícita.
 - Guardado de la escala (`createAssessmentViaLink`) nunca se bloquea por la lógica de alerta —
   la respuesta del paciente se persiste primero, siempre.
 - Fallo al resolver destinatario (sin cita, sin doctores en la clínica) → no lanza excepción,
-  simplemente no hay a quién enviar correo; el banner sigue siendo la red de seguridad.
+  simplemente no hay a quién enviar correo; el banner del dashboard (que no depende de este
+  paso) sigue siendo la red de seguridad.
 - Fallo al enviar el correo (proveedor caído, etc.) → capturado, logueado, registrado como
   `notifications.status = 'failed'`; no afecta el resto del flujo.
 - Fallo al registrar `audit_logs`/`notifications` → no debería ocurrir en condiciones normales
@@ -182,7 +205,6 @@ de link único: no se inventa contenido clínico sin validación explícita.
 - Tests de `alertOnRiskyAssessment`: caso feliz (con destinatario, correo enviado), caso
   fallback (sin cita, cae a todos los doctores), caso sin destinatario alguno (no revienta),
   caso de fallo de envío (no propaga excepción hacia el caller).
-- Test de que `risk_flag` se setea correctamente en `createAssessment` y
-  `createAssessmentViaLink` para respuestas riesgosas y no riesgosas.
-- Test del banner del dashboard: solo muestra filas con `link_id is not null AND risk_flag =
-  true AND risk_acknowledged_at is null`; desaparece tras "Marcar como atendido".
+- Tests de `listPhq9RiskAlerts`: incluye escalas PHQ-9 riesgosas con `link_id` no nulo; excluye
+  GAD-7, escalas sin `link_id`, y PHQ-9 con el ítem de autolesión en 0; una fila con
+  `payload_enc` corrupto se omite sin romper el resto de la lista.
