@@ -10,36 +10,36 @@ riesgo detectado por IA en consultas.
 **Architecture:** Detección pura (`isPhq9SelfHarmRisk`) reutilizada en dos caminos: (1) un
 módulo nuevo `lib/db/risk-alerts.ts` que resuelve destinatario (doctor de la próxima cita, o
 fallback a todo el personal admin/doctor de la clínica) y envía un correo mínimo sin contenido
-clínico, invocado **desde dentro de `createAssessmentViaLink`** (ver nota de desviación abajo);
-y (2) una función de lectura `listPhq9RiskAlerts` en `lib/db/assessments.ts` que sigue
-exactamente el patrón ya usado por `listRiskAlerts()` en `lib/db/reports.ts` (calcula el riesgo
-al leer, descifrando `payload_enc`, sin columnas de estado nuevas) y se fusiona visualmente con
-esa misma sección del dashboard.
+clínico, invocado desde `submitPublicAssessmentAction` en `app/enlace/[token]/actions.ts` —
+la Server Action pública real, que ya existe — inmediatamente después de
+`createAssessmentViaLink`, tal como describe el spec; y (2) una función de lectura
+`listPhq9RiskAlerts` en `lib/db/assessments.ts` que sigue exactamente el patrón ya usado por
+`listRiskAlerts()` en `lib/db/reports.ts` (calcula el riesgo al leer, descifrando `payload_enc`,
+sin columnas de estado nuevas) y se fusiona visualmente con esa misma sección del dashboard.
 
-**Desviación deliberada del spec:** el spec
-(`docs/superpowers/specs/2026-07-11-alerta-riesgo-phq9-link-design.md`) dice que la alerta "se
-invoca desde la Server Action pública que se construirá para `app/enlace/[token]`,
-inmediatamente después de `createAssessmentViaLink`". Esa Server Action y esa página **no
-existen todavía en ninguna rama** — es una pieza grande y separada, ya bosquejada en
-`docs/superpowers/specs/2026-07-10-portal-paciente-y-ajustes-design.md`, fuera del alcance de
-este plan. Para no dejar la alerta dependiendo de que un código futuro recuerde invocarla, este
-plan la llama **desde el final de `createAssessmentViaLink` misma** — mismo momento ("justo
-después del insert"), pero sin depender de un caller que aún no existe, y sin que un futuro
-caller pueda olvidarla. El resto del spec (umbral, contenido del correo, resolución de
-destinatario, banner) se implementa tal cual está escrito.
+**Nota de revisión (post-escritura del plan):** al mergear `feat/telehealth` en esta rama para
+poder ejecutar el plan, se encontró que `app/enlace/[token]/page.tsx`,
+`app/enlace/[token]/actions.ts` y `app/enlace/[token]/gracias/page.tsx` **ya existen** — la
+exploración previa (durante el diseño) no los había encontrado. Esto elimina la necesidad de la
+desviación planeada originalmente (invocar la alerta desde dentro de `createAssessmentViaLink`
+por falta de un caller real): ahora se sigue el spec tal cual, invocando desde la Server Action
+pública real. `createAssessmentViaLink` **no cambia de firma** en este plan — ya tiene un caller
+real (`submitPublicAssessmentAction`) que se rompería con un parámetro nuevo obligatorio.
+`alertOnRiskyAssessment` resuelve el nombre de la clínica internamente (columna `clinics.name`,
+texto plano, sin cifrar) en vez de recibirlo del caller, para no pedirle a la Server Action datos
+que no necesita para nada más.
 
 **Fuera de alcance de este plan** (ver spec, sección "Respuesta inmediata al paciente"): el
-bloque de recursos de crisis en la pantalla de confirmación del link público. Esa pantalla no
-existe todavía y su copy debe redactarse y validarse por separado antes de publicarse — queda
-para cuando se construya `app/enlace/[token]`, usando `isPhq9SelfHarmRisk` (ya implementado
-aquí) para decidir si mostrarlo.
+bloque de recursos de crisis en `app/enlace/[token]/gracias/page.tsx`. Esa página existe pero es
+un mensaje estático genérico; su copy de recursos de crisis debe redactarse y validarse por
+separado antes de publicarse — queda como seguimiento, usando `isPhq9SelfHarmRisk` (ya
+implementado aquí) para decidir si mostrarlo.
 
 **Tech Stack:** Next.js 16 / TypeScript, Supabase (Postgres + `@supabase/supabase-js`), Vitest,
 Resend (vía `getEmailProvider()`).
 
-**Rama base:** Este plan asume que `feat/telehealth` (donde viven `createAssessmentViaLink`,
-`patient_links`, `listRiskAlerts`, etc.) ya está mergeada en la rama de trabajo. Todas las rutas
-de archivo referidas abajo son las de esa rama.
+**Rama base:** `feat/telehealth` ya está mergeada en esta rama de trabajo
+(`claude/inspiring-mayer-8d97ba`) — confirmado antes de ejecutar este plan.
 
 **Convención de pruebas de este repo (verificado explorando `tests/`):** las funciones de
 `lib/db/*.ts` que hacen queries/writes a Supabase (`listRiskAlerts`, `listAppointments`,
@@ -423,6 +423,17 @@ import { logAuditPublic } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 
 /**
+ * Nombre de la clínica sin sesión (cliente service-role). `clinics.name` no
+ * está cifrado — es información de la clínica, no un dato del paciente.
+ */
+async function getClinicNamePublic(clinicId: string): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("clinics").select("name").eq("id", clinicId).single();
+  if (error) throw error;
+  return data.name;
+}
+
+/**
  * Si la escala indica riesgo (autolesión en el PHQ-9), avisa por correo al
  * doctor de la próxima cita del paciente (o, si no hay ninguna, a todo el
  * personal admin/doctor de la clínica). Nunca lanza excepción — un fallo de
@@ -431,7 +442,6 @@ import { logger } from "@/lib/logger";
  */
 export async function alertOnRiskyAssessment(params: {
   clinicId: string;
-  clinicName: string;
   patientId: string;
   assessmentId: string;
   type: AssessmentType;
@@ -440,9 +450,10 @@ export async function alertOnRiskyAssessment(params: {
   if (!isPhq9SelfHarmRisk(params.type, params.answers)) return;
 
   try {
-    const [nextDoctor, patient] = await Promise.all([
+    const [nextDoctor, patient, clinicName] = await Promise.all([
       getNextAppointmentDoctor(params.patientId),
       getPatientForLink(params.patientId),
+      getClinicNamePublic(params.clinicId),
     ]);
     const recipients = nextDoctor
       ? [nextDoctor]
@@ -468,7 +479,7 @@ export async function alertOnRiskyAssessment(params: {
             to: doctor.email,
             doctorName: doctor.fullName,
             patientName,
-            clinicName: params.clinicName,
+            clinicName,
             patientUrl,
           }),
         );
@@ -519,98 +530,77 @@ git commit -m "feat(risk-alerts): agregar alertOnRiskyAssessment"
 
 ---
 
-### Task 7: invocar la alerta desde `createAssessmentViaLink`
+### Task 7: invocar la alerta desde `submitPublicAssessmentAction`
 
 **Files:**
-- Modify: `lib/db/assessments.ts:54-71` (función `createAssessmentViaLink`)
+- Modify: `app/enlace/[token]/actions.ts:98-143` (función `submitPublicAssessmentAction`)
 
 - [ ] **Step 1: Write the implementation**
 
-En `lib/db/assessments.ts`, la función `createAssessmentViaLink` pasa de:
+En `app/enlace/[token]/actions.ts`, dentro del bloque `try` de `submitPublicAssessmentAction`,
+justo después de `markPatientLinkCompleted(link.id)` y antes del `logAuditPublic` de
+`assessment.created_via_link` (o después, el orden entre ambos no importa — ambos van dentro del
+mismo `try`, antes del `redirect` final), añade la llamada a la alerta:
 
 ```ts
-export async function createAssessmentViaLink(
-  clinicId: string,
-  input: { patientId: string; type: AssessmentType; result: AssessmentResult; linkId: string },
-): Promise<Assessment> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("psychometric_assessments")
-    .insert({
-      clinic_id: clinicId,
-      patient_id: input.patientId,
-      link_id: input.linkId,
-      type: input.type,
-      payload_enc: encrypt(JSON.stringify(input.result)),
-    })
-    .select(COLS)
-    .single();
-  if (error) throw error;
-  return mapRow(data as unknown as AssessmentRow);
-}
+  try {
+    const count = questionsFor(type).length;
+    const answers: number[] = [];
+    for (let i = 0; i < count; i++) {
+      answers.push(Number(formData.get(`q${i}`)));
+    }
+    const result = scoreAssessment(type, answers);
+
+    const assessment = await createAssessmentViaLink(link.clinicId, {
+      patientId: link.patientId,
+      type,
+      result,
+      linkId: link.id,
+    });
+    await markPatientLinkCompleted(link.id);
+    await logAuditPublic({
+      clinicId: link.clinicId,
+      action: "assessment.created_via_link",
+      entityType: "psychometric_assessment",
+      entityId: assessment.id,
+      metadata: { type, totalScore: result.totalScore, linkId: link.id, patientId: link.patientId },
+    });
+
+    // Se espera (await): en un entorno serverless (Vercel) una llamada async
+    // sin await puede quedar truncada si la función termina apenas se envía
+    // la respuesta (el redirect() de abajo). alertOnRiskyAssessment nunca
+    // lanza (captura sus propios errores, ver lib/db/risk-alerts.ts), así
+    // que este await no puede hacer fallar el envío del paciente — solo le
+    // agrega la latencia real del correo, aceptable para una alerta que debe
+    // salir cuanto antes.
+    await alertOnRiskyAssessment({
+      clinicId: link.clinicId,
+      patientId: link.patientId,
+      assessmentId: assessment.id,
+      type,
+      answers: result.answers,
+    });
+  } catch (error) {
 ```
 
-a:
+(El resto de la función —el `catch` y el `redirect` final— no cambia.)
 
-```ts
-export async function createAssessmentViaLink(
-  clinicId: string,
-  clinicName: string,
-  input: { patientId: string; type: AssessmentType; result: AssessmentResult; linkId: string },
-): Promise<Assessment> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("psychometric_assessments")
-    .insert({
-      clinic_id: clinicId,
-      patient_id: input.patientId,
-      link_id: input.linkId,
-      type: input.type,
-      payload_enc: encrypt(JSON.stringify(input.result)),
-    })
-    .select(COLS)
-    .single();
-  if (error) throw error;
-  const assessment = mapRow(data as unknown as AssessmentRow);
+Añade el import al inicio del archivo, junto a `import { logAuditPublic } from
+"@/lib/db/audit";`: `import { alertOnRiskyAssessment } from "@/lib/db/risk-alerts";`
 
-  // Se espera (await): en un entorno serverless (Vercel) una llamada async
-  // sin await puede quedar truncada si la función termina apenas se envía la
-  // respuesta. alertOnRiskyAssessment nunca lanza (captura sus propios
-  // errores, ver lib/db/risk-alerts.ts), así que este await no puede hacer
-  // fallar el guardado — solo le agrega la latencia real del envío del
-  // correo, que es aceptable para una alerta que debe salir cuanto antes.
-  await alertOnRiskyAssessment({
-    clinicId,
-    clinicName,
-    patientId: input.patientId,
-    assessmentId: assessment.id,
-    type: input.type,
-    answers: input.result.answers,
-  });
-
-  return assessment;
-}
-```
-
-Añade el import al inicio del archivo: `import { alertOnRiskyAssessment } from "@/lib/db/risk-alerts";`
-
-`clinicName` se agrega como parámetro explícito porque `createAssessmentViaLink` corre sin
-sesión (cliente admin) y no hay forma de derivar el nombre de la clínica desde RLS/JWT aquí — el
-caller (la futura Server Action de `app/enlace/[token]`) ya tiene que resolver `clinicId` a
-partir del `patient_links` validado, y puede traer `clinicName` en la misma consulta.
+`createAssessmentViaLink` **no cambia** — sigue con su firma actual de dos parámetros
+(`clinicId`, `input`).
 
 - [ ] **Step 2: Typecheck**
 
 Run: `npm run typecheck`
-Expected: sin errores nuevos. (No hay callers existentes de `createAssessmentViaLink` en el
-código hoy — la Server Action pública aún no se ha construido — así que el cambio de firma no
-rompe nada.)
+Expected: sin errores nuevos.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add lib/db/assessments.ts
-git commit -m "feat(assessments): invocar alertOnRiskyAssessment desde createAssessmentViaLink"
+git add "app/enlace/[token]/actions.ts"
+git commit -m "feat(enlace): invocar alertOnRiskyAssessment desde submitPublicAssessmentAction"
 ```
 
 ---
@@ -910,8 +900,9 @@ Expected: build exitoso.
 
 ## Seguimiento pendiente (fuera de este plan)
 
-- Construir `app/enlace/[token]/page.tsx` y su Server Action (spec
-  `2026-07-10-portal-paciente-y-ajustes-design.md`) — al llamar `createAssessmentViaLink`, la
-  alerta ya sale automáticamente (Task 7), no requiere wiring adicional.
-- Redactar y validar el texto del bloque de recursos de crisis para la pantalla de confirmación
-  del link público, y mostrarlo cuando `isPhq9SelfHarmRisk` sea `true` (usa la función de Task 1).
+- Redactar y validar el texto del bloque de recursos de crisis, y añadirlo a
+  `app/enlace/[token]/gracias/page.tsx` (hoy un mensaje estático) cuando
+  `isPhq9SelfHarmRisk` sea `true` — requiere pasarle esa señal a la página de gracias (por
+  ejemplo vía query param desde `submitPublicAssessmentAction`) y el copy debe redactarse y
+  validarse por separado antes de publicarse (ver spec, sección "Respuesta inmediata al
+  paciente").
