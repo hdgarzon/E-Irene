@@ -15,6 +15,9 @@ export default async function JoinPage({
   const invalid =
     !appointment ||
     appointment.modality !== "video" ||
+    appointment.status === "cancelled" ||
+    appointment.status === "completed" ||
+    appointment.status === "no_show" ||
     !appointment.videoRoomUrl ||
     !isJoinWindowOpen({
       scheduledAt: appointment.scheduledAt,

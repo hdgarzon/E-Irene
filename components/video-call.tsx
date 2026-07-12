@@ -41,7 +41,10 @@ export function VideoCall({
   });
 
   useEffect(() => {
-    const call = Daily.createCallObject();
+    // avoidEval: true evita que @daily-co/daily-js necesite 'unsafe-eval' en
+    // el CSP de producción (ver proxy.ts) — a cambio exige `script-src
+    // https://*.daily.co`, ya agregado ahí.
+    const call = Daily.createCallObject({ dailyConfig: { avoidEval: true } });
     callRef.current = call;
 
     call.on("track-started", (ev) => {

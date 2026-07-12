@@ -41,14 +41,24 @@ function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
     // 'unsafe-eval' solo en dev: React lo usa para reconstruir stack traces
-    // del servidor en el navegador; no se usa en producción.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    // del servidor en el navegador; no se usa en producción. https://*.daily.co
+    // es requerido por @daily-co/daily-js cuando se usa `avoidEval: true` (ver
+    // components/video-call.tsx / app/join/[token]/join-call.tsx) — evita tener
+    // que habilitar 'unsafe-eval' también en producción para la videollamada.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://*.daily.co${isDev ? " 'unsafe-eval'" : ""}`,
     // Next.js no aplica el nonce a estilos (Tailwind/CSS-in-JS inline); mantenemos
     // 'unsafe-inline' aquí, que es el rango de riesgo estándar aceptado para style-src.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com",
+    // Daily.co (telehealth): señalización/medios vía WebRTC necesita *.daily.co
+    // y *.pluot.blue (infraestructura de Daily), más wss: genérico porque los
+    // servidores de medios/relay se asignan dinámicamente y no siguen un
+    // subdominio fijo (ver https://docs.daily.co/guides/privacy-and-security/content-security-policy).
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://*.daily.co https://*.pluot.blue wss:",
+    // Web workers de @daily-co/daily-js se cargan vía blob: — sin esto caerían
+    // en default-src y se bloquearían.
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
