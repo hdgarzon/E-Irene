@@ -135,12 +135,6 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
   const appt = await getAppointment(appointmentId);
   if (!appt) return { ok: false, message: "Cita no encontrada." };
 
-  let videoJoinUrl: string | undefined;
-  if (appt.modality === "video") {
-    const { joinToken } = await ensureVideoRoom(appointmentId);
-    videoJoinUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/join/${joinToken}`;
-  }
-
   const [patient, overview] = await Promise.all([
     getPatient(appt.patientId),
     getClinicOverview(),
@@ -165,6 +159,15 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
   }
 
   try {
+    let videoJoinUrl: string | undefined;
+    if (appt.modality === "video") {
+      if (!process.env.NEXT_PUBLIC_SITE_URL) {
+        throw new Error("NEXT_PUBLIC_SITE_URL no está configurada; no se puede generar el link de videollamada");
+      }
+      const { joinToken } = await ensureVideoRoom(appointmentId);
+      videoJoinUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/join/${joinToken}`;
+    }
+
     let mode: string;
     if (channel === "whatsapp") {
       const wa = getWhatsAppProvider();
