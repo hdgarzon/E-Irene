@@ -22,7 +22,7 @@ un producto aparte.
 | Decisión | Elección | Razón |
 |---|---|---|
 | Infra de video | **Proveedor hospedado (Daily.co)** vía `VideoProvider` interface | Resuelve TURN/NAT traversal (crítico: sin esto, una fracción real de pacientes no conecta) sin operar infraestructura propia. Expone pistas de audio en crudo por participante. |
-| Transcripción en llamada | **Dos conexiones Deepgram separadas** (mic local del doctor + pista remota del paciente), cada una con speaker fijo | Elimina la heurística de diarización actual (que adivina quién habla) — con pistas separadas el speaker se conoce con certeza. |
+| Transcripción en llamada | **Dos conexiones Deepgram separadas** (mic local del doctor + pista remota del paciente), cada una con speaker fijo | Elimina la heurística de diarización actual (que adivina quién habla) — con pistas separadas el speaker se conoce con certeza. Límites de concurrencia y costo verificados: ver §6.1. |
 | Acceso del paciente | **Link de un solo uso (`/join/[token]`), sin cuenta** | Consistente con que hoy los pacientes no tienen ningún tipo de sesión; evita construir autenticación de pacientes en este spec. |
 | Entrega del link | **Automático**, reutilizando el sistema de recordatorios (email/WhatsApp) ya existente | Cero trabajo manual del doctor; reusa `sendReminderAction`/`buildReminderEmail`/`buildReminderWhatsApp`. |
 | Modalidad de cita | Nuevo campo `appointments.modality` (`in_person` \| `video`) | El doctor decide al agendar; determina si el recordatorio incluye el link de video. |
@@ -91,6 +91,51 @@ enlazada a la cita. No hace falta un campo de "modalidad" propio en `consultatio
   el modo video (sigue existiendo para el modo texto in-person, sin cambios ahí).
 - En modo mock, ambos "streams" se simulan igual que el guion actual (`MOCK_SESSION`), sin
   necesitar cuenta de Deepgram ni Daily.co.
+
+### 6.1 Límites de concurrencia y costo (verificado jul-2026)
+
+Este apartado documenta el hallazgo pendiente que quedó marcado como "no verificado" en el
+comentario original antes de `handleRemoteAudioTrack` (`components/live-consultation.tsx`).
+Verificado contra `developers.deepgram.com/reference/api-rate-limits`,
+`developers.deepgram.com/docs/working-with-concurrency-rate-limits` y `deepgram.com/pricing`
+(julio 2026; estos precios y límites pueden cambiar — Deepgram no versiona esa página).
+
+- **El límite de concurrencia es por proyecto de Deepgram, no por API key.** Las dos keys
+  efímeras que abre una consulta de video (doctor + paciente) comparten el mismo cupo del
+  proyecto — no hay una cuota independiente por key, así que abrir una key por conexión no evade
+  el límite ni tampoco lo empeora por sí solo.
+- Deepgram separa el cupo de streaming según si la conexión pide `diarize=true` o no:
+  - **Con diarización** (parámetro que el modo in-person sigue necesitando): hasta 50 streams
+    concurrentes en Norteamérica, 25 en Europa/Australia — mismo número en pay-as-you-go y en
+    Growth (no escala con el plan).
+  - **Sin diarización** (STT streaming general): hasta 150 concurrentes en NA en pay-as-you-go
+    (225 en Growth), 150 en EU/AU en ambos planes.
+  - Como consecuencia de esta verificación, se quitó `diarize=true` del modo video (no hacía
+    falta: cada conexión ya sabe de quién es el audio por venir de una pista separada de
+    Daily.co) — ver `DEEPGRAM_LISTEN_URL_VIDEO` en `lib/providers/deepgram.ts`. Esto separa el
+    modo video del pool más chico de diarización (que ahora usa en exclusiva el modo in-person) y
+    lo mueve al pool general, 3x más grande en NA.
+  - Cada consulta de video consume **2 conexiones** de ese cupo (project-wide, compartido con
+    cualquier otra consulta — video o in-person — activa al mismo tiempo).
+  - **Pendiente de confirmar en el dashboard real (no verificable desde documentación pública):**
+    los proyectos "secundarios" de una cuenta self-serve están limitados a **1 solo stream
+    concurrente por diseño**. Si el proyecto de `DEEPGRAM_API_KEY` en producción fuera uno de
+    esos, cualquier consulta de video fallaría siempre (necesita 2 streams simultáneos). Acción
+    antes de producción: confirmar en Deepgram Dashboard → Settings → Projects que el proyecto en
+    uso es el principal de la cuenta (o un proyecto Growth/Enterprise), no uno secundario.
+  - Si se excede el límite, Deepgram responde `429` sin cola del lado del servidor — el cliente
+    ve el WebSocket fallar (el navegador no expone el código HTTP del handshake fallido, solo un
+    evento `error`/`close`). `components/live-consultation.tsx` ahora maneja esto: si cualquiera
+    de las dos conexiones falla o se cierra inesperadamente, se muestra un aviso en la UI
+    ("esa parte no quedará en el reporte") sin interrumpir la videollamada ni el resto del flujo.
+- **Costo:** streaming base ronda $0.0048/min (pay-as-you-go); el add-on de diarización agrega
+  ~$0.0020/min. Una consulta in-person (1 conexión, con diarización) cuesta ~$0.0068/min de
+  transcripción. Una consulta de video (2 conexiones en paralelo durante toda la llamada, sin
+  diarización tras este ajuste) cuesta ~2 × $0.0048 = $0.0096/min — más del doble en minutos
+  facturables que una consulta in-person de la misma duración (por los dos streams paralelos),
+  pero no un 2x limpio sobre el costo por minuto de in-person porque ya no paga el add-on de
+  diarización que antes se cobraba (y no se usaba) en ambas conexiones. Confirmar tarifa y plan
+  contratado vigentes en el dashboard antes de proyectar costos reales de producción.
 
 ## 7. Proveedor de video
 
