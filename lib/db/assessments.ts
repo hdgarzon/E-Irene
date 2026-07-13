@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "@/lib/crypto";
-import type { AssessmentType, AssessmentResult } from "@/lib/psychometrics";
+import { isPhq9SelfHarmRisk, type AssessmentType, type AssessmentResult } from "@/lib/psychometrics";
+import { logger } from "@/lib/logger";
 
 export interface Assessment {
   id: string;
@@ -87,4 +88,79 @@ export async function listAssessmentsForPatient(patientId: string): Promise<Asse
     .order("administered_at", { ascending: true });
   if (error) throw error;
   return (data as unknown as AssessmentRow[]).map(mapRow);
+}
+
+export interface Phq9RiskCandidate {
+  assessmentId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+  type: AssessmentType;
+  answers: number[];
+}
+
+export interface Phq9RiskAlert {
+  assessmentId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+}
+
+/** Función pura: de un conjunto de escalas ya descifradas, cuáles son de riesgo. */
+export function selectPhq9RiskAlerts(rows: Phq9RiskCandidate[]): Phq9RiskAlert[] {
+  return rows
+    .filter((r) => isPhq9SelfHarmRisk(r.type, r.answers))
+    .map((r) => ({
+      assessmentId: r.assessmentId,
+      patientId: r.patientId,
+      patientName: r.patientName,
+      date: r.date,
+    }));
+}
+
+interface RiskRow {
+  id: string;
+  patient_id: string;
+  payload_enc: string;
+  administered_at: string;
+  patients: { full_name_enc: string } | null;
+}
+
+/**
+ * Escalas PHQ-9 completadas vía link público cuya respuesta indica riesgo,
+ * para la sección "Alertas de riesgo" del dashboard. Igual que
+ * `listRiskAlerts` (lib/db/reports.ts): calcula el riesgo al leer, sin
+ * columna de estado persistida.
+ */
+export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("psychometric_assessments")
+    .select(
+      "id, patient_id, payload_enc, administered_at, " +
+        "patients!psychometric_assessments_patient_id_fkey(full_name_enc)",
+    )
+    .eq("type", "phq9")
+    .not("link_id", "is", null)
+    .order("administered_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const candidates: Phq9RiskCandidate[] = [];
+  for (const row of data as unknown as RiskRow[]) {
+    try {
+      const result = JSON.parse(decrypt(row.payload_enc)) as AssessmentResult;
+      candidates.push({
+        assessmentId: row.id,
+        patientId: row.patient_id,
+        patientName: row.patients ? decrypt(row.patients.full_name_enc) : "(nombre no disponible)",
+        date: row.administered_at,
+        type: "phq9",
+        answers: result.answers,
+      });
+    } catch (error) {
+      logger.warn("phq9_risk_alert.payload_decrypt_failed", { assessmentId: row.id, error });
+    }
+  }
+  return selectPhq9RiskAlerts(candidates);
 }
