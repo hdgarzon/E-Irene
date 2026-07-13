@@ -4,6 +4,7 @@ import { ArrowLeft, Download, FileText } from "lucide-react";
 import { getConsultation, getTranscript } from "@/lib/db/consultations";
 import { getReportByConsultation } from "@/lib/db/reports";
 import { getSoapNoteByConsultation } from "@/lib/db/soap-notes";
+import { isMoreThanDaysAgo } from "@/lib/dates";
 import { ReportView } from "@/components/report-view";
 import { AnalysisStatusBanner } from "@/components/analysis-status";
 import { SoapNoteEditor } from "@/components/soap-note-editor";
@@ -24,6 +25,9 @@ export default async function ConsultationPage({
     getReportByConsultation(id),
     getSoapNoteByConsultation(id),
   ]);
+  const transcriptPurged = Boolean(
+    consultation.endedAt && isMoreThanDaysAgo(consultation.endedAt, 30),
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -98,8 +102,7 @@ export default async function ConsultationPage({
               );
             })}
           </div>
-        ) : consultation.endedAt &&
-          Date.now() - new Date(consultation.endedAt).getTime() > 30 * 24 * 60 * 60 * 1000 ? (
+        ) : transcriptPurged ? (
           <p className="text-sm text-muted-foreground">
             Esta transcripción ya no está disponible: se elimina automáticamente 30 días después
             de terminada la consulta.
