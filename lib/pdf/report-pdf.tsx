@@ -17,7 +17,6 @@ export interface PdfData {
   date: string;
   reason?: string | null;
   soapNote?: SoapNote | null;
-  transcript: string | null;
   validatedAt: string | null;
 }
 
@@ -87,8 +86,6 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
   tag: { marginRight: 8, color: "#635bff" },
-  transcriptLine: { marginBottom: 3 },
-  speaker: { color: "#635bff", fontWeight: 700 },
   footer: {
     marginTop: 24,
     paddingTop: 10,
@@ -101,7 +98,7 @@ const styles = StyleSheet.create({
 });
 
 function ReportDocument({ data }: { data: PdfData }) {
-  const { report, patientName, clinicName, doctorName, date, reason, soapNote, transcript, validatedAt } = data;
+  const { report, patientName, clinicName, doctorName, date, reason, soapNote, validatedAt } = data;
   const hasSoapContent = Boolean(
     soapNote && (soapNote.subjective || soapNote.objective || soapNote.assessment || soapNote.plan),
   );
@@ -258,23 +255,6 @@ function ReportDocument({ data }: { data: PdfData }) {
           información es confidencial y está protegida por el secreto profesional.
         </Text>
       </Page>
-
-      {/* 7. Transcripción completa */}
-      {transcript && (
-        <Page size="A4" style={styles.page}>
-          <View style={styles.brandBar} />
-          <Text style={styles.sectionTitle}>Transcripción completa</Text>
-          {transcript.split("\n").map((line, i) => {
-            const [speaker, ...rest] = line.split(": ");
-            return (
-              <Text key={i} style={styles.transcriptLine}>
-                <Text style={styles.speaker}>{speaker}: </Text>
-                {rest.join(": ")}
-              </Text>
-            );
-          })}
-        </Page>
-      )}
     </Document>
   );
 }

@@ -1,0 +1,104 @@
+"use client";
+
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import Daily, { type DailyCall } from "@daily-co/daily-js";
+import { MicOff } from "lucide-react";
+
+/**
+ * Embed de la videollamada (Daily.co). Renderiza el video local + remoto y,
+ * vía `onRemoteAudioTrack`, entrega al padre la pista de audio del paciente
+ * en crudo apenas está disponible — el padre (LiveConsultation) la usa para
+ * alimentar una segunda conexión Deepgram tageada "Paciente" (ver spec §6:
+ * sin esto no hay forma de transcribir lo que dice el paciente).
+ *
+ * `onRemoteAudioTrack` puede dispararse más de una vez durante la misma
+ * llamada si el paciente se reconecta (red inestable) — el padre debe
+ * REEMPLAZAR la conexión de Deepgram anterior por la nueva pista, nunca
+ * acumular ambas (evita duplicar/entrelazar la transcripción de PHI).
+ */
+export function VideoCall({
+  roomUrl,
+  token,
+  userName,
+  onRemoteAudioTrack,
+}: {
+  roomUrl: string;
+  token: string;
+  userName: string;
+  onRemoteAudioTrack: (track: MediaStreamTrack) => void;
+}) {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  // Reservado para controles futuros (mute, cámara) — no se lee todavía.
+  const callRef = useRef<DailyCall | null>(null);
+  const [joinError, setJoinError] = useState(false);
+
+  // El efecto de abajo corre una sola vez por montaje; useEffectEvent evita
+  // que el handler de track-started quede atado a una versión obsoleta del
+  // callback si el padre pasa una función nueva en cada render sin memoizarla.
+  const handleRemoteAudioTrack = useEffectEvent((track: MediaStreamTrack) => {
+    onRemoteAudioTrack(track);
+  });
+
+  useEffect(() => {
+    // avoidEval: true evita que @daily-co/daily-js necesite 'unsafe-eval' en
+    // el CSP de producción (ver proxy.ts) — a cambio exige `script-src
+    // https://*.daily.co`, ya agregado ahí.
+    const call = Daily.createCallObject({ dailyConfig: { avoidEval: true } });
+    callRef.current = call;
+
+    call.on("track-started", (ev) => {
+      if (!ev) return;
+      const { participant, track, type } = ev;
+      if (type === "video") {
+        const el = participant?.local ? localVideoRef.current : remoteVideoRef.current;
+        if (el) el.srcObject = new MediaStream([track]);
+      }
+      if (type === "audio" && !participant?.local) {
+        handleRemoteAudioTrack(track);
+      }
+    });
+
+    // Errores fatales a mitad de la llamada (red caída, expulsión, etc.) —
+    // sin esto, el doctor no tendría ningún indicio de que la sesión se cortó.
+    call.on("error", () => setJoinError(true));
+
+    call.join({ url: roomUrl, token, userName }).catch(() => setJoinError(true));
+
+    return () => {
+      call.leave().catch(() => {});
+      call.destroy();
+      callRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- se une una sola vez por montaje; roomUrl/token no cambian durante la llamada.
+  }, []);
+
+  if (joinError) {
+    return (
+      <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <MicOff className="size-3.5" />
+        No se pudo conectar la videollamada. Revisa tu conexión e intenta de nuevo.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-2xl bg-navy">
+      <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        aria-label="Tu video"
+        className="aspect-video w-full rounded-xl object-cover"
+      />
+      <video
+        ref={remoteVideoRef}
+        autoPlay
+        playsInline
+        aria-label="Video del paciente"
+        className="aspect-video w-full rounded-xl object-cover"
+      />
+    </div>
+  );
+}

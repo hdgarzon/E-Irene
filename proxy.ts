@@ -16,9 +16,11 @@ import { createServerClient } from "@supabase/ssr";
  */
 
 // Rutas accesibles SIN sesión.
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
-// Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…).
-const PUBLIC_PREFIXES = ["/auth"];
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad"]);
+// Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
+// /enlace: links de paciente con token, ver app/enlace/[token];
+// /join: sala de videollamada del paciente, ver app/join/[token]).
+const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join"];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;
@@ -39,14 +41,24 @@ function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
     // 'unsafe-eval' solo en dev: React lo usa para reconstruir stack traces
-    // del servidor en el navegador; no se usa en producción.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    // del servidor en el navegador; no se usa en producción. https://*.daily.co
+    // es requerido por @daily-co/daily-js cuando se usa `avoidEval: true` (ver
+    // components/video-call.tsx / app/join/[token]/join-call.tsx) — evita tener
+    // que habilitar 'unsafe-eval' también en producción para la videollamada.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://*.daily.co${isDev ? " 'unsafe-eval'" : ""}`,
     // Next.js no aplica el nonce a estilos (Tailwind/CSS-in-JS inline); mantenemos
     // 'unsafe-inline' aquí, que es el rango de riesgo estándar aceptado para style-src.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com",
+    // Daily.co (telehealth): señalización/medios vía WebRTC necesita *.daily.co
+    // y *.pluot.blue (infraestructura de Daily), más wss: genérico porque los
+    // servidores de medios/relay se asignan dinámicamente y no siguen un
+    // subdominio fijo (ver https://docs.daily.co/guides/privacy-and-security/content-security-policy).
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://*.daily.co https://*.pluot.blue wss:",
+    // Web workers de @daily-co/daily-js se cargan vía blob: — sin esto caerían
+    // en default-src y se bloquearían.
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

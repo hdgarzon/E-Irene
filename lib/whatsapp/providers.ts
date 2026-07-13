@@ -61,6 +61,10 @@ export function buildReminderWhatsApp(input: {
   clinicName: string;
   dateLabel: string;
   timeLabel: string;
+  videoJoinUrl?: string;
 }): string {
-  return `Hola ${input.patientName} 👋 Te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}. — E-Irene`;
+  const videoLine = input.videoJoinUrl
+    ? ` Es por video, entra aquí a la hora de tu cita: ${input.videoJoinUrl}`
+    : "";
+  return `Hola ${input.patientName} 👋 Te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.${videoLine} — E-Irene`;
 }

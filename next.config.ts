@@ -17,8 +17,8 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    // La transcripción usa el micrófono desde la propia app (self).
-    value: "camera=(), microphone=(self), geolocation=(), browsing-topics=()",
+    // Telehealth (Daily.co) usa cámara + micrófono desde la propia app (self).
+    value: "camera=(self), microphone=(self), geolocation=(), browsing-topics=()",
   },
 ];
 

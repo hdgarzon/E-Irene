@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { getConsultation, getTranscript } from "@/lib/db/consultations";
+import { getConsultation } from "@/lib/db/consultations";
 import { getReportByConsultation } from "@/lib/db/reports";
 import { getSoapNoteByConsultation } from "@/lib/db/soap-notes";
 import { renderReportPdf } from "@/lib/pdf/report-pdf";
@@ -13,10 +13,9 @@ export async function GET(
   if (!user) return new Response("No autorizado", { status: 401 });
 
   const { id } = await params;
-  const [consultation, report, transcript, soapNote] = await Promise.all([
+  const [consultation, report, soapNote] = await Promise.all([
     getConsultation(id),
     getReportByConsultation(id),
-    getTranscript(id),
     getSoapNoteByConsultation(id),
   ]);
   if (!consultation || !report) return new Response("No encontrado", { status: 404 });
@@ -35,7 +34,6 @@ export async function GET(
     date: new Date(consultation.startedAt).toLocaleString("es-CO"),
     reason: consultation.reason,
     soapNote,
-    transcript,
     validatedAt: report.validatedAt,
   });
 
