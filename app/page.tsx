@@ -110,9 +110,12 @@ export default function Home() {
       <footer className="border-t border-gray-line bg-cloud">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <span>© {new Date().getFullYear()} E-Irene. Plataforma clínica de salud mental.</span>
-          <span className="text-xs">
-            Las sugerencias de IA no constituyen diagnóstico médico.
-          </span>
+          <div className="flex items-center gap-4 text-xs">
+            <Link href="/seguridad" className="hover:text-navy">
+              Seguridad y cumplimiento
+            </Link>
+            <span>Las sugerencias de IA no constituyen diagnóstico médico.</span>
+          </div>
         </div>
       </footer>
     </main>
