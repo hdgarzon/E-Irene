@@ -98,6 +98,12 @@ export default async function ConsultationPage({
               );
             })}
           </div>
+        ) : consultation.endedAt &&
+          Date.now() - new Date(consultation.endedAt).getTime() > 30 * 24 * 60 * 60 * 1000 ? (
+          <p className="text-sm text-muted-foreground">
+            Esta transcripción ya no está disponible: se elimina automáticamente 30 días después
+            de terminada la consulta.
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">Sin transcripción.</p>
         )}
