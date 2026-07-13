@@ -75,54 +75,84 @@ export default async function DashboardPage() {
               Alertas de riesgo ({riskAlerts.length + phq9RiskAlerts.length})
             </h2>
           </div>
-          <ul className="space-y-2">
-            {riskAlerts.slice(0, 5).map((a) => (
-              <li key={a.consultationId}>
-                <Link
-                  href={`/consultations/${a.consultationId}`}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
-                >
-                  <span className="font-medium text-navy">{a.patientName}</span>
-                  <span className="flex flex-wrap gap-1.5">
-                    {a.categories.map((c) => (
-                      <Badge
-                        key={c.key}
-                        variant="secondary"
-                        className={cn(
-                          "text-[11px]",
-                          c.level === "alto"
-                            ? "bg-coral/15 text-destructive"
-                            : "bg-amber-100 text-amber-800",
-                        )}
-                      >
-                        {RISK_LABEL[c.key]} · {c.level}
-                      </Badge>
-                    ))}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <ul className="space-y-2">
-            {phq9RiskAlerts.slice(0, 5).map((a) => (
-              <li key={a.assessmentId}>
-                <Link
-                  href={`/patients/${a.patientId}`}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
-                >
-                  <span className="font-medium text-navy">{a.patientName}</span>
-                  <span className="flex flex-wrap gap-1.5">
-                    <Badge variant="secondary" className="text-[11px] bg-coral/15 text-destructive">
-                      Autolesión · PHQ-9
-                    </Badge>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Detección temprana por IA — apoyo a tu criterio, nunca un diagnóstico.
-          </p>
+          {riskAlerts.length > 0 && (
+            <>
+              <h3
+                id="risk-alerts-ia-heading"
+                className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                De consultas (IA)
+              </h3>
+              <ul className="space-y-2" aria-labelledby="risk-alerts-ia-heading">
+                {riskAlerts.slice(0, 5).map((a) => (
+                  <li key={a.consultationId}>
+                    <Link
+                      href={`/consultations/${a.consultationId}`}
+                      className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
+                    >
+                      <span className="font-medium text-navy">{a.patientName}</span>
+                      <span className="flex flex-wrap gap-1.5">
+                        {a.categories.map((c) => (
+                          <Badge
+                            key={c.key}
+                            variant="secondary"
+                            className={cn(
+                              "text-[11px]",
+                              c.level === "alto"
+                                ? "bg-coral/15 text-destructive"
+                                : "bg-amber-100 text-amber-800",
+                            )}
+                          >
+                            {RISK_LABEL[c.key]} · {c.level}
+                          </Badge>
+                        ))}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Detección temprana por IA — apoyo a tu criterio, nunca un diagnóstico.
+              </p>
+            </>
+          )}
+          {phq9RiskAlerts.length > 0 && (
+            <>
+              <h3
+                id="risk-alerts-phq9-heading"
+                className={cn(
+                  "mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                  riskAlerts.length > 0 && "mt-4",
+                )}
+              >
+                De cuestionarios (PHQ-9)
+              </h3>
+              <ul className="space-y-2" aria-labelledby="risk-alerts-phq9-heading">
+                {phq9RiskAlerts.slice(0, 5).map((a) => (
+                  <li key={a.assessmentId}>
+                    <Link
+                      href={`/patients/${a.patientId}`}
+                      className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
+                    >
+                      <span className="font-medium text-navy">{a.patientName}</span>
+                      <span className="flex flex-wrap gap-1.5">
+                        <Badge
+                          variant="secondary"
+                          className="text-[11px] bg-coral/15 text-destructive"
+                        >
+                          Autolesión · PHQ-9
+                        </Badge>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Autolesión reportada directamente por el paciente en el PHQ-9 — no es una
+                detección por IA.
+              </p>
+            </>
+          )}
         </section>
       )}
 
