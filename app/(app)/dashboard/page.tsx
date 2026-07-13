@@ -13,6 +13,7 @@ import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listTodayAppointments } from "@/lib/db/appointments";
 import { countPendingReports, listRiskAlerts, type RiskAlert } from "@/lib/db/reports";
+import { listPhq9RiskAlerts, type Phq9RiskAlert } from "@/lib/db/assessments";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
 import { formatTime, formatFullDate } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
@@ -44,13 +45,15 @@ export default async function DashboardPage() {
   const isClinician = user?.role === "admin" || user?.role === "doctor";
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
-  const [patients, todayAppts, pendingReports, patientsNoConsent, riskAlerts] = await Promise.all([
-    patientCount(),
-    listTodayAppointments(),
-    isClinician ? countPendingReports() : Promise.resolve(0),
-    countPatientsWithoutConsent(),
-    isClinician ? listRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
-  ]);
+  const [patients, todayAppts, pendingReports, patientsNoConsent, riskAlerts, phq9RiskAlerts] =
+    await Promise.all([
+      patientCount(),
+      listTodayAppointments(),
+      isClinician ? countPendingReports() : Promise.resolve(0),
+      countPatientsWithoutConsent(),
+      isClinician ? listRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
+      isClinician ? listPhq9RiskAlerts() : Promise.resolve<Phq9RiskAlert[]>([]),
+    ]);
 
   const firstName = user?.fullName.split(" ")[0] ?? "";
 
@@ -64,12 +67,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* Alertas de riesgo — lo más importante arriba */}
-      {isClinician && riskAlerts.length > 0 && (
+      {isClinician && (riskAlerts.length > 0 || phq9RiskAlerts.length > 0) && (
         <section className="rounded-2xl border border-coral/40 bg-coral/5 p-5">
           <div className="mb-3 flex items-center gap-2">
             <ShieldAlert className="size-5 text-destructive" />
             <h2 className="font-heading font-semibold text-navy">
-              Alertas de riesgo ({riskAlerts.length})
+              Alertas de riesgo ({riskAlerts.length + phq9RiskAlerts.length})
             </h2>
           </div>
           <ul className="space-y-2">
@@ -95,6 +98,23 @@ export default async function DashboardPage() {
                         {RISK_LABEL[c.key]} · {c.level}
                       </Badge>
                     ))}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <ul className="space-y-2">
+            {phq9RiskAlerts.slice(0, 5).map((a) => (
+              <li key={a.assessmentId}>
+                <Link
+                  href={`/patients/${a.patientId}`}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
+                >
+                  <span className="font-medium text-navy">{a.patientName}</span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <Badge variant="secondary" className="text-[11px] bg-coral/15 text-destructive">
+                      Autolesión · PHQ-9
+                    </Badge>
                   </span>
                 </Link>
               </li>
