@@ -55,10 +55,29 @@ export class DeepgramTranscriptionProvider implements TranscriptionProvider {
   }
 }
 
+const DEEPGRAM_LISTEN_BASE =
+  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true";
+
 /**
- * Parámetros de query para el WebSocket de streaming (español, webm/opus desde
- * MediaRecorder). `diarize=true` activa la identificación de hablantes:
- * Deepgram devuelve un índice `speaker` por palabra en `channel.alternatives[0].words[]`.
+ * Modo texto in-person: una sola pista con ambos hablantes mezclados.
+ * `diarize=true` activa la identificación de hablantes: Deepgram devuelve un
+ * índice `speaker` por palabra en `channel.alternatives[0].words[]`, que usa
+ * la heurística de lib/diarization.ts para separar Doctor/Paciente.
+ *
+ * Costo/límites (verificado jul-2026 contra developers.deepgram.com/reference/api-rate-limits
+ * y deepgram.com/pricing): `diarize=true` mete la conexión en el pool de
+ * concurrencia "Speaker Diarization" (más bajo que el de STT general — ver
+ * DEEPGRAM_LISTEN_URL_VIDEO) y añade un add-on de facturación de streaming
+ * (~$0.0020/min sobre ~$0.0048/min base, pay-as-you-go). Necesario aquí; no
+ * quitar sin revisar lib/diarization.ts.
  */
-export const DEEPGRAM_LISTEN_URL =
-  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true&diarize=true";
+export const DEEPGRAM_LISTEN_URL = `${DEEPGRAM_LISTEN_BASE}&diarize=true`;
+
+/**
+ * Modo video: cada una de las dos conexiones (mic del doctor, pista remota del
+ * paciente vía Daily.co) ya sabe de quién es el audio, así que NO se activa
+ * diarización — pedirla de más solo bajaría el límite de concurrencia
+ * disponible y pagaría un add-on que no se usa (ver comentario extenso en
+ * components/live-consultation.tsx antes de handleRemoteAudioTrack).
+ */
+export const DEEPGRAM_LISTEN_URL_VIDEO = DEEPGRAM_LISTEN_BASE;
