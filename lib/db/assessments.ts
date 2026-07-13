@@ -148,19 +148,34 @@ export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]> {
 
   const candidates: Phq9RiskCandidate[] = [];
   for (const row of data as unknown as RiskRow[]) {
+    let result: AssessmentResult;
     try {
-      const result = JSON.parse(decrypt(row.payload_enc)) as AssessmentResult;
-      candidates.push({
-        assessmentId: row.id,
-        patientId: row.patient_id,
-        patientName: row.patients ? decrypt(row.patients.full_name_enc) : "(nombre no disponible)",
-        date: row.administered_at,
-        type: "phq9",
-        answers: result.answers,
-      });
+      result = JSON.parse(decrypt(row.payload_enc)) as AssessmentResult;
     } catch (error) {
+      // payload ilegible (p. ej. clave rotada) → se omite, no rompe la lista.
       logger.warn("phq9_risk_alert.payload_decrypt_failed", { assessmentId: row.id, error });
+      continue;
     }
+
+    let patientName = "(nombre no disponible)";
+    if (row.patients?.full_name_enc) {
+      try {
+        patientName = decrypt(row.patients.full_name_enc);
+      } catch (error) {
+        // el nombre no descifra, pero el payload sí indica riesgo: no se
+        // pierde la alerta, solo se muestra con el placeholder.
+        logger.warn("phq9_risk_alert.patient_name_decrypt_failed", { assessmentId: row.id, error });
+      }
+    }
+
+    candidates.push({
+      assessmentId: row.id,
+      patientId: row.patient_id,
+      patientName,
+      date: row.administered_at,
+      type: "phq9",
+      answers: result.answers,
+    });
   }
   return selectPhq9RiskAlerts(candidates);
 }
