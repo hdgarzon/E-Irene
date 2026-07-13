@@ -38,7 +38,9 @@ export class DailyVideoProvider implements VideoProvider {
           // de limpieza para no acumular salas huérfanas en Daily.
           exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
           max_participants: 2,
-          enable_recording: undefined, // nunca se graba (ver spec §8)
+          // enable_recording se omite a propósito: Daily.co solo graba si la
+          // propiedad está presente (valores "cloud"/"local"/...), así que no
+          // enviarla es la forma de garantizar que nunca se graba (spec §8).
         },
       }),
     });
@@ -47,6 +49,9 @@ export class DailyVideoProvider implements VideoProvider {
       throw new Error(`Daily.co (rooms) respondió ${res.status}: ${body.slice(0, 300)}`);
     }
     const data = (await res.json()) as { name: string; url: string };
+    if (!data.name || !data.url) {
+      throw new Error("Daily.co (rooms) respondió 200 sin name/url");
+    }
     return { roomName: data.name, roomUrl: data.url };
   }
 
@@ -92,6 +97,9 @@ export class DailyVideoProvider implements VideoProvider {
       throw new Error(`Daily.co (meeting-tokens) respondió ${res.status}: ${body.slice(0, 300)}`);
     }
     const data = (await res.json()) as { token: string };
+    if (!data.token) {
+      throw new Error("Daily.co (meeting-tokens) respondió 200 sin token");
+    }
     return data.token;
   }
 }
