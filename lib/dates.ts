@@ -76,6 +76,11 @@ export function fromInputDateTime(local: string): string {
   return new Date(`${local}:00-05:00`).toISOString();
 }
 
+/** true si `iso` fue hace más de `days` días. */
+export function isMoreThanDaysAgo(iso: string, days: number): boolean {
+  return Date.now() - new Date(iso).getTime() > days * 24 * 60 * 60 * 1000;
+}
+
 /** Agrupa items con `scheduledAt` por día local, en orden cronológico. */
 export function groupByDay<T extends { scheduledAt: string }>(
   items: T[],
