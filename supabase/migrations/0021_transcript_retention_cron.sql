@@ -27,6 +27,8 @@ begin
 end;
 $$;
 
+-- service_role/postgres conservan acceso vía privilegios por defecto de Supabase;
+-- no agregarlos aquí o se rompe el cron.
 revoke execute on function purge_expired_transcripts() from public, anon, authenticated;
 
 select cron.schedule(
@@ -34,3 +36,10 @@ select cron.schedule(
   '0 3 * * *',
   'select purge_expired_transcripts()'
 );
+
+-- Índice parcial para el predicado exacto de esta consulta de purga: evita un
+-- full table scan sobre consultations (tabla consultada constantemente por la
+-- app para lecturas por clínica) a medida que crece.
+create index consultations_transcript_purge_idx
+  on consultations (ended_at)
+  where transcript_enc is not null;
