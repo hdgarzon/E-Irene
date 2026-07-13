@@ -83,7 +83,7 @@ export async function alertOnRiskyAssessment(params: {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
     const patientUrl = `${appUrl}/patients/${params.patientId}`;
 
-    for (const doctor of recipients) {
+    const notifyDoctor = async (doctor: DoctorContact): Promise<void> => {
       try {
         await getEmailProvider().send(
           buildRiskAlertEmail({
@@ -136,7 +136,9 @@ export async function alertOnRiskyAssessment(params: {
           });
         }
       }
-    }
+    };
+
+    await Promise.allSettled(recipients.map(notifyDoctor));
 
     await logAuditPublic({
       clinicId: params.clinicId,
