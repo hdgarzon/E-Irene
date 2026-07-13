@@ -72,7 +72,7 @@ export function LiveConsultation({
         })
         .catch(() => setMicOk(false));
     } else {
-      setMicOk(false);
+      Promise.resolve().then(() => setMicOk(false));
     }
 
     const clock = setInterval(() => setElapsed((e) => e + 1), 1000);
