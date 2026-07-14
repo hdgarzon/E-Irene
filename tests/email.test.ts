@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { getEmailProvider, LogEmailProvider } from "@/lib/email/providers";
-import { buildReminderEmail, buildReportReadyEmail } from "@/lib/email/templates";
+import { buildReminderEmail, buildReportReadyEmail, buildRiskAlertEmail } from "@/lib/email/templates";
 
 describe("email", () => {
   beforeEach(() => {
@@ -35,6 +35,22 @@ describe("email", () => {
     });
     expect(msg.subject).toContain("resumen");
     expect(msg.html).toContain("no se envía por correo");
+  });
+
+  it("plantilla de alerta de riesgo no expone datos clínicos", () => {
+    const msg = buildRiskAlertEmail({
+      to: "doctor@correo.co",
+      doctorName: "Dra. Pérez",
+      patientName: "Ana",
+      clinicName: "Centro Irene",
+      patientUrl: "https://e-irene.co/patients/abc-123",
+    });
+    expect(msg.to).toBe("doctor@correo.co");
+    expect(msg.subject).toContain("Alerta");
+    expect(msg.html).toContain("Ana");
+    expect(msg.html).toContain("https://e-irene.co/patients/abc-123");
+    expect(msg.html).not.toMatch(/PHQ|puntaje|sever/i);
+    expect(msg.text).toContain("Ana");
   });
 
   it("el log provider devuelve un id", async () => {

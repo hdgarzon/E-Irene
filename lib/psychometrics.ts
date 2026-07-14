@@ -52,6 +52,15 @@ export function questionsFor(type: AssessmentType): readonly string[] {
 /** Índice (0-based) del ítem de ideación suicida/autolesión en el PHQ-9. */
 export const PHQ9_SELF_HARM_ITEM_INDEX = 8;
 
+/**
+ * true si la respuesta al ítem de ideación suicida/autolesión del PHQ-9 es
+ * mayor a 0 (cualquier frecuencia reportada, no solo la máxima) — criterio
+ * clínico habitual para este ítem específico.
+ */
+export function isPhq9SelfHarmRisk(type: AssessmentType, answers: number[]): boolean {
+  return type === "phq9" && answers[PHQ9_SELF_HARM_ITEM_INDEX] > 0;
+}
+
 export function severityFor(type: AssessmentType, total: number): string {
   if (type === "phq9") {
     if (total <= 4) return "Mínima";

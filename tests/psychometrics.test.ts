@@ -5,6 +5,7 @@ import {
   PHQ9_QUESTIONS,
   GAD7_QUESTIONS,
   PHQ9_SELF_HARM_ITEM_INDEX,
+  isPhq9SelfHarmRisk,
 } from "@/lib/psychometrics";
 
 describe("scoreAssessment", () => {
@@ -64,5 +65,28 @@ describe("severityFor", () => {
     expect(severityFor("gad7", 14)).toBe("Moderada");
     expect(severityFor("gad7", 15)).toBe("Severa");
     expect(severityFor("gad7", 21)).toBe("Severa");
+  });
+});
+
+describe("isPhq9SelfHarmRisk", () => {
+  it("es true si el ítem de autolesión (índice 8) es > 0", () => {
+    const answers = [0, 0, 0, 0, 0, 0, 0, 0, 1];
+    expect(isPhq9SelfHarmRisk("phq9", answers)).toBe(true);
+  });
+
+  it("es true para cualquier valor > 0 en ese ítem (1, 2 o 3)", () => {
+    expect(isPhq9SelfHarmRisk("phq9", [0, 0, 0, 0, 0, 0, 0, 0, 1])).toBe(true);
+    expect(isPhq9SelfHarmRisk("phq9", [0, 0, 0, 0, 0, 0, 0, 0, 2])).toBe(true);
+    expect(isPhq9SelfHarmRisk("phq9", [0, 0, 0, 0, 0, 0, 0, 0, 3])).toBe(true);
+  });
+
+  it("es false si el ítem de autolesión es 0", () => {
+    const answers = [3, 3, 3, 3, 3, 3, 3, 3, 0];
+    expect(isPhq9SelfHarmRisk("phq9", answers)).toBe(false);
+  });
+
+  it("es false para GAD-7 sin importar las respuestas (no tiene ese ítem)", () => {
+    const answers = [3, 3, 3, 3, 3, 3, 3];
+    expect(isPhq9SelfHarmRisk("gad7", answers)).toBe(false);
   });
 });
