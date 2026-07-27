@@ -4,12 +4,30 @@ import {
   createPlanAction,
   addItemAction,
   toggleItemAction,
+  setApproachAction,
 } from "@/app/(app)/patients/[id]/treatment-plan/actions";
+import { THERAPEUTIC_APPROACHES, APPROACH_LABEL } from "@/lib/treatment-approach";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 const TYPE_LABEL = { objetivo: "Objetivo", checkpoint: "Checkpoint" } as const;
+
+const SELECT_CLASS =
+  "flex h-9 rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+function ApproachSelect({ name, defaultValue }: { name: string; defaultValue?: string }) {
+  return (
+    <select name={name} defaultValue={defaultValue ?? ""} className={SELECT_CLASS}>
+      <option value="">Enfoque terapéutico (opcional)</option>
+      {THERAPEUTIC_APPROACHES.map((a) => (
+        <option key={a} value={a}>
+          {APPROACH_LABEL[a]}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export function TreatmentPlanSection({
   patientId,
@@ -29,8 +47,9 @@ export function TreatmentPlanSection({
         <p className="mb-3 text-sm text-muted-foreground">
           Aún no hay un plan de tratamiento activo para este paciente.
         </p>
-        <form action={create} className="flex gap-2">
+        <form action={create} className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
           <Input name="title" placeholder="Título del plan (p. ej. Manejo de ansiedad social)" required />
+          <ApproachSelect name="approach" />
           <Button type="submit" size="sm">
             Crear plan
           </Button>
@@ -40,6 +59,7 @@ export function TreatmentPlanSection({
   }
 
   const addItem = addItemAction.bind(null, plan.id, patientId);
+  const updateApproach = setApproachAction.bind(null, plan.id, patientId);
 
   return (
     <div className="rounded-2xl border border-gray-line bg-card p-6">
@@ -51,6 +71,17 @@ export function TreatmentPlanSection({
         <Badge className="bg-purple/15 text-purple capitalize">{plan.status}</Badge>
       </div>
       <p className="mt-1 text-sm text-navy">{plan.title}</p>
+      {plan.approach && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Enfoque: <span className="text-navy">{APPROACH_LABEL[plan.approach]}</span>
+        </p>
+      )}
+      <form action={updateApproach} className="mt-2 flex items-center gap-2">
+        <ApproachSelect name="approach" defaultValue={plan.approach ?? undefined} />
+        <Button type="submit" size="sm" variant="outline">
+          Guardar enfoque
+        </Button>
+      </form>
 
       {plan.items.length > 0 && (
         <ul className="mt-4 space-y-2">

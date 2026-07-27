@@ -85,7 +85,6 @@ const styles = StyleSheet.create({
     color: "#5b6b7c",
   },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
-  tag: { marginRight: 8, color: "#635bff" },
   footer: {
     marginTop: 24,
     paddingTop: 10,
@@ -154,27 +153,7 @@ function ReportDocument({ data }: { data: PdfData }) {
         <Text style={styles.sectionTitle}>Resumen ejecutivo</Text>
         <Text>{p.summary}</Text>
 
-        {/* 3. Sentimiento */}
-        <Text style={styles.sectionTitle}>Análisis de sentimiento</Text>
-        <Text>
-          Tono general: {p.sentiment.label} (puntaje {p.sentiment.score.toFixed(2)} en escala −1 a
-          +1).
-        </Text>
-
-        {/* 4. Nube de palabras */}
-        <Text style={styles.sectionTitle}>Palabras clave y temas</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          {p.keywords.map((k) => (
-            <Text key={k.term} style={styles.tag}>
-              {k.term}
-            </Text>
-          ))}
-        </View>
-        {p.topics.length > 0 && (
-          <Text style={{ marginTop: 4 }}>Temas recurrentes: {p.topics.join(", ")}.</Text>
-        )}
-
-        {/* 5. Patrones lingüísticos */}
+        {/* 3. Patrones lingüísticos */}
         <Text style={styles.sectionTitle}>Patrones lingüísticos</Text>
         {Object.entries(p.patterns).map(([key, value]) => (
           <View key={key} style={styles.row}>
@@ -183,7 +162,7 @@ function ReportDocument({ data }: { data: PdfData }) {
           </View>
         ))}
 
-        {/* 6. Sugerencia preliminar */}
+        {/* 4. Sugerencia preliminar */}
         <Text style={styles.sectionTitle}>Sugerencia preliminar</Text>
         <Text>{p.suggestion}</Text>
         <Text style={styles.disclaimer}>
@@ -234,7 +213,7 @@ function ReportDocument({ data }: { data: PdfData }) {
           </>
         )}
 
-        {/* 8. Firma / validación */}
+        {/* 5. Firma / validación */}
         <View style={styles.sign}>
           <View style={styles.signBox}>
             <Text>{doctorName}</Text>

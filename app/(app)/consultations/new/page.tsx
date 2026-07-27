@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Mic, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Mic, ShieldCheck, Sparkles } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
@@ -24,13 +24,22 @@ export default async function NewConsultationPage({
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <Link
-        href={`/patients/${patientId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
-      >
-        <ArrowLeft className="size-4" />
-        Volver a la ficha
-      </Link>
+      <div className="flex items-center justify-between gap-4">
+        <Link
+          href={`/patients/${patientId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        >
+          <ArrowLeft className="size-4" />
+          Volver a la ficha
+        </Link>
+        <Link
+          href={`/patients/${patientId}/brief`}
+          className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+        >
+          <Sparkles className="size-3.5" />
+          Ver brief pre-sesión
+        </Link>
+      </div>
 
       <div className="rounded-2xl border border-gray-line bg-card p-8 text-center">
         <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-cloud">

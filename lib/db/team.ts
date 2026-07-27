@@ -27,6 +27,25 @@ export async function listMembers(): Promise<Member[]> {
   }));
 }
 
+export interface MemberContact {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+/** Contacto de un miembro puntual de la clínica — usado para notificaciones
+ * internas (p. ej. alertas de riesgo al doctor tratante). */
+export async function getMemberContact(userId: string): Promise<MemberContact | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, full_name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, fullName: data.full_name, email: data.email } : null;
+}
+
 /**
  * Crea un miembro del equipo. Usa el admin client (service-role) para
  * provisionar el usuario de auth y su perfil. SOLO debe invocarse tras

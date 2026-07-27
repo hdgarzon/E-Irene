@@ -14,6 +14,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   FileDown,
+  Sparkles,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
@@ -263,6 +264,15 @@ export default async function PatientDetailPage({
               >
                 <TrendingUp className="size-3.5" />
                 Ver evolución
+              </Link>
+            )}
+            {consultations.length > 0 && (
+              <Link
+                href={`/patients/${id}/brief`}
+                className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+              >
+                <Sparkles className="size-3.5" />
+                Brief pre-sesión
               </Link>
             )}
             {consent ? (

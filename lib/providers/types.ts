@@ -1,9 +1,9 @@
 import { z } from "zod";
-
-const riskLevel = z.enum(["ninguno", "bajo", "moderado", "alto"]);
+import { riskLevelSchema } from "@/lib/risk-levels";
+import type { AnalysisContext, ClinicalStateDelta } from "@/lib/clinical-state";
 
 const riskFlag = z.object({
-  level: riskLevel,
+  level: riskLevelSchema,
   // Frase o paráfrasis del paciente que sustenta el nivel asignado (vacío si "ninguno").
   evidence: z.string(),
 });
@@ -18,7 +18,7 @@ export const riskFlagsSchema = z.object({
 });
 
 export type RiskFlags = z.infer<typeof riskFlagsSchema>;
-export type RiskLevel = z.infer<typeof riskLevel>;
+export type { RiskLevel, RiskCategory } from "@/lib/risk-levels";
 
 /**
  * Esquema del reporte de análisis IA (validado con Zod 4).
@@ -58,7 +58,32 @@ export interface TranscriptionProvider {
   createSession(consultationId: string): Promise<TranscriptionSession>;
 }
 
+/**
+ * Procedencia de un output clínico generado por IA. Se persiste junto al
+ * reporte: sin esto no se puede reproducir ni auditar una conclusión clínica
+ * pasada, ni comparar la calidad de dos proveedores sobre los mismos casos.
+ *
+ * `promptVersion` DEBE incrementarse cada vez que cambia el prompt del
+ * proveedor — si no, dos reportes con la misma versión declarada habrán sido
+ * generados por prompts distintos y la trazabilidad miente.
+ */
+export interface AnalysisProvenance {
+  /** Identificador exacto del modelo, p. ej. "gpt-4o". */
+  model: string;
+  /** Versión del prompt del proveedor, p. ej. "openai-clinical-v1". */
+  promptVersion: string;
+  /** Momento en que el proveedor devolvió el análisis (ISO 8601). */
+  generatedAt: string;
+}
+
+export interface AnalysisResult {
+  payload: ReportPayload;
+  provenance: AnalysisProvenance;
+  /** Observaciones de ESTA sesión para el estado clínico longitudinal — ver lib/clinical-state.ts. */
+  stateDelta: ClinicalStateDelta;
+}
+
 export interface AnalysisProvider {
   readonly mode: ProviderMode;
-  analyze(transcript: string): Promise<ReportPayload>;
+  analyze(context: AnalysisContext): Promise<AnalysisResult>;
 }

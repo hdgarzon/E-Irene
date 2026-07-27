@@ -212,9 +212,6 @@ function PatientRecordDocument({ data }: { data: PatientRecordData }) {
                 {report ? (
                   <>
                     <Text style={{ marginTop: 3 }}>{report.payload.summary}</Text>
-                    <Text style={styles.label}>
-                      Sentimiento: {report.payload.sentiment.label} ({report.payload.sentiment.score.toFixed(2)})
-                    </Text>
                     {report.validatedAt && (
                       <Text style={styles.label}>
                         Sugerencia validada: {report.payload.suggestion}

@@ -12,25 +12,21 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listTodayAppointments } from "@/lib/db/appointments";
-import { countPendingReports, listRiskAlerts, type RiskAlert } from "@/lib/db/reports";
+import { countPendingReports } from "@/lib/db/reports";
+import { listOpenRiskAlerts, type RiskAlert } from "@/lib/db/risk-alerts";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
+import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { acknowledgeRiskAlertAction } from "./actions";
 
 const APPT_STATUS_LABEL: Record<string, string> = {
   scheduled: "Agendada",
   confirmed: "Confirmada",
   completed: "Completada",
   no_show: "No asistió",
-};
-
-const RISK_LABEL: Record<RiskAlert["categories"][number]["key"], string> = {
-  suicidal_ideation: "Ideación suicida",
-  self_harm: "Autolesión",
-  substance_use: "Consumo de sustancias",
-  risk_to_others: "Riesgo a terceros",
 };
 
 async function patientCount(): Promise<number> {
@@ -49,7 +45,7 @@ export default async function DashboardPage() {
     listTodayAppointments(),
     isClinician ? countPendingReports() : Promise.resolve(0),
     countPatientsWithoutConsent(),
-    isClinician ? listRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
+    isClinician ? listOpenRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
   ]);
 
   const firstName = user?.fullName.split(" ")[0] ?? "";
@@ -74,10 +70,13 @@ export default async function DashboardPage() {
           </div>
           <ul className="space-y-2">
             {riskAlerts.slice(0, 5).map((a) => (
-              <li key={a.consultationId}>
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
+              >
                 <Link
                   href={`/consultations/${a.consultationId}`}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
                 >
                   <span className="font-medium text-navy">{a.patientName}</span>
                   <span className="flex flex-wrap gap-1.5">
@@ -92,11 +91,19 @@ export default async function DashboardPage() {
                             : "bg-amber-100 text-amber-800",
                         )}
                       >
-                        {RISK_LABEL[c.key]} · {c.level}
+                        {RISK_CATEGORY_LABEL[c.key]} · {c.level}
                       </Badge>
                     ))}
                   </span>
                 </Link>
+                <form action={acknowledgeRiskAlertAction.bind(null, a.id)}>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-mint"
+                  >
+                    Acusar recibo
+                  </button>
+                </form>
               </li>
             ))}
           </ul>

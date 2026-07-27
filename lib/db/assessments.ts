@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "@/lib/crypto";
 import type { AssessmentType, AssessmentResult } from "@/lib/psychometrics";
+import type { LatestAssessment } from "@/lib/clinical-state";
 
 export interface Assessment {
   id: string;
@@ -87,4 +88,22 @@ export async function listAssessmentsForPatient(patientId: string): Promise<Asse
     .order("administered_at", { ascending: true });
   if (error) throw error;
   return (data as unknown as AssessmentRow[]).map(mapRow);
+}
+
+/**
+ * La puntuación más reciente de cada tipo de escala (PHQ-9/GAD-7) que tenga
+ * el paciente — contexto compacto para el análisis de IA. Nunca se le pasa
+ * el historial completo (ver spec §2: "el modelo ve resumen de estado ...
+ * nunca N transcripciones/historiales").
+ */
+export async function getLatestAssessments(patientId: string): Promise<LatestAssessment[]> {
+  const all = await listAssessmentsForPatient(patientId);
+  const latestByType = new Map<AssessmentType, Assessment>();
+  for (const a of all) latestByType.set(a.type, a); // ascendente → el último sobrescribe = más reciente
+  return [...latestByType.values()].map((a) => ({
+    type: a.type,
+    totalScore: a.result.totalScore,
+    severity: a.result.severity,
+    administeredAt: a.administeredAt,
+  }));
 }
