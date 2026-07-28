@@ -6,10 +6,16 @@ import {
 } from "@/lib/db/consultations";
 import { createReport, getReportByConsultation } from "@/lib/db/reports";
 import { getPatient } from "@/lib/db/patients";
+import { getMemberContact } from "@/lib/db/team";
+import { createRiskAlert } from "@/lib/db/risk-alerts";
+import { getLatestClinicalState, appendClinicalState } from "@/lib/db/clinical-state";
+import { getLatestAssessments } from "@/lib/db/assessments";
+import { getActivePlanForPatient } from "@/lib/db/treatment-plans";
 import { recordNotification } from "@/lib/db/notifications";
 import { getAnalysisProvider } from "@/lib/providers";
 import { getEmailProvider } from "@/lib/email/providers";
-import { buildReportReadyEmail } from "@/lib/email/templates";
+import { buildReportReadyEmail, buildRiskAlertEmail } from "@/lib/email/templates";
+import { extractRiskAlertCategories, RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 
@@ -48,11 +54,91 @@ export async function runConsultationAnalysis(params: {
       return;
     }
 
-    const payload = await getAnalysisProvider().analyze(transcript);
+    // Contexto de continuidad: el modelo ve el estado acumulado del paciente,
+    // sus últimas escalas y el enfoque terapéutico del plan vigente (si hay
+    // uno) — nunca el historial completo de sesiones (costo O(1), no O(n) en
+    // número de sesiones; ver spec §2).
+    const [previousState, assessments, activePlan] = await Promise.all([
+      getLatestClinicalState(consultation.patientId),
+      getLatestAssessments(consultation.patientId),
+      getActivePlanForPatient(consultation.patientId),
+    ]);
+    const { payload, provenance, stateDelta } = await getAnalysisProvider().analyze({
+      transcript,
+      previousState,
+      assessments,
+      approach: activePlan?.approach ?? undefined,
+    });
+    const patient = await getPatient(consultation.patientId);
+
+    // Alerta de riesgo AL DOCTOR TRATANTE — se persiste ANTES de crear el
+    // reporte, deliberadamente: si `createReport` falla más abajo, la
+    // alerta ya existe y no depende de que el reporte se termine de generar.
+    // Canal separado del pipeline de reportes; nunca notifica al paciente.
+    const alertCategories = extractRiskAlertCategories(payload.riskFlags);
+    if (alertCategories.length > 0) {
+      const { isNew } = await createRiskAlert(clinicId, {
+        source: "session_analysis",
+        consultationId,
+        patientId: consultation.patientId,
+        doctorId: consultation.doctorId,
+        categories: alertCategories,
+      });
+      // Solo se avisa por correo la primera vez — un reintento del análisis
+      // (p. ej. tras un fallo posterior al de esta alerta) no debe reenviar
+      // el aviso al doctor.
+      if (isNew) {
+        try {
+          const doctor = await getMemberContact(consultation.doctorId);
+          if (doctor?.email) {
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
+            await getEmailProvider().send(
+              buildRiskAlertEmail({
+                to: doctor.email,
+                doctorName: doctor.fullName,
+                patientName: patient?.fullName ?? "un paciente",
+                clinicName,
+                consultationUrl: `${appUrl}/consultations/${consultationId}`,
+                categories: alertCategories.map((c) => ({
+                  label: RISK_CATEGORY_LABEL[c.key],
+                  level: c.level,
+                })),
+              }),
+            );
+          }
+        } catch (error) {
+          // El aviso por correo es best-effort: la alerta ya quedó
+          // persistida y visible en el dashboard aunque el correo falle.
+          logger.warn("risk_alert_email.send_failed", { clinicId, consultationId, error });
+        }
+        await logAudit({
+          clinicId,
+          actorId,
+          action: "risk_alert.created",
+          entityType: "consultation",
+          entityId: consultationId,
+          metadata: { categories: alertCategories.map((c) => `${c.key}:${c.level}`) },
+        });
+      }
+    }
+
+    // Actualiza el estado clínico longitudinal del paciente con lo observado
+    // en esta sesión (append-only, idempotente por consulta — ver
+    // lib/db/clinical-state.ts). Se hace ANTES de crear el reporte por la
+    // misma razón que la alerta de riesgo: un fallo posterior en
+    // `createReport` no debe dejar la continuidad del paciente sin registrar.
+    await appendClinicalState(clinicId, {
+      patientId: consultation.patientId,
+      consultationId,
+      delta: stateDelta,
+      provenance,
+    });
+
     const report = await createReport(clinicId, {
       consultationId,
       patientId: consultation.patientId,
       payload,
+      provenance,
     });
     await markConsultationAnalyzed(consultationId);
     await setAnalysisStatus(consultationId, "done");
@@ -62,12 +148,15 @@ export async function runConsultationAnalysis(params: {
       action: "report.generated",
       entityType: "report",
       entityId: report.id,
-      metadata: { consultationId },
+      metadata: {
+        consultationId,
+        model: provenance.model,
+        promptVersion: provenance.promptVersion,
+      },
     });
 
     // Aviso "reporte listo" al paciente (sin contenido clínico). Un fallo de
     // envío no debe marcar el análisis como fallido: el reporte ya existe.
-    const patient = await getPatient(consultation.patientId);
     if (patient?.email) {
       try {
         await getEmailProvider().send(

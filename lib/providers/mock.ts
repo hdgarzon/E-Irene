@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { extractPatientLines, extractPatientText } from "@/lib/transcript-utils";
+import type { AnalysisContext, ClinicalStateDelta } from "@/lib/clinical-state";
 import type {
   AnalysisProvider,
+  AnalysisResult,
   ReportPayload,
   RiskFlags,
   TranscriptionProvider,
   TranscriptionSession,
 } from "./types";
+
+/** Bump obligatorio si cambia la heurística de `mockAnalyze` o `mockStateDelta`. */
+const MOCK_PROMPT_VERSION = "mock-heuristic-v2";
 
 const POSITIVE = ["bien", "mejor", "tranquilo", "feliz", "logré", "avance", "calma", "esperanza"];
 const NEGATIVE = ["ansioso", "triste", "miedo", "angustia", "no puedo", "cansado", "solo", "preocupa"];
@@ -130,10 +135,45 @@ export function mockAnalyze(transcript: string): ReportPayload {
   };
 }
 
+/**
+ * Delta de estado clínico plausible pero simplista, derivado de lo que el
+ * mock ya calculó — no hay inferencia real de objetivos/hipótesis/técnicas
+ * (el mock no tiene el juicio clínico para eso), solo riesgos (reusa
+ * `detectRiskFlags`) y temas (reusa los `topics` por frecuencia). Suficiente
+ * para que el pipeline de estado funcione en modo demo sin API keys.
+ */
+function mockStateDelta(payload: ReportPayload): ClinicalStateDelta {
+  const riesgos = payload.riskFlags
+    ? (Object.entries(payload.riskFlags) as [keyof RiskFlags, RiskFlags[keyof RiskFlags]][])
+        .filter(([, v]) => v.level !== "ninguno")
+        .map(([categoria, v]) => ({
+          categoria,
+          nivel: v.level,
+          evidencia: v.evidence,
+          estado: "activo" as const,
+        }))
+    : [];
+  const temas = payload.topics.map((tema) => ({
+    tema,
+    tendencia: "estable" as const,
+    evidencia: "Detectado por frecuencia de palabras (modo demo, sin juicio clínico real).",
+  }));
+  return { objetivos: [], riesgos, temas, hipotesis: [], tecnicas: [] };
+}
+
 export class MockAnalysisProvider implements AnalysisProvider {
   readonly mode = "mock" as const;
-  async analyze(transcript: string): Promise<ReportPayload> {
-    return mockAnalyze(transcript);
+  async analyze(context: AnalysisContext): Promise<AnalysisResult> {
+    const payload = mockAnalyze(context.transcript);
+    return {
+      payload,
+      stateDelta: mockStateDelta(payload),
+      provenance: {
+        model: "mock",
+        promptVersion: MOCK_PROMPT_VERSION,
+        generatedAt: new Date().toISOString(),
+      },
+    };
   }
 }
 

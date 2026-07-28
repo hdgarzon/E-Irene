@@ -1,17 +1,49 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ArrowLeft, TrendingUp, Target, ShieldAlert, Tags } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { listReportsForPatient } from "@/lib/db/reports";
 import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { getLatestClinicalStateSnapshot } from "@/lib/db/clinical-state";
+import type { ClinicalState } from "@/lib/clinical-state";
+import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
+import type { RiskCategory } from "@/lib/risk-levels";
 import { ASSESSMENT_LABEL, ASSESSMENT_MAX_SCORE, type AssessmentType } from "@/lib/psychometrics";
-import {
-  sentimentTrend,
-  aggregateKeywords,
-  averageSentiment,
-} from "@/lib/progress";
-import { SentimentTrendChart } from "@/components/sentiment-trend-chart";
+import { formatFullDate } from "@/lib/dates";
 import { ScoreTrendChart } from "@/components/score-trend-chart";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+const ALL_RISK_CATEGORIES: RiskCategory[] = [
+  "suicidal_ideation",
+  "self_harm",
+  "substance_use",
+  "risk_to_others",
+];
+
+const OBJETIVO_ESTADO_LABEL: Record<ClinicalState["objetivos"][number]["estado"], string> = {
+  activo: "Activos",
+  logrado: "Logrados",
+  abandonado: "Abandonados",
+};
+
+const OBJETIVO_ESTADO_STYLE: Record<ClinicalState["objetivos"][number]["estado"], string> = {
+  activo: "bg-purple/15 text-purple",
+  logrado: "bg-mint/15 text-[#04342a]",
+  abandonado: "bg-muted text-muted-foreground",
+};
+
+const RIESGO_LEVEL_STYLE: Record<string, string> = {
+  bajo: "border-amber-400/40 bg-amber-400/10 text-amber-800",
+  moderado: "border-coral/40 bg-coral/10 text-[#7a2020]",
+  alto: "border-destructive/50 bg-destructive/15 text-destructive",
+};
+
+const TENDENCIA_LABEL: Record<ClinicalState["temas"][number]["tendencia"], string> = {
+  creciente: "↑ creciente",
+  estable: "→ estable",
+  decreciente: "↓ decreciente",
+};
 
 function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
@@ -26,20 +58,11 @@ export default async function ProgressPage({
   const patient = await getPatient(id);
   if (!patient) notFound();
 
-  const [reports, assessments] = await Promise.all([
+  const [reports, assessments, snapshot] = await Promise.all([
     listReportsForPatient(id),
     listAssessmentsForPatient(id),
+    getLatestClinicalStateSnapshot(id),
   ]);
-  const sessions = reports.map((r) => ({ date: r.date, payload: r.payload, consultationId: r.consultationId }));
-  const trend = sentimentTrend(sessions);
-  const keywords = aggregateKeywords(sessions);
-  const avg = averageSentiment(sessions);
-  const maxWeight = Math.max(...keywords.map((k) => k.weight), 1);
-
-  const delta =
-    trend.length >= 2 ? trend[trend.length - 1].score - trend[0].score : 0;
-  const DeltaIcon = delta > 0.05 ? TrendingUp : delta < -0.05 ? TrendingDown : Minus;
-  const deltaColor = delta > 0.05 ? "text-mint" : delta < -0.05 ? "text-destructive" : "text-muted-foreground";
 
   const assessmentsByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
     type,
@@ -47,6 +70,17 @@ export default async function ProgressPage({
       .filter((a) => a.type === type)
       .map((a) => ({ date: a.administeredAt, score: a.result.totalScore, severity: a.result.severity })),
   }));
+
+  const state = snapshot?.state ?? null;
+  const objetivosByEstado = state
+    ? (["activo", "logrado", "abandonado"] as const).map((estado) => ({
+        estado,
+        items: state.objetivos.filter((o) => o.estado === estado),
+      }))
+    : [];
+  const temasByFrequency = state ? [...state.temas].sort((a, b) => b.sesiones.length - a.sesiones.length) : [];
+
+  const hasAnything = reports.length > 0 || assessments.length > 0 || Boolean(state);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -68,7 +102,7 @@ export default async function ProgressPage({
         </p>
       </div>
 
-      {reports.length === 0 && assessments.length === 0 ? (
+      {!hasAnything ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <TrendingUp className="size-6 text-purple" />
@@ -80,78 +114,84 @@ export default async function ProgressPage({
         </div>
       ) : (
         <>
-          {reports.length > 0 && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-gray-line bg-card p-5">
-                  <p className="text-xs text-muted-foreground">Sesiones</p>
-                  <p className="font-heading text-2xl font-bold text-navy">{reports.length}</p>
+          {state && (
+            <div className="rounded-2xl border border-gray-line bg-card p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+                <Target className="size-4 text-purple" />
+                Objetivos terapéuticos
+              </h2>
+              {state.objetivos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin objetivos registrados aún.</p>
+              ) : (
+                <div className="space-y-4">
+                  {objetivosByEstado.map(
+                    ({ estado, items }) =>
+                      items.length > 0 && (
+                        <div key={estado}>
+                          <Badge className={cn("mb-2", OBJETIVO_ESTADO_STYLE[estado])}>
+                            {OBJETIVO_ESTADO_LABEL[estado]} ({items.length})
+                          </Badge>
+                          <ul className="space-y-1.5">
+                            {items.map((o) => (
+                              <li key={o.id} className="text-sm text-navy">
+                                {o.texto}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ),
+                  )}
                 </div>
-                <div className="rounded-2xl border border-gray-line bg-card p-5">
-                  <p className="text-xs text-muted-foreground">Sentimiento promedio</p>
-                  <p className="font-heading text-2xl font-bold text-navy">{avg.toFixed(2)}</p>
-                </div>
-                <div className="rounded-2xl border border-gray-line bg-card p-5">
-                  <p className="text-xs text-muted-foreground">Tendencia</p>
-                  <p className={`flex items-center gap-1.5 font-heading text-2xl font-bold ${deltaColor}`}>
-                    <DeltaIcon className="size-5" />
-                    {delta > 0 ? "+" : ""}
-                    {delta.toFixed(2)}
-                  </p>
-                </div>
-              </div>
+              )}
+            </div>
+          )}
 
-              <div className="rounded-2xl border border-gray-line bg-card p-6">
-                <h2 className="mb-4 font-heading font-semibold text-navy">
-                  Evolución del sentimiento
-                </h2>
-                <SentimentTrendChart points={trend} />
-                <div className="mt-2 flex justify-between px-4 text-xs text-muted-foreground">
-                  {trend.map((p, i) => (
-                    <span key={i}>{shortDate(p.date)}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-line bg-card p-6">
-                <h2 className="mb-4 font-heading font-semibold text-navy">
-                  Temas recurrentes (todas las sesiones)
-                </h2>
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  {keywords.map((k, i) => (
-                    <span
-                      key={k.term}
-                      className="font-heading font-semibold"
-                      style={{
-                        fontSize: `${0.85 + (k.weight / maxWeight) * 0.9}rem`,
-                        color: ["#635bff", "#0a2540", "#00d4aa"][i % 3],
-                      }}
+          {state && (
+            <div className="rounded-2xl border border-gray-line bg-card p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+                <ShieldAlert className="size-4 text-purple" />
+                Riesgos identificados a lo largo del tratamiento
+              </h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {ALL_RISK_CATEGORIES.map((categoria) => {
+                  const r = state.riesgos.find((x) => x.categoria === categoria);
+                  return (
+                    <div
+                      key={categoria}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-sm",
+                        r ? RIESGO_LEVEL_STYLE[r.nivel] : "border-gray-line text-muted-foreground",
+                      )}
                     >
-                      {k.term}
-                    </span>
-                  ))}
-                </div>
+                      <p className="font-medium">{RISK_CATEGORY_LABEL[categoria]}</p>
+                      <p className="text-xs">
+                        {r ? `Nivel ${r.nivel} · ${r.estado === "activo" ? "activo" : "resuelto"}` : "Sin indicios registrados"}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
+            </div>
+          )}
 
-              <div className="rounded-2xl border border-gray-line bg-card p-6">
-                <h2 className="mb-3 font-heading font-semibold text-navy">Sesiones</h2>
-                <ul className="divide-y divide-gray-line">
-                  {sessions.map((s) => (
-                    <li key={s.consultationId}>
-                      <Link
-                        href={`/consultations/${s.consultationId}`}
-                        className="flex items-center justify-between py-2.5 text-sm hover:text-purple"
-                      >
-                        <span className="text-navy">{shortDate(s.date)}</span>
-                        <span className="capitalize text-muted-foreground">
-                          {s.payload.sentiment.label} ({s.payload.sentiment.score.toFixed(2)})
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
+          {temasByFrequency.length > 0 && (
+            <div className="rounded-2xl border border-gray-line bg-card p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+                <Tags className="size-4 text-purple" />
+                Temas recurrentes
+              </h2>
+              <ul className="space-y-2">
+                {temasByFrequency.map((t) => (
+                  <li key={t.tema} className="flex items-center justify-between text-sm">
+                    <span className="text-navy">{t.tema}</span>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {t.sesiones.length} {t.sesiones.length === 1 ? "sesión" : "sesiones"} ·{" "}
+                      {TENDENCIA_LABEL[t.tendencia]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {assessmentsByType.map(
@@ -179,6 +219,27 @@ export default async function ProgressPage({
                   </ul>
                 </div>
               ),
+          )}
+
+          {reports.length > 0 && (
+            <div className="rounded-2xl border border-gray-line bg-card p-6">
+              <h2 className="mb-3 font-heading font-semibold text-navy">Sesiones</h2>
+              <ul className="divide-y divide-gray-line">
+                {reports.map((r) => (
+                  <li key={r.consultationId}>
+                    <Link
+                      href={`/consultations/${r.consultationId}`}
+                      className="flex items-center justify-between py-2.5 text-sm hover:text-purple"
+                    >
+                      <span className="text-navy">{formatFullDate(r.date)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {r.validatedAt ? "Validado" : "Sin validar"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </>
       )}

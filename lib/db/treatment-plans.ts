@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { encrypt, decrypt } from "@/lib/crypto";
+import type { TherapeuticApproach } from "@/lib/treatment-approach";
 
 export type TreatmentPlanStatus = "activo" | "completado" | "archivado";
 export type TreatmentItemType = "objetivo" | "checkpoint";
@@ -19,6 +20,8 @@ export interface TreatmentPlan {
   patientId: string;
   title: string;
   status: TreatmentPlanStatus;
+  /** Enfoque terapéutico del plan — de la lista curada, no texto libre (ver lib/treatment-approach.ts). */
+  approach: TherapeuticApproach | null;
   createdAt: string;
   items: TreatmentPlanItem[];
 }
@@ -28,6 +31,7 @@ interface PlanRow {
   patient_id: string;
   title_enc: string;
   status: TreatmentPlanStatus;
+  approach: TherapeuticApproach | null;
   created_at: string;
 }
 
@@ -57,7 +61,7 @@ export async function getActivePlanForPatient(patientId: string): Promise<Treatm
   const supabase = await createClient();
   const { data: plan, error } = await supabase
     .from("treatment_plans")
-    .select("id, patient_id, title_enc, status, created_at")
+    .select("id, patient_id, title_enc, status, approach, created_at")
     .eq("patient_id", patientId)
     .eq("status", "activo")
     .order("created_at", { ascending: false })
@@ -79,6 +83,7 @@ export async function getActivePlanForPatient(patientId: string): Promise<Treatm
     patientId: p.patient_id,
     title: decrypt(p.title_enc),
     status: p.status,
+    approach: p.approach,
     createdAt: p.created_at,
     items: (items as unknown as ItemRow[]).map(mapItem),
   };
@@ -87,7 +92,7 @@ export async function getActivePlanForPatient(patientId: string): Promise<Treatm
 export async function createPlan(
   clinicId: string,
   createdBy: string,
-  input: { patientId: string; title: string },
+  input: { patientId: string; title: string; approach?: TherapeuticApproach | null },
 ): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -97,11 +102,22 @@ export async function createPlan(
       patient_id: input.patientId,
       created_by: createdBy,
       title_enc: encrypt(input.title),
+      approach: input.approach ?? null,
     })
     .select("id")
     .single();
   if (error) throw error;
   return data.id;
+}
+
+/** El terapeuta puede ajustar el enfoque durante el tratamiento (p. ej. pasar de TCC a ACT). */
+export async function setPlanApproach(
+  planId: string,
+  approach: TherapeuticApproach | null,
+): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("treatment_plans").update({ approach }).eq("id", planId);
+  if (error) throw error;
 }
 
 export async function addItem(

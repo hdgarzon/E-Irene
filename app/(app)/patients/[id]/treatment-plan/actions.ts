@@ -6,24 +6,53 @@ import {
   createPlan,
   addItem,
   toggleItemStatus,
+  setPlanApproach,
   getActivePlanForPatient,
   type TreatmentItemType,
   type TreatmentItemStatus,
 } from "@/lib/db/treatment-plans";
+import { THERAPEUTIC_APPROACHES, type TherapeuticApproach } from "@/lib/treatment-approach";
 import { logAudit } from "@/lib/db/audit";
+
+function parseApproach(value: FormDataEntryValue | null): TherapeuticApproach | null {
+  const str = String(value ?? "");
+  return (THERAPEUTIC_APPROACHES as string[]).includes(str) ? (str as TherapeuticApproach) : null;
+}
 
 export async function createPlanAction(patientId: string, formData: FormData): Promise<void> {
   const user = await requireUser();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
+  const approach = parseApproach(formData.get("approach"));
 
-  const planId = await createPlan(user.clinicId, user.id, { patientId, title });
+  const planId = await createPlan(user.clinicId, user.id, { patientId, title, approach });
   await logAudit({
     clinicId: user.clinicId,
     actorId: user.id,
     action: "treatment_plan.created",
     entityType: "treatment_plan",
     entityId: planId,
+    metadata: { approach },
+  });
+  revalidatePath(`/patients/${patientId}`);
+}
+
+export async function setApproachAction(
+  planId: string,
+  patientId: string,
+  formData: FormData,
+): Promise<void> {
+  const user = await requireUser();
+  const approach = parseApproach(formData.get("approach"));
+
+  await setPlanApproach(planId, approach);
+  await logAudit({
+    clinicId: user.clinicId,
+    actorId: user.id,
+    action: "treatment_plan.approach_updated",
+    entityType: "treatment_plan",
+    entityId: planId,
+    metadata: { approach },
   });
   revalidatePath(`/patients/${patientId}`);
 }

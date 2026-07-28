@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { OpenAIAnalysisProvider } from "@/lib/providers/openai";
 import { DeepgramTranscriptionProvider } from "@/lib/providers/deepgram";
 import { reportSchema } from "@/lib/providers/types";
+import { bareAnalysisContext, clinicalStateDeltaSchema } from "@/lib/clinical-state";
 
 /**
  * Pruebas contra las APIs REALES de OpenAI/Deepgram. Se saltan si la key no
@@ -13,7 +14,7 @@ const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
 const hasDeepgram = Boolean(process.env.DEEPGRAM_API_KEY);
 
 describe.runIf(hasOpenAI)("OpenAIAnalysisProvider (real)", () => {
-  it("analiza una transcripción en español y cumple el schema", async () => {
+  it("analiza una transcripción en español, cumple el schema y devuelve un stateDelta válido", async () => {
     const transcript =
       "Doctor: ¿Cómo te has sentido esta semana?\n" +
       "Paciente: Bastante ansioso, sobre todo antes de las reuniones de trabajo, " +
@@ -23,7 +24,12 @@ describe.runIf(hasOpenAI)("OpenAIAnalysisProvider (real)", () => {
       "aunque esta semana logré hablar en una reunión y me sentí más tranquilo después.";
 
     const provider = new OpenAIAnalysisProvider();
-    const report = await provider.analyze(transcript);
+    const { payload: report, provenance, stateDelta } = await provider.analyze(
+      bareAnalysisContext(transcript),
+    );
+
+    expect(provenance.model).toBe("gpt-4o");
+    expect(provenance.promptVersion).toBeTruthy();
 
     expect(() => reportSchema.parse(report)).not.toThrow();
     expect(report.summary.length).toBeGreaterThan(10);
@@ -32,7 +38,44 @@ describe.runIf(hasOpenAI)("OpenAIAnalysisProvider (real)", () => {
     expect(report.suggestion.length).toBeGreaterThan(10);
     expect(report.riskFlags).toBeDefined();
     expect(report.riskFlags!.suicidal_ideation.level).toBe("ninguno");
+
+    // El shape ya viene validado por el provider (clinicalStateDeltaSchema.parse
+    // dentro de OpenAIAnalysisProvider) — re-validar aquí confirma que la
+    // respuesta real de la API sigue cumpliendo el esquema tras cambios de prompt.
+    expect(() => clinicalStateDeltaSchema.parse(stateDelta)).not.toThrow();
+    // Sin riesgo activo en la transcripción, no debería reportar un riesgo "activo".
+    expect(stateDelta.riesgos.every((r) => r.estado !== "activo")).toBe(true);
   }, 30_000);
+
+  it("reusa el texto exacto de un objetivo existente en vez de parafrasearlo", async () => {
+    const provider = new OpenAIAnalysisProvider();
+    const context = bareAnalysisContext(
+      "Doctor: ¿Cómo te fue esta semana practicando lo que hablamos?\n" +
+        "Paciente: Mejor. Volví a intentar hablar en las reuniones de trabajo sin sentir " +
+        "que iba a fallar, y esta vez me sentí bien conmigo mismo.",
+    );
+    context.previousState = {
+      ...context.previousState,
+      objetivos: [
+        {
+          id: "obj-1",
+          texto: "Reducir la ansiedad al hablar en reuniones de trabajo",
+          estado: "activo",
+          sesionOrigen: "consulta-anterior",
+          ultimaMencion: "consulta-anterior",
+          evidencia: "me pone muy ansioso hablar frente a mis compañeros",
+          confianza: 0.8,
+        },
+      ],
+    };
+
+    const { stateDelta } = await provider.analyze(context);
+    const texts = stateDelta.objetivos.map((o) => o.texto.toLowerCase());
+    expect(
+      texts,
+      "el modelo debía reusar el texto EXACTO del objetivo existente para que el merge lo reconozca como continuación, no como uno nuevo",
+    ).toContain("reducir la ansiedad al hablar en reuniones de trabajo");
+  }, 60_000);
 });
 
 describe.runIf(hasDeepgram)("DeepgramTranscriptionProvider (real)", () => {

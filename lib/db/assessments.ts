@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "@/lib/crypto";
-import { isPhq9SelfHarmRisk, type AssessmentType, type AssessmentResult } from "@/lib/psychometrics";
-import { logger } from "@/lib/logger";
+import type { AssessmentType, AssessmentResult } from "@/lib/psychometrics";
+import type { LatestAssessment } from "@/lib/clinical-state";
 
 export interface Assessment {
   id: string;
@@ -90,92 +90,20 @@ export async function listAssessmentsForPatient(patientId: string): Promise<Asse
   return (data as unknown as AssessmentRow[]).map(mapRow);
 }
 
-export interface Phq9RiskCandidate {
-  assessmentId: string;
-  patientId: string;
-  patientName: string;
-  date: string;
-  type: AssessmentType;
-  answers: number[];
-}
-
-export interface Phq9RiskAlert {
-  assessmentId: string;
-  patientId: string;
-  patientName: string;
-  date: string;
-}
-
-/** Función pura: de un conjunto de escalas ya descifradas, cuáles son de riesgo. */
-export function selectPhq9RiskAlerts(rows: Phq9RiskCandidate[]): Phq9RiskAlert[] {
-  return rows
-    .filter((r) => isPhq9SelfHarmRisk(r.type, r.answers))
-    .map((r) => ({
-      assessmentId: r.assessmentId,
-      patientId: r.patientId,
-      patientName: r.patientName,
-      date: r.date,
-    }));
-}
-
-interface RiskRow {
-  id: string;
-  patient_id: string;
-  payload_enc: string;
-  administered_at: string;
-  patients: { full_name_enc: string } | null;
-}
-
 /**
- * Escalas PHQ-9 completadas vía link público cuya respuesta indica riesgo,
- * para la sección "Alertas de riesgo" del dashboard. Igual que
- * `listRiskAlerts` (lib/db/reports.ts): calcula el riesgo al leer, sin
- * columna de estado persistida.
+ * La puntuación más reciente de cada tipo de escala (PHQ-9/GAD-7) que tenga
+ * el paciente — contexto compacto para el análisis de IA. Nunca se le pasa
+ * el historial completo (ver spec §2: "el modelo ve resumen de estado ...
+ * nunca N transcripciones/historiales").
  */
-export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("psychometric_assessments")
-    .select(
-      "id, patient_id, payload_enc, administered_at, " +
-        "patients!psychometric_assessments_patient_id_fkey(full_name_enc)",
-    )
-    .eq("type", "phq9")
-    .not("link_id", "is", null)
-    .order("administered_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-
-  const candidates: Phq9RiskCandidate[] = [];
-  for (const row of data as unknown as RiskRow[]) {
-    let result: AssessmentResult;
-    try {
-      result = JSON.parse(decrypt(row.payload_enc)) as AssessmentResult;
-    } catch (error) {
-      // payload ilegible (p. ej. clave rotada) → se omite, no rompe la lista.
-      logger.warn("phq9_risk_alert.payload_decrypt_failed", { assessmentId: row.id, error });
-      continue;
-    }
-
-    let patientName = "(nombre no disponible)";
-    if (row.patients?.full_name_enc) {
-      try {
-        patientName = decrypt(row.patients.full_name_enc);
-      } catch (error) {
-        // el nombre no descifra, pero el payload sí indica riesgo: no se
-        // pierde la alerta, solo se muestra con el placeholder.
-        logger.warn("phq9_risk_alert.patient_name_decrypt_failed", { assessmentId: row.id, error });
-      }
-    }
-
-    candidates.push({
-      assessmentId: row.id,
-      patientId: row.patient_id,
-      patientName,
-      date: row.administered_at,
-      type: "phq9",
-      answers: result.answers,
-    });
-  }
-  return selectPhq9RiskAlerts(candidates);
+export async function getLatestAssessments(patientId: string): Promise<LatestAssessment[]> {
+  const all = await listAssessmentsForPatient(patientId);
+  const latestByType = new Map<AssessmentType, Assessment>();
+  for (const a of all) latestByType.set(a.type, a); // ascendente → el último sobrescribe = más reciente
+  return [...latestByType.values()].map((a) => ({
+    type: a.type,
+    totalScore: a.result.totalScore,
+    severity: a.result.severity,
+    administeredAt: a.administeredAt,
+  }));
 }

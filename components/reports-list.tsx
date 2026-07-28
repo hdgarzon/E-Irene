@@ -8,12 +8,6 @@ import { formatFullDate, formatTime } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import type { ReportListItem } from "@/lib/db/reports";
 
-const SENTIMENT_META: Record<string, { label: string; className: string }> = {
-  positivo: { label: "Positivo", className: "bg-mint/15 text-[#04342a]" },
-  neutral: { label: "Neutral", className: "bg-purple/15 text-purple" },
-  negativo: { label: "Negativo", className: "bg-destructive/15 text-destructive" },
-};
-
 export function ReportsList({ reports }: { reports: ReportListItem[] }) {
   const { query, setQuery, filtered } = useSearchFilter(reports, (r) => r.patientName);
 
@@ -28,7 +22,6 @@ export function ReportsList({ reports }: { reports: ReportListItem[] }) {
       ) : (
         <div className="divide-y divide-gray-line overflow-hidden rounded-2xl border border-gray-line bg-card">
           {filtered.map((r) => {
-            const sentiment = SENTIMENT_META[r.sentimentLabel] ?? SENTIMENT_META.neutral;
             return (
               <Link
                 key={r.id}
@@ -44,12 +37,7 @@ export function ReportsList({ reports }: { reports: ReportListItem[] }) {
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-navy">{r.patientName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Sentimiento: {sentiment.label} ({r.sentimentScore.toFixed(2)})
-                  </p>
                 </div>
-
-                <Badge className={sentiment.className}>{sentiment.label}</Badge>
 
                 {r.validated ? (
                   <span className="flex items-center gap-1 text-xs text-mint">

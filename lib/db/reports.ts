@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { encrypt, decrypt } from "@/lib/crypto";
-import { reportSchema, type ReportPayload, type RiskLevel } from "@/lib/providers/types";
-import { logger } from "@/lib/logger";
+import { reportSchema, type AnalysisProvenance, type ReportPayload } from "@/lib/providers/types";
 
 export interface Report {
   id: string;
@@ -14,6 +13,12 @@ export interface Report {
   validatedBy: string | null;
   pdfPath: string | null;
   createdAt: string;
+  /**
+   * Procedencia del análisis de IA. `null` en reportes generados antes de que
+   * existiera trazabilidad — es un dato desconocido, no un dato ausente por
+   * error, y no debe rellenarse con suposiciones.
+   */
+  provenance: AnalysisProvenance | null;
 }
 
 interface ReportRow {
@@ -27,6 +32,20 @@ interface ReportRow {
   validated_by: string | null;
   pdf_path: string | null;
   created_at: string;
+  model: string | null;
+  prompt_version: string | null;
+  generated_at: string | null;
+}
+
+/**
+ * La procedencia solo se considera conocida si las tres columnas están
+ * presentes. Una fila a medias significa que algo escribió el reporte sin
+ * pasar por `createReport` — mejor tratarla como desconocida que reportar una
+ * trazabilidad parcial como si fuera completa.
+ */
+function mapProvenance(r: ReportRow): AnalysisProvenance | null {
+  if (!r.model || !r.prompt_version || !r.generated_at) return null;
+  return { model: r.model, promptVersion: r.prompt_version, generatedAt: r.generated_at };
 }
 
 function mapRow(r: ReportRow): Report {
@@ -41,15 +60,21 @@ function mapRow(r: ReportRow): Report {
     validatedBy: r.validated_by,
     pdfPath: r.pdf_path,
     createdAt: r.created_at,
+    provenance: mapProvenance(r),
   };
 }
 
 const COLS =
-  "id, consultation_id, patient_id, payload_enc, doctor_edited, doctor_notes_enc, validated_at, validated_by, pdf_path, created_at";
+  "id, consultation_id, patient_id, payload_enc, doctor_edited, doctor_notes_enc, validated_at, validated_by, pdf_path, created_at, model, prompt_version, generated_at";
 
 export async function createReport(
   clinicId: string,
-  input: { consultationId: string; patientId: string; payload: ReportPayload },
+  input: {
+    consultationId: string;
+    patientId: string;
+    payload: ReportPayload;
+    provenance: AnalysisProvenance;
+  },
 ): Promise<Report> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -59,6 +84,9 @@ export async function createReport(
       consultation_id: input.consultationId,
       patient_id: input.patientId,
       payload_enc: encrypt(JSON.stringify(input.payload)),
+      model: input.provenance.model,
+      prompt_version: input.provenance.promptVersion,
+      generated_at: input.provenance.generatedAt,
     })
     .select(COLS)
     .single();
@@ -83,23 +111,22 @@ export interface ReportListItem {
   patientId: string;
   patientName: string;
   date: string;
-  sentimentLabel: ReportPayload["sentiment"]["label"];
-  sentimentScore: number;
   validated: boolean;
 }
 
 /**
  * Todos los reportes de la clínica del usuario (RLS scoped), más recientes
- * primero. Si el payload de un reporte no descifra con la clave actual
- * (p. ej. tras rotar ENCRYPTION_KEY sin migrar datos antiguos), se omite en
- * vez de romper toda la lista; se registra en los logs del servidor.
+ * primero. A diferencia de otras lecturas de `reports`, esta lista NO
+ * necesita descifrar `payload_enc` — ninguno de sus campos depende del
+ * contenido clínico (a propósito: ver deprecación de sentiment/keywords en
+ * la UI, spec §2.1). Por eso tampoco puede fallar por payload ilegible.
  */
 export async function listReports(): Promise<ReportListItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("reports")
     .select(
-      "id, consultation_id, patient_id, payload_enc, validated_at, created_at, " +
+      "id, consultation_id, patient_id, validated_at, created_at, " +
         "patients!reports_patient_id_fkey(full_name_enc), " +
         "consultations!reports_consultation_id_fkey(started_at)",
     )
@@ -110,22 +137,13 @@ export async function listReports(): Promise<ReportListItem[]> {
     id: string;
     consultation_id: string;
     patient_id: string;
-    payload_enc: string;
     validated_at: string | null;
     created_at: string;
     patients: { full_name_enc: string } | null;
     consultations: { started_at: string } | null;
   }[];
 
-  const items: ReportListItem[] = [];
-  for (const r of rows) {
-    let payload: ReportPayload;
-    try {
-      payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
-    } catch (error) {
-      logger.error("report.decrypt_failed", { reportId: r.id, error });
-      continue;
-    }
+  return rows.map((r) => {
     let patientName = "(nombre no disponible)";
     if (r.patients?.full_name_enc) {
       try {
@@ -134,18 +152,15 @@ export async function listReports(): Promise<ReportListItem[]> {
         // se mantiene el placeholder
       }
     }
-    items.push({
+    return {
       id: r.id,
       consultationId: r.consultation_id,
       patientId: r.patient_id,
       patientName,
       date: r.consultations?.started_at ?? r.created_at,
-      sentimentLabel: payload.sentiment.label,
-      sentimentScore: payload.sentiment.score,
       validated: Boolean(r.validated_at),
-    });
-  }
-  return items;
+    };
+  });
 }
 
 export interface PatientSessionReport {
@@ -247,84 +262,7 @@ export async function countPendingReports(): Promise<number> {
   return count ?? 0;
 }
 
-export interface RiskAlert {
-  consultationId: string;
-  patientId: string;
-  patientName: string;
-  date: string;
-  categories: { key: keyof NonNullable<ReportPayload["riskFlags"]>; level: RiskLevel }[];
-}
-
-const RISK_ALERT_LEVELS = new Set<RiskLevel>(["moderado", "alto"]);
-
-/**
- * Alertas de riesgo abiertas: reportes recientes cuyo análisis de IA marcó al
- * menos una categoría (ideación suicida, autolesión, consumo, riesgo a
- * terceros) en nivel "moderado" o "alto". Apoyo a la detección temprana para
- * el profesional — NUNCA un diagnóstico. Los reportes previos a esta versión
- * no tienen riskFlags y simplemente no generan alerta.
- */
-export async function listRiskAlerts(limit = 50): Promise<RiskAlert[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("reports")
-    .select(
-      "consultation_id, patient_id, payload_enc, created_at, " +
-        "patients!reports_patient_id_fkey(full_name_enc), " +
-        "consultations!reports_consultation_id_fkey(started_at)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-
-  const rows = data as unknown as {
-    consultation_id: string;
-    patient_id: string;
-    payload_enc: string;
-    created_at: string;
-    patients: { full_name_enc: string } | null;
-    consultations: { started_at: string } | null;
-  }[];
-
-  const alerts: RiskAlert[] = [];
-  for (const r of rows) {
-    let payload: ReportPayload;
-    try {
-      payload = reportSchema.parse(JSON.parse(decrypt(r.payload_enc)));
-    } catch (error) {
-      // payload ilegible (p. ej. clave rotada) → se omite, no rompe la lista.
-      logger.warn("risk_alert.payload_decrypt_failed", { consultationId: r.consultation_id, error });
-      continue;
-    }
-    if (!payload.riskFlags) continue;
-
-    const categories = (
-      Object.entries(payload.riskFlags) as [
-        keyof NonNullable<ReportPayload["riskFlags"]>,
-        { level: RiskLevel },
-      ][]
-    )
-      .filter(([, v]) => RISK_ALERT_LEVELS.has(v.level))
-      .map(([key, v]) => ({ key, level: v.level }));
-
-    if (categories.length === 0) continue;
-
-    let patientName = "(nombre no disponible)";
-    if (r.patients?.full_name_enc) {
-      try {
-        patientName = decrypt(r.patients.full_name_enc);
-      } catch {
-        // se mantiene el placeholder
-      }
-    }
-
-    alerts.push({
-      consultationId: r.consultation_id,
-      patientId: r.patient_id,
-      patientName,
-      date: r.consultations?.started_at ?? r.created_at,
-      categories,
-    });
-  }
-  return alerts;
-}
+// La detección de alertas de riesgo derivada de `reports` se retiró en favor
+// de `lib/db/risk-alerts.ts` — un canal propio hacia el doctor tratante, con
+// acuse de recibo persistido, que no depende de que el reporte exista (ver
+// spec §5 en docs/superpowers/specs/2026-07-24-copiloto-clinico-design.md).

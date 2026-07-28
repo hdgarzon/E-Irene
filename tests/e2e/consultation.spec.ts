@@ -61,8 +61,7 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   // Reporte IA con sus secciones + disclaimer (puede tardar un par de ciclos de polling)
   await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Resumen ejecutivo" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Análisis de sentimiento" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Nube de palabras/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patrones lingüísticos" })).toBeVisible();
 
   // Sin alertas de riesgo (transcripción demo benigna)
   await expect(page.getByText(/No se identificaron alertas de riesgo/)).toBeVisible();
@@ -120,7 +119,7 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
 
   await page.getByRole("link", { name: /ver evolución/i }).click();
   await expect(page).toHaveURL(/\/progress$/);
-  await expect(page.getByText(/Evolución del sentimiento/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Evolución de/ })).toBeVisible();
   await expect(page.getByText(/1 sesión analizada/)).toBeVisible();
 
   // Vista global de Consultas: aparece la consulta recién analizada

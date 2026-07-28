@@ -65,6 +65,47 @@ export function buildReportReadyEmail(input: {
   };
 }
 
+/**
+ * Aviso al doctor tratante de una alerta de riesgo detectada por IA.
+ *
+ * Deliberadamente incluye categoría y nivel (necesarios para que el doctor
+ * priorice sin tener que entrar a la plataforma primero) pero NUNCA la cita
+ * textual del paciente — mismo principio que `buildReportReadyEmail`: el
+ * contenido clínico sensible no viaja por correo, solo vive cifrado en la
+ * app. El correo es un aviso con link, no el canal de la evidencia.
+ */
+export function buildRiskAlertEmail(input: {
+  to: string;
+  doctorName: string;
+  patientName: string;
+  clinicName: string;
+  consultationUrl: string;
+  categories: { label: string; level: string }[];
+}): EmailMessage {
+  const list = input.categories.map((c) => `${c.label} (${c.level})`).join(", ");
+  const text =
+    `Hola ${input.doctorName}, el análisis de IA de la sesión con ${input.patientName} en ` +
+    `${input.clinicName} detectó posibles indicios de riesgo: ${list}. ` +
+    `Revisa el detalle y la evidencia en la plataforma: ${input.consultationUrl} — ` +
+    `esto es apoyo a la detección temprana, no un diagnóstico; la decisión y la acción son tuyas.`;
+  return {
+    to: input.to,
+    subject: `⚠️ Alerta de riesgo · ${input.patientName}`,
+    text,
+    html: wrap(
+      "Alerta de riesgo detectada por IA",
+      `<p>Hola <strong>${input.doctorName}</strong>,</p>
+       <p>El análisis de la sesión con <strong>${input.patientName}</strong> en <strong>${input.clinicName}</strong>
+       detectó posibles indicios de riesgo:</p>
+       <p style="background:#fdecec;border-radius:8px;padding:12px;font-size:14px;color:#9b1c1c;font-weight:bold">
+         ${list}
+       </p>
+       <p><a href="${input.consultationUrl}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Ver detalle y evidencia</a></p>
+       <p style="font-size:12px;color:#5b6b7c">Esto es apoyo a la detección temprana — nunca un diagnóstico ni un protocolo de crisis automatizado. La decisión y la acción son siempre tuyas como profesional tratante.</p>`,
+    ),
+  };
+}
+
 export function buildPatientLinkEmail(input: {
   to: string;
   patientName: string;
@@ -99,7 +140,16 @@ export function buildPatientLinkEmail(input: {
   };
 }
 
-export function buildRiskAlertEmail(input: {
+/**
+ * Aviso al doctor de un PHQ-9 autorreportado (link público) cuya respuesta
+ * indica riesgo de autolesión. Deliberadamente NO nombra la categoría en el
+ * asunto/cuerpo ("respuesta que requiere tu atención", no "autolesión") —
+ * a diferencia de `buildRiskAlertEmail` (fuente IA), donde el doctor ya
+ * espera ver categoría/nivel; aquí es un correo que puede llegar sin
+ * contexto previo, y nombrar el riesgo explícito en un asunto de correo es
+ * innecesariamente expositivo para el paciente si alguien más lo ve.
+ */
+export function buildPhq9RiskAlertEmail(input: {
   to: string;
   doctorName: string;
   patientName: string;

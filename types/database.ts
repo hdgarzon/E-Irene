@@ -421,6 +421,64 @@ export type Database = {
           },
         ]
       }
+      patient_clinical_state: {
+        Row: {
+          clinic_id: string
+          consultation_id: string | null
+          created_at: string
+          id: string
+          model: string
+          patient_id: string
+          prompt_version: string
+          state_enc: string
+          version: number
+        }
+        Insert: {
+          clinic_id: string
+          consultation_id?: string | null
+          created_at?: string
+          id?: string
+          model: string
+          patient_id: string
+          prompt_version: string
+          state_enc: string
+          version: number
+        }
+        Update: {
+          clinic_id?: string
+          consultation_id?: string | null
+          created_at?: string
+          id?: string
+          model?: string
+          patient_id?: string
+          prompt_version?: string
+          state_enc?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_clinical_state_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_clinical_state_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_clinical_state_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_links: {
         Row: {
           assessment_type: string | null
@@ -741,10 +799,13 @@ export type Database = {
           created_at: string
           doctor_edited: boolean
           doctor_notes_enc: string | null
+          generated_at: string | null
           id: string
+          model: string | null
           patient_id: string
           payload_enc: string
           pdf_path: string | null
+          prompt_version: string | null
           updated_at: string
           validated_at: string | null
           validated_by: string | null
@@ -755,10 +816,13 @@ export type Database = {
           created_at?: string
           doctor_edited?: boolean
           doctor_notes_enc?: string | null
+          generated_at?: string | null
           id?: string
+          model?: string | null
           patient_id: string
           payload_enc: string
           pdf_path?: string | null
+          prompt_version?: string | null
           updated_at?: string
           validated_at?: string | null
           validated_by?: string | null
@@ -769,10 +833,13 @@ export type Database = {
           created_at?: string
           doctor_edited?: boolean
           doctor_notes_enc?: string | null
+          generated_at?: string | null
           id?: string
+          model?: string | null
           patient_id?: string
           payload_enc?: string
           pdf_path?: string | null
+          prompt_version?: string | null
           updated_at?: string
           validated_at?: string | null
           validated_by?: string | null
@@ -804,6 +871,91 @@ export type Database = {
             columns: ["validated_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      risk_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          assessment_id: string | null
+          categories_enc: string
+          clinic_id: string
+          consultation_id: string | null
+          created_at: string
+          doctor_id: string | null
+          id: string
+          patient_id: string
+          source: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          assessment_id?: string | null
+          categories_enc: string
+          clinic_id: string
+          consultation_id?: string | null
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_id: string
+          source?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          assessment_id?: string | null
+          categories_enc?: string
+          clinic_id?: string
+          consultation_id?: string | null
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risk_alerts_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "psychometric_assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
             referencedColumns: ["id"]
           },
         ]
@@ -989,6 +1141,7 @@ export type Database = {
       }
       treatment_plans: {
         Row: {
+          approach: string | null
           clinic_id: string
           created_at: string
           created_by: string | null
@@ -999,6 +1152,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approach?: string | null
           clinic_id: string
           created_at?: string
           created_by?: string | null
@@ -1009,6 +1163,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approach?: string | null
           clinic_id?: string
           created_at?: string
           created_by?: string | null
