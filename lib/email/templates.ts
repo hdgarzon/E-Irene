@@ -139,3 +139,40 @@ export function buildPatientLinkEmail(input: {
     ),
   };
 }
+
+/**
+ * Aviso al doctor de un PHQ-9 autorreportado (link público) cuya respuesta
+ * indica riesgo de autolesión. Deliberadamente NO nombra la categoría en el
+ * asunto/cuerpo ("respuesta que requiere tu atención", no "autolesión") —
+ * a diferencia de `buildRiskAlertEmail` (fuente IA), donde el doctor ya
+ * espera ver categoría/nivel; aquí es un correo que puede llegar sin
+ * contexto previo, y nombrar el riesgo explícito en un asunto de correo es
+ * innecesariamente expositivo para el paciente si alguien más lo ve.
+ */
+export function buildPhq9RiskAlertEmail(input: {
+  to: string;
+  doctorName: string;
+  patientName: string;
+  clinicName: string;
+  patientUrl: string;
+}): EmailMessage {
+  const text = `Hola ${input.doctorName}, ${input.patientName} completó un cuestionario en ${input.clinicName} con una respuesta que requiere tu atención. Revísalo aquí: ${input.patientUrl}`;
+  return {
+    to: input.to,
+    subject: "Alerta: respuesta que requiere tu atención",
+    text,
+    html: wrap(
+      "Alerta de seguimiento",
+      `<p>Hola <strong>${input.doctorName}</strong>,</p>
+       <p><strong>${input.patientName}</strong> completó un cuestionario de seguimiento en
+       <strong>${input.clinicName}</strong> con una respuesta que requiere tu atención
+       cercana.</p>
+       <p style="margin:20px 0">
+         <a href="${input.patientUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+           Ver expediente del paciente
+         </a>
+       </p>
+       <p style="font-size:13px;color:#5b6b7c">Por privacidad del paciente, el detalle clínico no se envía por correo.</p>`,
+    ),
+  };
+}

@@ -879,35 +879,41 @@ export type Database = {
         Row: {
           acknowledged_at: string | null
           acknowledged_by: string | null
+          assessment_id: string | null
           categories_enc: string
           clinic_id: string
-          consultation_id: string
+          consultation_id: string | null
           created_at: string
-          doctor_id: string
+          doctor_id: string | null
           id: string
           patient_id: string
+          source: string
         }
         Insert: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          assessment_id?: string | null
           categories_enc: string
           clinic_id: string
-          consultation_id: string
+          consultation_id?: string | null
           created_at?: string
-          doctor_id: string
+          doctor_id?: string | null
           id?: string
           patient_id: string
+          source?: string
         }
         Update: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          assessment_id?: string | null
           categories_enc?: string
           clinic_id?: string
-          consultation_id?: string
+          consultation_id?: string | null
           created_at?: string
-          doctor_id?: string
+          doctor_id?: string | null
           id?: string
           patient_id?: string
+          source?: string
         }
         Relationships: [
           {
@@ -915,6 +921,13 @@ export type Database = {
             columns: ["acknowledged_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risk_alerts_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "psychometric_assessments"
             referencedColumns: ["id"]
           },
           {

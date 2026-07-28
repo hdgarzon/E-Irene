@@ -78,6 +78,7 @@ export async function runConsultationAnalysis(params: {
     const alertCategories = extractRiskAlertCategories(payload.riskFlags);
     if (alertCategories.length > 0) {
       const { isNew } = await createRiskAlert(clinicId, {
+        source: "session_analysis",
         consultationId,
         patientId: consultation.patientId,
         doctorId: consultation.doctorId,

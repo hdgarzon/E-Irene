@@ -10,6 +10,7 @@ import { CONSENT_VERSION, CONSENT_HASH } from "@/lib/consent";
 import { scoreAssessment, questionsFor, type AssessmentType } from "@/lib/psychometrics";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { logAuditPublic } from "@/lib/db/audit";
+import { alertOnRiskyAssessment } from "@/lib/db/risk-alerts";
 import { logger } from "@/lib/logger";
 import type { ConsentState } from "@/app/(app)/patients/[id]/consent/actions";
 
@@ -128,6 +129,21 @@ export async function submitPublicAssessmentAction(token: string, formData: Form
       entityType: "psychometric_assessment",
       entityId: assessment.id,
       metadata: { type, totalScore: result.totalScore, linkId: link.id, patientId: link.patientId },
+    });
+
+    // Se espera (await): en un entorno serverless (Vercel) una llamada async
+    // sin await puede quedar truncada si la función termina apenas se envía
+    // la respuesta (el redirect() de abajo). alertOnRiskyAssessment nunca
+    // lanza (captura sus propios errores, ver lib/db/risk-alerts.ts), así
+    // que este await no puede hacer fallar el envío del paciente — solo le
+    // agrega la latencia real del correo, aceptable para una alerta que debe
+    // salir cuanto antes.
+    await alertOnRiskyAssessment({
+      clinicId: link.clinicId,
+      patientId: link.patientId,
+      assessmentId: assessment.id,
+      type,
+      answers: result.answers,
     });
   } catch (error) {
     logger.error("assessment.submit_via_link_failed", {
