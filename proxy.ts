@@ -19,8 +19,12 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad"]);
 // Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
 // /enlace: links de paciente con token, ver app/enlace/[token];
-// /join: sala de videollamada del paciente, ver app/join/[token]).
-const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join"];
+// /join: sala de videollamada del paciente, ver app/join/[token];
+// /api/webhooks: llamadas servidor-a-servidor de terceros (Wompi) — nunca
+// traen sesión de usuario. NO desprotegido: cada handler bajo /api/webhooks
+// verifica su propia firma criptográfica (ver app/api/webhooks/wompi/route.ts)
+// en vez de depender de una cookie de sesión que el emisor no puede tener.
+const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join", "/api/webhooks"];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;

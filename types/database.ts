@@ -131,6 +131,47 @@ export type Database = {
           },
         ]
       }
+      billing_events: {
+        Row: {
+          amount_in_cents: number
+          clinic_id: string
+          created_at: string
+          id: string
+          raw_payload_enc: string
+          status: string
+          wompi_event: string
+          wompi_transaction_id: string
+        }
+        Insert: {
+          amount_in_cents: number
+          clinic_id: string
+          created_at?: string
+          id?: string
+          raw_payload_enc: string
+          status: string
+          wompi_event: string
+          wompi_transaction_id: string
+        }
+        Update: {
+          amount_in_cents?: number
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          raw_payload_enc?: string
+          status?: string
+          wompi_event?: string
+          wompi_transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_doctors: {
         Row: {
           clinic_id: string
@@ -166,31 +207,40 @@ export type Database = {
       }
       clinics: {
         Row: {
+          billing_status: string
           created_at: string
+          current_period_end: string | null
           id: string
           name: string
           plan: Database["public"]["Enums"]["clinic_plan"]
           slug: string
           suspended_at: string | null
           updated_at: string
+          wompi_payment_source_id_enc: string | null
         }
         Insert: {
+          billing_status?: string
           created_at?: string
+          current_period_end?: string | null
           id?: string
           name: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
           slug: string
           suspended_at?: string | null
           updated_at?: string
+          wompi_payment_source_id_enc?: string | null
         }
         Update: {
+          billing_status?: string
           created_at?: string
+          current_period_end?: string | null
           id?: string
           name?: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
           slug?: string
           suspended_at?: string | null
           updated_at?: string
+          wompi_payment_source_id_enc?: string | null
         }
         Relationships: []
       }
