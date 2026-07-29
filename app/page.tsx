@@ -21,13 +21,13 @@ const features = [
   {
     icon: Brain,
     title: "Análisis con IA",
-    desc: "Sentimiento, palabras clave, patrones lingüísticos y una sugerencia preliminar que el doctor valida.",
+    desc: "Patrones lingüísticos, estado clínico longitudinal (objetivos, riesgos, temas) y una sugerencia preliminar que el doctor valida.",
     color: "text-mint",
   },
   {
     icon: FileText,
     title: "Reportes clínicos",
-    desc: "Reporte PDF de 8 secciones con firma del profesional, listo para la historia clínica.",
+    desc: "Reporte PDF completo con firma del profesional, listo para la historia clínica.",
     color: "text-purple",
   },
   {
