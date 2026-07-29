@@ -6,10 +6,17 @@ export interface PlanLimits {
   maxDoctors: number;
   maxPatients: number;
   transcriptionHours: number;
+  consultationsPerMonth: number;
   ai: boolean;
   whatsapp: boolean;
 }
 
+// Nombres y precios vigentes desde 2026-07 (ver
+// docs/E-Irene_Resumen_Ejecutivo_Integral). Los códigos internos
+// (free/pro/clinica/enterprise) no cambian a propósito — son los que ya
+// tienen 12 clínicas reales asignadas en producción; solo cambia lo que se
+// muestra. maxDoctors/maxPatients/transcriptionHours/ai/whatsapp quedan
+// igual que antes de este cambio de precios.
 export const PLANS: Record<Plan, PlanLimits> = {
   free: {
     label: "Free",
@@ -17,33 +24,37 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxDoctors: 1,
     maxPatients: 5,
     transcriptionHours: 2,
+    consultationsPerMonth: 5,
     ai: false,
     whatsapp: false,
   },
   pro: {
-    label: "Pro",
-    price: "$49/mes",
+    label: "Professional",
+    price: "$29/mes",
     maxDoctors: 1,
     maxPatients: Infinity,
     transcriptionHours: 20,
+    consultationsPerMonth: 20,
     ai: true,
     whatsapp: false,
   },
   clinica: {
-    label: "Clínica",
-    price: "$149/mes",
+    label: "Plus",
+    price: "$59/mes",
     maxDoctors: 5,
     maxPatients: Infinity,
     transcriptionHours: 100,
+    consultationsPerMonth: 50,
     ai: true,
     whatsapp: true,
   },
   enterprise: {
-    label: "Enterprise",
-    price: "Personalizado",
+    label: "Clinic",
+    price: "$149/mes",
     maxDoctors: Infinity,
     maxPatients: Infinity,
     transcriptionHours: Infinity,
+    consultationsPerMonth: 120,
     ai: true,
     whatsapp: true,
   },
@@ -61,6 +72,10 @@ export function canAddPatient(plan: Plan, currentCount: number): boolean {
 
 export function canAddDoctor(plan: Plan, currentCount: number): boolean {
   return currentCount < PLANS[plan].maxDoctors;
+}
+
+export function canStartConsultation(plan: Plan, consultationsThisMonth: number): boolean {
+  return consultationsThisMonth < PLANS[plan].consultationsPerMonth;
 }
 
 /** "5" o "Ilimitado" para mostrar límites. */

@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getActiveConsent } from "@/lib/db/consents";
+import { getClinicOverview } from "@/lib/db/clinic";
+import { canStartConsultation } from "@/lib/plans";
 import { startConsultation, appendChunk, endConsultation, setAnalysisStatus } from "@/lib/db/consultations";
 import { updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
 import { upsertSoapNote } from "@/lib/db/soap-notes";
@@ -19,6 +21,11 @@ export async function startConsultationAction(
   const user = await requireUser();
   const consent = await getActiveConsent(patientId);
   if (!consent) redirect(`/patients/${patientId}/consent`);
+
+  const overview = await getClinicOverview();
+  if (!canStartConsultation(overview.plan, overview.consultationsThisMonth)) {
+    redirect(`/consultations/new?patientId=${patientId}`);
+  }
 
   const reason = String(formData.get("reason") ?? "").trim();
   const id = await startConsultation(user.clinicId, {

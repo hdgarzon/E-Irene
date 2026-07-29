@@ -10,13 +10,13 @@ test("configuración: cambiar plan y agregar miembro al equipo", async ({ page }
   await expect(page.getByText("Plan actual")).toBeVisible();
   await expect(page.getByText("Free · $0/mes")).toBeVisible();
 
-  // Cambiar a Clínica
+  // Cambiar a Plus (código interno "clinica")
   await page.goto("/settings/plan");
-  await page.getByRole("button", { name: "Cambiar a Clínica" }).click();
+  await page.getByRole("button", { name: "Cambiar a Plus" }).click();
   await expect(page.getByRole("button", { name: "Cambiar a Free" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cambiar a Clínica" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cambiar a Plus" })).toHaveCount(0);
 
-  // Agregar un profesional (permitido en Clínica)
+  // Agregar un profesional (permitido en Plus)
   await page.goto("/settings/team");
   await page.fill("#fullName", "Dr. Nuevo Colega");
   await page.fill("#email", `colega_${Date.now()}@e-irene.test`);

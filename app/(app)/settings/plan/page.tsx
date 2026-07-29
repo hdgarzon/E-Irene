@@ -15,6 +15,7 @@ export default async function PlanPage() {
     return [
       `${limitLabel(l.maxDoctors)} profesional${l.maxDoctors === 1 ? "" : "es"}`,
       `${limitLabel(l.maxPatients)} pacientes`,
+      `${limitLabel(l.consultationsPerMonth)} consultas/mes`,
       `${limitLabel(l.transcriptionHours)} h de transcripción`,
       l.ai ? "Análisis con IA" : "Sin análisis con IA",
       l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Mic, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Mic, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
+import { getClinicOverview } from "@/lib/db/clinic";
+import { canStartConsultation, limitLabel, PLANS } from "@/lib/plans";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +20,8 @@ export default async function NewConsultationPage({
   if (!patientId) redirect("/patients");
   const patient = await getPatient(patientId);
   if (!patient) notFound();
-  const consent = await getActiveConsent(patientId);
+  const [consent, overview] = await Promise.all([getActiveConsent(patientId), getClinicOverview()]);
+  const limitReached = !canStartConsultation(overview.plan, overview.consultationsThisMonth);
 
   const start = startConsultationAction.bind(null, patientId);
 
@@ -49,7 +52,31 @@ export default async function NewConsultationPage({
           Iniciar consulta con {patient.fullName}
         </h1>
 
-        {consent ? (
+        {!consent ? (
+          <>
+            <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
+              <ShieldCheck className="size-4 text-coral" />
+              Este paciente aún no tiene consentimiento firmado.
+            </p>
+            <Link
+              href={`/patients/${patientId}/consent`}
+              className={cn(buttonVariants(), "mt-6")}
+            >
+              Capturar consentimiento
+            </Link>
+          </>
+        ) : limitReached ? (
+          <>
+            <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
+              <TriangleAlert className="size-4 text-coral" />
+              Alcanzaste el límite de {limitLabel(PLANS[overview.plan].consultationsPerMonth)}{" "}
+              consultas de este mes en el plan {PLANS[overview.plan].label}.
+            </p>
+            <Link href="/settings/plan" className={cn(buttonVariants(), "mt-6")}>
+              Mejorar plan
+            </Link>
+          </>
+        ) : (
           <>
             <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
               Se transcribirá la sesión en tiempo real. El audio nunca se almacena; solo el texto,
@@ -70,19 +97,6 @@ export default async function NewConsultationPage({
                 Iniciar y grabar
               </Button>
             </form>
-          </>
-        ) : (
-          <>
-            <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
-              <ShieldCheck className="size-4 text-coral" />
-              Este paciente aún no tiene consentimiento firmado.
-            </p>
-            <Link
-              href={`/patients/${patientId}/consent`}
-              className={cn(buttonVariants(), "mt-6")}
-            >
-              Capturar consentimiento
-            </Link>
           </>
         )}
       </div>

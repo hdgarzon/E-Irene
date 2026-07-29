@@ -76,6 +76,17 @@ export function fromInputDateTime(local: string): string {
   return new Date(`${local}:00-05:00`).toISOString();
 }
 
+/** Inicio del mes actual en Bogotá, como ISO UTC — corte para contar uso mensual (p. ej. límite de consultas del plan). */
+export function startOfCurrentMonthBogota(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return new Date(`${get("year")}-${get("month")}-01T00:00:00-05:00`).toISOString();
+}
+
 /** true si `iso` fue hace más de `days` días. */
 export function isMoreThanDaysAgo(iso: string, days: number): boolean {
   return Date.now() - new Date(iso).getTime() > days * 24 * 60 * 60 * 1000;
