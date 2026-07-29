@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Plan } from "@/lib/plans";
+import { startOfCurrentMonthBogota } from "@/lib/dates";
 
 export interface DoctorOption {
   id: string;
@@ -12,12 +13,13 @@ export interface ClinicOverview {
   patientCount: number;
   doctorCount: number;
   memberCount: number;
+  consultationsThisMonth: number;
 }
 
 /** Plan + conteos de la clínica del usuario (RLS scoped). */
 export async function getClinicOverview(): Promise<ClinicOverview> {
   const supabase = await createClient();
-  const [clinic, patients, doctors, members] = await Promise.all([
+  const [clinic, patients, doctors, members, consultations] = await Promise.all([
     supabase.from("clinics").select("plan").single(),
     supabase.from("patients").select("*", { count: "exact", head: true }),
     supabase
@@ -25,12 +27,17 @@ export async function getClinicOverview(): Promise<ClinicOverview> {
       .select("*", { count: "exact", head: true })
       .in("role", ["admin", "doctor"]),
     supabase.from("users").select("*", { count: "exact", head: true }),
+    supabase
+      .from("consultations")
+      .select("*", { count: "exact", head: true })
+      .gte("started_at", startOfCurrentMonthBogota()),
   ]);
   return {
     plan: (clinic.data?.plan ?? "free") as Plan,
     patientCount: patients.count ?? 0,
     doctorCount: doctors.count ?? 0,
     memberCount: members.count ?? 0,
+    consultationsThisMonth: consultations.count ?? 0,
   };
 }
 

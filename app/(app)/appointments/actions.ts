@@ -20,7 +20,7 @@ import { recordNotification } from "@/lib/db/notifications";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildReminderEmail } from "@/lib/email/templates";
 import { getWhatsAppProvider, buildReminderWhatsApp } from "@/lib/whatsapp/providers";
-import { PLANS } from "@/lib/plans";
+import { PLANS, canStartConsultation, limitLabel } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 import { fromInputDateTime, formatFullDate, formatTime } from "@/lib/dates";
@@ -287,6 +287,16 @@ export async function startVideoConsultationAction(
     if (existing) {
       redirectTo = `/consultations/${existing.id}/live`;
     } else {
+      const overview = await getClinicOverview();
+      if (!canStartConsultation(overview.plan, overview.consultationsThisMonth)) {
+        return {
+          ok: false,
+          message: `Alcanzaste el límite de ${limitLabel(
+            PLANS[overview.plan].consultationsPerMonth,
+          )} consultas de este mes en el plan ${PLANS[overview.plan].label}. Mejora tu plan en Configuración.`,
+        };
+      }
+
       await ensureVideoRoom(appointmentId);
       const consultationId = await startConsultation(user.clinicId, {
         patientId: appt.patientId,
