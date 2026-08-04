@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   verifyWompiChecksum,
   extractWompiTimestamp,
-  parseClinicIdFromReference,
+  parseBillingReference,
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
@@ -76,14 +76,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "missing_transaction" }, { status: 400 });
   }
 
-  const clinicId = parseClinicIdFromReference(transaction.reference);
-  if (!clinicId || !(await clinicExists(clinicId))) {
+  const parsedRef = parseBillingReference(transaction.reference);
+  if (!parsedRef || !(await clinicExists(parsedRef.clinicId))) {
     // No es un error nuestro necesariamente (podría ser tráfico de prueba
     // del Dashboard de Wompi con una referencia inventada) — se acusa
     // recibo igual, sin reintentos.
     logger.warn("wompi_webhook.unknown_reference", { reference: transaction.reference });
     return NextResponse.json({ ok: true, skipped: true });
   }
+  const { clinicId, plan } = parsedRef;
 
   const { isNew } = await recordBillingEvent({
     clinicId,
@@ -95,7 +96,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   if (isNew && transaction.status === "APPROVED") {
-    await activateBilling(clinicId, transaction.payment_source_id ?? null);
+    await activateBilling(clinicId, plan, transaction.payment_source_id ?? null);
   }
 
   return NextResponse.json({ ok: true });

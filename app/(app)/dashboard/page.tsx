@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listTodayAppointments } from "@/lib/db/appointments";
 import { countPendingReports } from "@/lib/db/reports";
 import { listOpenRiskAlerts, type RiskAlert } from "@/lib/db/risk-alerts";
+import { listPhq9RiskAlerts, type Phq9RiskAlert } from "@/lib/db/assessments";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
@@ -35,7 +36,7 @@ async function patientCount(): Promise<number> {
   return count ?? 0;
 }
 
-function RiskAlertItem({ alert, href }: { alert: RiskAlert; href: string }) {
+function SessionRiskAlertItem({ alert, href }: { alert: RiskAlert; href: string }) {
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm">
       <Link href={href} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -67,21 +68,35 @@ function RiskAlertItem({ alert, href }: { alert: RiskAlert; href: string }) {
   );
 }
 
+function Phq9RiskAlertItem({ alert }: { alert: Phq9RiskAlert }) {
+  return (
+    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm">
+      <Link href={`/patients/${alert.patientId}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <span className="font-medium text-navy">{alert.patientName}</span>
+        <Badge variant="secondary" className="bg-coral/15 text-[11px] text-destructive">
+          Autolesión · PHQ-9
+        </Badge>
+      </Link>
+    </li>
+  );
+}
+
 export default async function DashboardPage() {
   const user = await getSessionUser();
   const isClinician = user?.role === "admin" || user?.role === "doctor";
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
-  const [patients, todayAppts, pendingReports, patientsNoConsent, allRiskAlerts] = await Promise.all([
-    patientCount(),
-    listTodayAppointments(),
-    isClinician ? countPendingReports() : Promise.resolve(0),
-    countPatientsWithoutConsent(),
-    isClinician ? listOpenRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
-  ]);
+  const [patients, todayAppts, pendingReports, patientsNoConsent, sessionAlerts, phq9Alerts] =
+    await Promise.all([
+      patientCount(),
+      listTodayAppointments(),
+      isClinician ? countPendingReports() : Promise.resolve(0),
+      countPatientsWithoutConsent(),
+      isClinician ? listOpenRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
+      isClinician ? listPhq9RiskAlerts() : Promise.resolve<Phq9RiskAlert[]>([]),
+    ]);
 
-  const sessionAlerts = allRiskAlerts.filter((a) => a.source === "session_analysis");
-  const phq9Alerts = allRiskAlerts.filter((a) => a.source === "phq9_self_report");
+  const allRiskAlerts = [...sessionAlerts, ...phq9Alerts];
 
   const firstName = user?.fullName.split(" ")[0] ?? "";
 
@@ -113,7 +128,11 @@ export default async function DashboardPage() {
               </h3>
               <ul className="space-y-2" aria-labelledby="risk-alerts-ia-heading">
                 {sessionAlerts.slice(0, 5).map((a) => (
-                  <RiskAlertItem key={a.id} alert={a} href={`/consultations/${a.consultationId}`} />
+                  <SessionRiskAlertItem
+                    key={a.id}
+                    alert={a}
+                    href={`/consultations/${a.consultationId}`}
+                  />
                 ))}
               </ul>
               <p className="mt-3 text-xs text-muted-foreground">
@@ -134,7 +153,7 @@ export default async function DashboardPage() {
               </h3>
               <ul className="space-y-2" aria-labelledby="risk-alerts-phq9-heading">
                 {phq9Alerts.slice(0, 5).map((a) => (
-                  <RiskAlertItem key={a.id} alert={a} href={`/patients/${a.patientId}`} />
+                  <Phq9RiskAlertItem key={a.assessmentId} alert={a} />
                 ))}
               </ul>
               <p className="mt-3 text-xs text-muted-foreground">

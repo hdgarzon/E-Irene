@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "@/lib/crypto";
+import { sha256 } from "@/lib/consent";
+import { isPhq9SelfHarmRisk } from "@/lib/psychometrics";
 import type { AssessmentType, AssessmentResult } from "@/lib/psychometrics";
 import type { LatestAssessment } from "@/lib/clinical-state";
 
@@ -76,6 +78,93 @@ export async function createAssessmentViaLink(
     .single();
   if (error) throw error;
   return mapRow(data as unknown as AssessmentRow);
+}
+
+/**
+ * Busca la escala asociada a un link público por su token en claro. Se usa
+ * desde la página de agradecimiento, donde el link ya puede estar marcado
+ * como completado. Usa service-role porque es una ruta pública sin sesión.
+ */
+export async function getAssessmentByLinkToken(token: string): Promise<Assessment | null> {
+  const admin = createAdminClient();
+  const tokenHash = sha256(token);
+  const { data, error } = await admin
+    .from("patient_links")
+    .select("psychometric_assessments(id, patient_id, type, payload_enc, administered_at)")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const assessments = (
+    data as unknown as {
+      psychometric_assessments: AssessmentRow[] | null;
+    }
+  ).psychometric_assessments;
+  if (!assessments || assessments.length === 0) return null;
+  return mapRow(assessments[0]);
+}
+
+export interface Phq9RiskAlert {
+  assessmentId: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+}
+
+/** Lógica pura de filtrado — extraída para poder testear sin base de datos. */
+export function isPhq9RiskPayload(type: AssessmentType, payloadEnc: string): boolean {
+  try {
+    const result = JSON.parse(decrypt(payloadEnc)) as AssessmentResult;
+    return isPhq9SelfHarmRisk(type, result.answers);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Alertas de riesgo por PHQ-9 autorreportado vía link público. Recalcula el
+ * riesgo al leer (sin columna de estado persistida), igual que el patrón de
+ * `listOpenRiskAlerts` para reportes de IA. Omite filas con descifrado
+ * fallido sin romper toda la lista.
+ */
+export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("psychometric_assessments")
+    .select(
+      "id, patient_id, type, payload_enc, administered_at, " +
+        "patients!psychometric_assessments_patient_id_fkey(full_name_enc)",
+    )
+    .eq("type", "phq9")
+    .not("link_id", "is", null)
+    .order("administered_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const rows = data as unknown as (AssessmentRow & {
+    patients: { full_name_enc: string } | null;
+  })[];
+  const alerts: Phq9RiskAlert[] = [];
+  for (const r of rows) {
+    const isRisk = isPhq9RiskPayload(r.type, r.payload_enc);
+    if (!isRisk) continue;
+
+    let patientName = "(nombre no disponible)";
+    if (r.patients?.full_name_enc) {
+      try {
+        patientName = decrypt(r.patients.full_name_enc);
+      } catch {
+        // se mantiene el placeholder
+      }
+    }
+    alerts.push({
+      assessmentId: r.id,
+      patientId: r.patient_id,
+      patientName,
+      date: r.administered_at,
+    });
+  }
+  return alerts;
 }
 
 /** Historial de escalas del paciente, cronológico (más antigua primero). */

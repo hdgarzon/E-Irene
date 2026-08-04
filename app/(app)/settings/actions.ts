@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { addMember } from "@/lib/db/team";
@@ -8,6 +9,7 @@ import { getClinicOverview, setClinicPlan } from "@/lib/db/clinic";
 import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
+import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
 
 export type MemberState = {
   ok?: boolean;
@@ -89,4 +91,56 @@ export async function changePlanAction(plan: Plan): Promise<void> {
   revalidatePath("/settings/plan");
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+}
+
+export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
+  const user = await requireRole(["admin"]);
+  const overview = await getClinicOverview();
+  if (overview.plan === plan) {
+    redirect("/settings/plan");
+  }
+
+  const amountInCents = PLANS[plan].priceInCents;
+  if (amountInCents <= 0) {
+    // Plan gratis: se cambia inmediatamente sin pasar por Wompi.
+    await setClinicPlan(user.clinicId, plan);
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "plan.downgraded_to_free",
+      entityType: "clinic",
+      entityId: user.clinicId,
+      metadata: { plan },
+    });
+    revalidatePath("/settings/plan");
+    return;
+  }
+
+  const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/settings/plan?wompi=return`;
+
+  try {
+    const checkout = await createWompiCheckout({
+      clinicId: user.clinicId,
+      plan,
+      redirectUrl,
+      userEmail: user.email,
+    });
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "billing.checkout_initiated",
+      entityType: "clinic",
+      entityId: user.clinicId,
+      metadata: { plan, reference: checkout.reference, transactionId: checkout.transactionId },
+    });
+    redirect(checkout.checkoutUrl);
+  } catch (error) {
+    logger.error("billing.checkout_initiate_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      plan,
+      error,
+    });
+    redirect("/settings/plan?wompi=error");
+  }
 }

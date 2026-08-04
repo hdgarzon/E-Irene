@@ -92,14 +92,23 @@ export function verifyWompiChecksum(params: {
 // (Fase 2) y que Wompi nos devuelve tal cual en cada evento. Lo usamos para
 // saber a qué clínica pertenece la transacción.
 
-const REFERENCE_PREFIX = "planupgrade";
-const REFERENCE_RE = /^planupgrade-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-\d+$/i;
+import type { Plan } from "@/lib/plans";
 
-export function buildBillingReference(clinicId: string): string {
-  return `${REFERENCE_PREFIX}-${clinicId}-${Date.now()}`;
+const REFERENCE_PREFIX = "planupgrade";
+const REFERENCE_RE =
+  /^planupgrade-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(free|pro|clinica|enterprise)-\d+$/i;
+
+export interface BillingReference {
+  clinicId: string;
+  plan: Plan;
 }
 
-export function parseClinicIdFromReference(reference: string): string | null {
+export function buildBillingReference(clinicId: string, plan: Plan): string {
+  return `${REFERENCE_PREFIX}-${clinicId}-${plan}-${Date.now()}`;
+}
+
+export function parseBillingReference(reference: string): BillingReference | null {
   const match = REFERENCE_RE.exec(reference);
-  return match ? match[1] : null;
+  if (!match) return null;
+  return { clinicId: match[1], plan: match[2] as Plan };
 }

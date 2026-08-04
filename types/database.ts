@@ -172,6 +172,53 @@ export type Database = {
           },
         ]
       }
+      billing_scheduled_charges: {
+        Row: {
+          amount_in_cents: number
+          charged_at: string | null
+          clinic_id: string
+          created_at: string
+          due_at: string
+          failure_reason: string | null
+          id: string
+          plan: string
+          status: string
+          wompi_transaction_id: string | null
+        }
+        Insert: {
+          amount_in_cents: number
+          charged_at?: string | null
+          clinic_id: string
+          created_at?: string
+          due_at: string
+          failure_reason?: string | null
+          id?: string
+          plan: string
+          status?: string
+          wompi_transaction_id?: string | null
+        }
+        Update: {
+          amount_in_cents?: number
+          charged_at?: string | null
+          clinic_id?: string
+          created_at?: string
+          due_at?: string
+          failure_reason?: string | null
+          id?: string
+          plan?: string
+          status?: string
+          wompi_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_scheduled_charges_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_doctors: {
         Row: {
           clinic_id: string

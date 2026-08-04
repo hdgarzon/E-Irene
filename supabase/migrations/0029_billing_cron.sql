@@ -1,0 +1,8 @@
+-- Fase 3 de facturación: cron diario para cobros recurrentes.
+--
+-- NOTA: en este proyecto el cron se ejecuta mediante Vercel Cron Jobs
+-- (configurados en `vercel.json`), no desde Postgres. Esto evita depender de
+-- extensiones como pg_net que no exponen tipos estables en Supabase.
+--
+-- Vercel llamará a POST /api/cron/billing todos los días a las 6 AM UTC.
+-- El endpoint está protegido por la variable de entorno CRON_SECRET.

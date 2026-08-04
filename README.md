@@ -4,7 +4,9 @@ Plataforma clínica SaaS multi-tenant para profesionales de salud mental. Transc
 en vivo, las analiza con IA y genera reportes clínicos, bajo cumplimiento legal colombiano
 (Habeas Data, consentimiento digital, historia clínica electrónica).
 
-> **Estado:** Fases 1-4 implementadas (modo demo, sin API keys requeridas).
+> **Estado:** Fases 1-4 implementadas. Facturación Wompi Fases 1-3 implementadas
+> (webhook + checkout + cobro recurrente). Las API keys externas son opcionales;
+> sin ellas la app corre en modo demo/mock.
 > Ver [docs/superpowers/plans](docs/superpowers/plans) para el detalle de cada fase.
 
 ## Funcionalidades
@@ -66,6 +68,8 @@ npm run dev   # http://localhost:3000
 Las API keys de Deepgram/OpenAI/Resend son **opcionales**: si se dejan vacías, la app funciona
 en modo demo (mock). Al añadirlas en `.env.local` se activan los proveedores reales.
 
+Para cobros reales, configurá también las variables de Wompi (ver sección Facturación).
+
 ## Scripts
 
 | Comando | Descripción |
@@ -92,11 +96,36 @@ tests/            Vitest (unit + RLS) y Playwright (E2E)
 docs/             Spec, planes y diseño original
 ```
 
+## Facturación (Wompi)
+
+El flujo de pago usa [Wompi Colombia](https://wompi.co):
+
+- **Fase 1 — Webhook:** `POST /api/webhooks/wompi` recibe `transaction.updated`, verifica
+  la firma con `WOMPI_EVENTS_SECRET` y activa el plan en `APPROVED`.
+- **Fase 2 — Checkout:** `/settings/plan` redirige a Wompi para pagar. La referencia incluye
+  `planupgrade-<clinicId>-<plan>-<timestamp>`.
+- **Fase 3 — Recurrente:** Vercel Cron Jobs dispara `POST /api/cron/billing` diariamente a las 6 AM,
+  cobrando el `payment_source_id` tokenizado de cada clínica activa.
+
+Variables necesarias:
+
+```bash
+WOMPI_EVENTS_SECRET=      # secreto de eventos del Dashboard de Wompi
+WOMPI_PUBLIC_KEY=         # llave pública del Dashboard
+WOMPI_PRIVATE_KEY=        # llave privada del Dashboard
+WOMPI_ENVIRONMENT=sandbox # sandbox | production
+CRON_SECRET=              # protege /api/cron/billing
+```
+
+**Importante:** validar el algoritmo de firma del webhook con un evento real del sandbox antes
+ de activar cobros en producción. Ver comentarios en `lib/billing/wompi.ts`.
+
 ## Seguridad y cumplimiento
 
 - **Aislamiento por clínica** vía RLS (testeado en `tests/rls.test.ts`).
 - **PII cifrada** en reposo (AES-256-GCM) + TLS en tránsito.
 - **audit_logs inmutable** (solo INSERT; trigger bloquea UPDATE/DELETE).
+- **billing_events** y **billing_scheduled_charges** son inmutables (solo INSERT).
 - **Consentimiento digital** con hash + firma + IP/UA (Ley 527).
 - El **audio nunca se persiste**: WebRTC → Deepgram directo; el servidor solo recibe texto.
 - Las sugerencias de IA **no constituyen diagnóstico** (disclaimers visibles).

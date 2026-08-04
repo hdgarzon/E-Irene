@@ -4,7 +4,7 @@ import {
   verifyWompiChecksum,
   extractWompiTimestamp,
   buildBillingReference,
-  parseClinicIdFromReference,
+  parseBillingReference,
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 
@@ -90,14 +90,15 @@ describe("wompi (verificación de firma de webhooks) — SOLO consistencia inter
     expect(extractWompiTimestamp(payload)).toBeNull();
   });
 
-  it("buildBillingReference/parseClinicIdFromReference son inversas", () => {
+  it("buildBillingReference/parseBillingReference son inversas", () => {
     const clinicId = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
-    const reference = buildBillingReference(clinicId);
-    expect(parseClinicIdFromReference(reference)).toBe(clinicId);
+    const reference = buildBillingReference(clinicId, "pro");
+    expect(parseBillingReference(reference)).toEqual({ clinicId, plan: "pro" });
   });
 
-  it("parseClinicIdFromReference devuelve null para una referencia con formato inválido", () => {
-    expect(parseClinicIdFromReference("algo-inventado")).toBeNull();
-    expect(parseClinicIdFromReference("planupgrade-no-es-un-uuid-123")).toBeNull();
+  it("parseBillingReference devuelve null para una referencia con formato inválido", () => {
+    expect(parseBillingReference("algo-inventado")).toBeNull();
+    expect(parseBillingReference("planupgrade-no-es-un-uuid-123")).toBeNull();
+    expect(parseBillingReference("planupgrade-6550747c-13a0-4cfb-a88a-b1cb9bb99952-999")).toBeNull();
   });
 });

@@ -3,6 +3,8 @@ export type Plan = "free" | "pro" | "clinica" | "enterprise";
 export interface PlanLimits {
   label: string;
   price: string;
+  /** Precio mensual en centavos para Wompi (COP). 0 = gratis. */
+  priceInCents: number;
   maxDoctors: number;
   maxPatients: number;
   transcriptionHours: number;
@@ -21,6 +23,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
   free: {
     label: "Free",
     price: "$0/mes",
+    priceInCents: 0,
     maxDoctors: 1,
     maxPatients: 5,
     transcriptionHours: 2,
@@ -31,6 +34,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
   pro: {
     label: "Professional",
     price: "$29/mes",
+    priceInCents: 2_900_000,
     maxDoctors: 1,
     maxPatients: Infinity,
     transcriptionHours: 20,
@@ -41,6 +45,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
   clinica: {
     label: "Plus",
     price: "$59/mes",
+    priceInCents: 5_900_000,
     maxDoctors: 5,
     maxPatients: Infinity,
     transcriptionHours: 100,
@@ -51,6 +56,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
   enterprise: {
     label: "Clinic",
     price: "$149/mes",
+    priceInCents: 14_900_000,
     maxDoctors: Infinity,
     maxPatients: Infinity,
     transcriptionHours: Infinity,
