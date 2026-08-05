@@ -94,7 +94,7 @@ export async function changePlanAction(plan: Plan): Promise<void> {
 }
 
 export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
-  const user = await requireRole(["admin"]);
+  const user = await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
   if (overview.plan === plan) {
     redirect("/settings/plan");

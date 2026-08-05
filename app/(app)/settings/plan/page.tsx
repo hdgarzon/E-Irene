@@ -11,7 +11,7 @@ interface PlanPageProps {
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
   const { wompi } = await searchParams;
 

@@ -25,7 +25,8 @@ function UsageBar({ used, max, label }: { used: number; max: number; label: stri
 }
 
 export default async function SettingsPage() {
-  const user = await requireRole(["admin"]);
+  const user = await requireRole(["admin", "doctor"]);
+  const isAdmin = user.role === "admin";
   const overview = await getClinicOverview();
   const limits = PLANS[overview.plan];
 
@@ -50,23 +51,25 @@ export default async function SettingsPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Link
-          href="/settings/team"
-          className="flex items-center justify-between rounded-2xl border border-gray-line bg-card p-5 transition-shadow hover:shadow-md"
-        >
-          <span className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-cloud">
-              <Users className="size-5 text-purple" />
-            </span>
-            <span>
-              <span className="block font-medium text-navy">Equipo</span>
-              <span className="text-xs text-muted-foreground">
-                {overview.memberCount} miembro{overview.memberCount === 1 ? "" : "s"}
+        {isAdmin && (
+          <Link
+            href="/settings/team"
+            className="flex items-center justify-between rounded-2xl border border-gray-line bg-card p-5 transition-shadow hover:shadow-md"
+          >
+            <span className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-cloud">
+                <Users className="size-5 text-purple" />
+              </span>
+              <span>
+                <span className="block font-medium text-navy">Equipo</span>
+                <span className="text-xs text-muted-foreground">
+                  {overview.memberCount} miembro{overview.memberCount === 1 ? "" : "s"}
+                </span>
               </span>
             </span>
-          </span>
-          <ChevronRight className="size-4 text-muted-foreground" />
-        </Link>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+        )}
 
         <Link
           href="/settings/plan"
