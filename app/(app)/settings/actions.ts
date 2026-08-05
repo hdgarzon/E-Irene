@@ -131,7 +131,7 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
       action: "billing.checkout_initiated",
       entityType: "clinic",
       entityId: user.clinicId,
-      metadata: { plan, reference: checkout.reference, transactionId: checkout.transactionId },
+      metadata: { plan, reference: checkout.reference, paymentLinkId: checkout.paymentLinkId },
     });
     redirect(checkout.checkoutUrl);
   } catch (error) {

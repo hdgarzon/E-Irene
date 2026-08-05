@@ -14,9 +14,9 @@ describe("createWompiCheckout", () => {
         text: async () =>
           JSON.stringify({
             data: {
-              id: "tx-123",
+              id: "pl-123",
               status: "PENDING",
-              redirect_url: "https://checkout.wompi.co/tx-123",
+              url: "https://checkout.wompi.co/pl-123",
             },
           }),
       })) as unknown as typeof fetch,
@@ -45,12 +45,12 @@ describe("createWompiCheckout", () => {
       userEmail: "test@example.com",
     });
 
-    expect(result.transactionId).toBe("tx-123");
-    expect(result.checkoutUrl).toBe("https://checkout.wompi.co/tx-123");
+    expect(result.paymentLinkId).toBe("pl-123");
+    expect(result.checkoutUrl).toBe("https://checkout.wompi.co/pl-123");
     expect(result.reference).toMatch(/^planupgrade-6550747c-13a0-4cfb-a88a-b1cb9bb99952-pro-\d+$/);
 
     const fetchCall = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(fetchCall[0]).toBe("https://sandbox.wompi.co/v1/transactions");
+    expect(fetchCall[0]).toBe("https://sandbox.wompi.co/v1/payment_links");
     const body = JSON.parse(fetchCall[1].body);
     expect(body.amount_in_cents).toBe(2_900_000);
     expect(body.currency).toBe("COP");
