@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
 import { chargeClinic } from "@/lib/billing/recurring";
+import { periodKeyFor } from "@/lib/db/billing";
 
 describe("createWompiCheckout", () => {
   beforeEach(() => {
@@ -192,5 +193,42 @@ describe("chargeClinic", () => {
 
     expect(result.success).toBe(false);
     expect(result.status).toBe("DECLINED");
+  });
+
+  it("PENDING no se reporta como fallo (PSE/Nequi en curso — cobrarlo de nuevo sería doble cobro)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { id: "tx-pse-1", status: "PENDING" } }),
+      })) as unknown as typeof fetch,
+    );
+
+    const result = await chargeClinic({
+      id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+      plan: "pro",
+      currentPeriodEnd: "2026-01-01T00:00:00.000Z",
+      wompiPaymentSourceId: "ps-123",
+    });
+
+    expect(result.pending).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.transactionId).toBe("tx-pse-1");
+  });
+});
+
+describe("periodKeyFor (idempotencia del cobro recurrente)", () => {
+  it("deriva la clave del período vigente, no de la fecha de ejecución", () => {
+    // Dos corridas del cron en días distintos, sobre la misma clínica sin
+    // renovar, deben producir la MISMA clave → el índice único de la BD
+    // detecta el intento repetido y no se vuelve a cobrar.
+    expect(periodKeyFor("2026-09-15T00:00:00.000Z")).toBe("2026-09-15");
+    expect(periodKeyFor("2026-09-15T23:59:59.000Z")).toBe("2026-09-15");
+  });
+
+  it("cae a la fecha de hoy si la clínica no tiene período previo", () => {
+    const key = periodKeyFor(null);
+    expect(key).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

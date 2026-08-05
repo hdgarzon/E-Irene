@@ -181,6 +181,7 @@ export type Database = {
           due_at: string
           failure_reason: string | null
           id: string
+          period_key: string
           plan: string
           status: string
           wompi_transaction_id: string | null
@@ -193,6 +194,7 @@ export type Database = {
           due_at: string
           failure_reason?: string | null
           id?: string
+          period_key?: string
           plan: string
           status?: string
           wompi_transaction_id?: string | null
@@ -205,6 +207,7 @@ export type Database = {
           due_at?: string
           failure_reason?: string | null
           id?: string
+          period_key?: string
           plan?: string
           status?: string
           wompi_transaction_id?: string | null
