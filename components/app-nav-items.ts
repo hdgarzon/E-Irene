@@ -24,5 +24,5 @@ export const NAV: NavItem[] = [
   { href: "/appointments", label: "Agenda", icon: CalendarDays, roles: ["admin", "doctor", "secretaria"], enabled: true },
   { href: "/consultations", label: "Consultas", icon: Mic, roles: ["admin", "doctor"], enabled: true },
   { href: "/reports", label: "Reportes", icon: FileText, roles: ["admin", "doctor"], enabled: true },
-  { href: "/settings", label: "Configuración", icon: Settings, roles: ["admin"], enabled: true },
+  { href: "/settings", label: "Configuración", icon: Settings, roles: ["admin", "doctor"], enabled: true },
 ];
