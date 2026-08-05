@@ -4,9 +4,16 @@ import { logger } from "@/lib/logger";
 
 /**
  * Endpoint de cron para cobros recurrentes. Protegido por CRON_SECRET en el
- * header Authorization. Lo dispara pg_cron diariamente.
+ * header Authorization — Vercel lo agrega automáticamente en cada invocación
+ * (ver https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
+ * Lo dispara Vercel Cron Jobs diariamente (vercel.json), NO pg_cron.
+ *
+ * DEBE ser GET: Vercel Cron Jobs siempre invoca por HTTP GET, nunca POST —
+ * confirmado contra la documentación oficial. Con POST este endpoint nunca
+ * se ejecuta (404/405 silencioso, sin reintento — Vercel no reintenta cron
+ * jobs fallidos), que es exactamente lo que estaba pasando antes de este fix.
  */
-export async function POST(request: Request): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
     logger.error("cron_billing.missing_secret");

@@ -86,7 +86,7 @@ export default async function DashboardPage() {
   const isClinician = user?.role === "admin" || user?.role === "doctor";
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
-  const [patients, todayAppts, pendingReports, patientsNoConsent, sessionAlerts, phq9Alerts] =
+  const [patients, todayAppts, pendingReports, patientsNoConsent, persistedAlerts, phq9Alerts] =
     await Promise.all([
       patientCount(),
       listTodayAppointments(),
@@ -96,6 +96,11 @@ export default async function DashboardPage() {
       isClinician ? listPhq9RiskAlerts() : Promise.resolve<Phq9RiskAlert[]>([]),
     ]);
 
+  // listOpenRiskAlerts() ya trae AMBAS fuentes (unificadas en risk_alerts,
+  // ver migración 0026) — hay que filtrar antes de renderizar como "De
+  // consultas (IA)", si no, una alerta phq9_self_report con
+  // consultationId=null termina con un link roto a /consultations/null.
+  const sessionAlerts = persistedAlerts.filter((a) => a.source === "session_analysis");
   const allRiskAlerts = [...sessionAlerts, ...phq9Alerts];
 
   const firstName = user?.fullName.split(" ")[0] ?? "";

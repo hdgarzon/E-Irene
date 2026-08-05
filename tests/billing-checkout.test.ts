@@ -56,6 +56,50 @@ describe("createWompiCheckout", () => {
     expect(body.currency).toBe("COP");
     expect(body.reference).toBe(result.reference);
     expect(body.redirect_url).toBe("https://e-irene.co/settings/plan?wompi=return");
+    // Requeridos por Wompi — su ausencia causó un 422 INPUT_VALIDATION_ERROR
+    // real en producción (2026-08-05) porque el mock de este test siempre
+    // devolvía éxito y nunca lo hubiera atrapado sin esta aserción explícita.
+    expect(body.single_use).toBe(true);
+    expect(body.collect_shipping).toBe(false);
+  });
+
+  it("regresión: reproduce el 422 real de producción si vuelven a faltar single_use/collect_shipping", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: { body: string }) => {
+        const sent = JSON.parse(init.body);
+        const missing: string[] = [];
+        if (sent.single_use === undefined) missing.push("single_use");
+        if (sent.collect_shipping === undefined) missing.push("collect_shipping");
+        if (missing.length > 0) {
+          return {
+            ok: false,
+            status: 422,
+            text: async () =>
+              JSON.stringify({
+                error: {
+                  type: "INPUT_VALIDATION_ERROR",
+                  messages: Object.fromEntries(missing.map((m) => [m, ["No está presente"]])),
+                },
+              }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({ data: { id: "pl-123", status: "PENDING", url: "https://checkout.wompi.co/pl-123" } }),
+        };
+      }) as unknown as typeof fetch,
+    );
+
+    await expect(
+      createWompiCheckout({
+        clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+        plan: "pro",
+        redirectUrl: "https://e-irene.co/settings/plan?wompi=return",
+      }),
+    ).resolves.toMatchObject({ paymentLinkId: "pl-123" });
   });
 
   it("throws when Wompi returns an error", async () => {

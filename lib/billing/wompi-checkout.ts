@@ -53,6 +53,14 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   const body = {
     name: `Plan ${PLANS[input.plan].label} · E-Irene`,
     description: `Suscripción mensual al plan ${PLANS[input.plan].label}`,
+    // Requeridos por Wompi (POST /v1/payment_links devuelve 422
+    // INPUT_VALIDATION_ERROR sin ellos, confirmado contra la respuesta real
+    // en producción — no son opcionales pese a lo que dice la doc pública).
+    // single_use=true: un link = un cobro, no queremos que el mismo link de
+    // "mejorar a Pro" sirva para pagar dos veces. collect_shipping=false:
+    // E-Irene es un servicio, no hay nada que enviar.
+    single_use: true,
+    collect_shipping: false,
     amount_in_cents: amountInCents,
     currency: "COP",
     reference,
