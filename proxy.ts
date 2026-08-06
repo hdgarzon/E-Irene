@@ -24,7 +24,13 @@ const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad"]);
 // traen sesión de usuario. NO desprotegido: cada handler bajo /api/webhooks
 // verifica su propia firma criptográfica (ver app/api/webhooks/wompi/route.ts)
 // en vez de depender de una cookie de sesión que el emisor no puede tener.
-const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join", "/api/webhooks"];
+// /api/cron: invocaciones de Vercel Cron Jobs, igual de "sin sesión". Se
+// protegen con CRON_SECRET, que Vercel envía como header Authorization.
+// Crítico que estén acá: los cron jobs de Vercel NO siguen redirects — un
+// 307 hacia /login no es un fallo visible, la invocación simplemente termina
+// y el cobro recurrente nunca corre
+// (https://vercel.com/docs/cron-jobs/manage-cron-jobs#cron-jobs-and-redirects).
+const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join", "/api/webhooks", "/api/cron"];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;
