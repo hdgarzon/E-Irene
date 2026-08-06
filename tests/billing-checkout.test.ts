@@ -7,6 +7,9 @@ describe("createWompiCheckout", () => {
   beforeEach(() => {
     process.env.WOMPI_PRIVATE_KEY = "test_private_key";
     process.env.WOMPI_ENVIRONMENT = "sandbox";
+    // El mock NO incluye un campo `url`: la respuesta real de Wompi tampoco
+    // lo trae. El mock anterior lo inventaba, y por eso este test pasaba
+    // mientras el checkout fallaba en producción.
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -14,11 +17,7 @@ describe("createWompiCheckout", () => {
         status: 200,
         text: async () =>
           JSON.stringify({
-            data: {
-              id: "pl-123",
-              status: "PENDING",
-              url: "https://checkout.wompi.co/pl-123",
-            },
+            data: { id: "pl-123", active: true },
           }),
       })) as unknown as typeof fetch,
     );
@@ -47,7 +46,7 @@ describe("createWompiCheckout", () => {
     });
 
     expect(result.paymentLinkId).toBe("pl-123");
-    expect(result.checkoutUrl).toBe("https://checkout.wompi.co/pl-123");
+    expect(result.checkoutUrl).toBe("https://checkout.wompi.co/l/pl-123");
     expect(result.reference).toMatch(/^planupgrade-6550747c-13a0-4cfb-a88a-b1cb9bb99952-pro-\d+$/);
 
     const fetchCall = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -62,6 +61,42 @@ describe("createWompiCheckout", () => {
     // devolvía éxito y nunca lo hubiera atrapado sin esta aserción explícita.
     expect(body.single_use).toBe(true);
     expect(body.collect_shipping).toBe(false);
+  });
+
+  it("construye la URL de pago desde el id (Wompi no la devuelve en la respuesta)", async () => {
+    // Regresión del segundo fallo real en producción (2026-08-06): el link SE
+    // CREABA correctamente (200 OK), pero el código buscaba un campo
+    // `url`/`checkout_url` que la respuesta de Wompi nunca incluye, así que
+    // abortaba un checkout perfectamente válido. El mock replica la forma
+    // exacta de la respuesta real, sin campo de URL.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: {
+              id: "test_ikE08d",
+              name: "Plan Professional · E-Irene",
+              amount_in_cents: 2_900_000,
+              currency: "COP",
+              single_use: true,
+              collect_shipping: false,
+              active: true,
+            },
+          }),
+      })) as unknown as typeof fetch,
+    );
+
+    const result = await createWompiCheckout({
+      clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+      plan: "pro",
+      redirectUrl: "https://e-irene.co/settings/plan?wompi=return",
+    });
+
+    expect(result.checkoutUrl).toBe("https://checkout.wompi.co/l/test_ikE08d");
+    expect(result.paymentLinkId).toBe("test_ikE08d");
   });
 
   it("regresión: reproduce el 422 real de producción si vuelven a faltar single_use/collect_shipping", async () => {

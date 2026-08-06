@@ -7,6 +7,10 @@ const WOMPI_BASE = {
   production: "https://production.wompi.co/v1",
 };
 
+/** Checkout público de Wompi. Único para sandbox y producción: el modo lo
+ *  determina el prefijo del id del payment link (`test_` = pruebas). */
+const WOMPI_CHECKOUT_BASE = "https://checkout.wompi.co/l";
+
 export interface WompiCheckoutInput {
   clinicId: string;
   plan: Plan;
@@ -99,25 +103,27 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
     data?: {
       id?: string;
       status?: string;
-      url?: string;
-      payment_link_url?: string;
-      checkout_url?: string;
     };
   } | null;
 
   const paymentLinkId = data?.data?.id;
-  const status = data?.data?.status ?? "UNKNOWN";
-  const checkoutUrl =
-    data?.data?.url ?? data?.data?.payment_link_url ?? data?.data?.checkout_url;
+  const status = data?.data?.status ?? "CREATED";
 
-  if (!paymentLinkId || !checkoutUrl) {
+  if (!paymentLinkId) {
     logger.error("wompi.checkout_unexpected_response", {
       clinicId: input.clinicId,
       plan: input.plan,
       response: responseText.slice(0, 500),
     });
-    throw new Error("La respuesta de Wompi no incluyó el id del link o la URL de pago");
+    throw new Error("La respuesta de Wompi no incluyó el id del payment link");
   }
+
+  // La respuesta de Wompi NO trae la URL de pago: el comercio la construye a
+  // partir del id (https://docs.wompi.co/en/docs/colombia/links-de-pago/).
+  // El mismo dominio sirve sandbox y producción — lo que determina el modo es
+  // el prefijo del id (`test_...`), verificado abriendo un link real de
+  // sandbox: muestra "MODO DE PRUEBAS" y el monto correcto.
+  const checkoutUrl = `${WOMPI_CHECKOUT_BASE}/${paymentLinkId}`;
 
   logger.info("wompi.checkout_created", {
     clinicId: input.clinicId,

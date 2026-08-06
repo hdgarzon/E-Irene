@@ -6,6 +6,7 @@ import {
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
+import { PLANS } from "@/lib/plans";
 import { logger } from "@/lib/logger";
 
 /**
@@ -96,6 +97,27 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   if (isNew && transaction.status === "APPROVED") {
+    // Defensa en profundidad: el plan a activar viene de `reference`, que la
+    // generamos nosotros y llega firmada — pero activar un plan sin comprobar
+    // que lo pagado corresponde a su precio deja el sistema a merced de un
+    // solo error (un payment link creado con el monto equivocado, un cambio
+    // de precio a mitad de un checkout ya abierto). El monto es el único dato
+    // que refleja lo que la clínica realmente pagó, así que se compara.
+    const expected = PLANS[plan].priceInCents;
+    if (transaction.amount_in_cents !== expected) {
+      logger.error("wompi_webhook.amount_mismatch", {
+        clinicId,
+        plan,
+        expected,
+        received: transaction.amount_in_cents,
+        transactionId: transaction.id,
+        action: "NO se activó el plan; el pago quedó registrado en billing_events. Conciliar manualmente.",
+      });
+      // 200 a propósito: el evento se procesó y quedó registrado; reintentarlo
+      // no cambiaría nada. Lo que no se hace es activar el plan.
+      return NextResponse.json({ ok: true, planActivated: false });
+    }
+
     await activateBilling(clinicId, plan, transaction.payment_source_id ?? null);
   }
 

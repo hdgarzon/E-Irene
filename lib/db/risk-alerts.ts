@@ -10,6 +10,7 @@ import { getEmailProvider } from "@/lib/email/providers";
 import { buildPhq9RiskAlertEmail } from "@/lib/email/templates";
 import { recordNotificationPublic } from "@/lib/db/notifications";
 import { logAuditPublic } from "@/lib/db/audit";
+import { appBaseUrl } from "@/lib/app-url";
 
 /**
  * Dos fuentes de riesgo, un solo mecanismo de persistencia y acuse de
@@ -261,8 +262,7 @@ export async function alertOnRiskyAssessment(params: {
     if (!isNew) return;
 
     const patientName = patient?.fullName ?? "(nombre no disponible)";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
-    const patientUrl = `${appUrl}/patients/${params.patientId}`;
+    const patientUrl = `${appBaseUrl()}/patients/${params.patientId}`;
 
     const notifyDoctor = async (doctor: DoctorContact): Promise<void> => {
       try {

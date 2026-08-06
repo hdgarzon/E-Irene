@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { sha256 } from "@/lib/consent";
+import { appBaseUrl } from "@/lib/app-url";
 
 /** Días de validez de un link único de paciente antes de expirar. */
 export const PATIENT_LINK_TTL_DAYS = 7;
@@ -18,6 +19,5 @@ export function patientLinkExpiryDate(from: Date = new Date()): Date {
 
 /** URL pública absoluta que se envía al paciente por correo. */
 export function buildPatientLinkUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
-  return `${base}/enlace/${token}`;
+  return `${appBaseUrl()}/enlace/${token}`;
 }

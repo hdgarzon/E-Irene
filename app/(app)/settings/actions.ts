@@ -10,6 +10,7 @@ import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
+import { appBaseUrl } from "@/lib/app-url";
 
 export type MemberState = {
   ok?: boolean;
@@ -116,7 +117,7 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
     return;
   }
 
-  const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/settings/plan?wompi=return`;
+  const redirectUrl = `${appBaseUrl()}/settings/plan?wompi=return`;
 
   try {
     const checkout = await createWompiCheckout({

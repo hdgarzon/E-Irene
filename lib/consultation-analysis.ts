@@ -18,6 +18,7 @@ import { buildReportReadyEmail, buildRiskAlertEmail } from "@/lib/email/template
 import { extractRiskAlertCategories, RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
+import { appBaseUrl } from "@/lib/app-url";
 
 /**
  * Analiza la transcripción de una consulta finalizada y genera el reporte
@@ -91,7 +92,7 @@ export async function runConsultationAnalysis(params: {
         try {
           const doctor = await getMemberContact(consultation.doctorId);
           if (doctor?.email) {
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://e-irene.co";
+            const appUrl = appBaseUrl();
             await getEmailProvider().send(
               buildRiskAlertEmail({
                 to: doctor.email,
