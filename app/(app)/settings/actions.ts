@@ -119,6 +119,13 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
 
   const redirectUrl = `${appBaseUrl()}/settings/plan?wompi=return`;
 
+  // IMPORTANTE: `redirect()` funciona LANZANDO una excepción (NEXT_REDIRECT),
+  // así que no puede ir dentro del `try` — el `catch` la atraparía y trataría
+  // un checkout exitoso como un fallo. Eso es exactamente lo que ocurría:
+  // el payment link se creaba bien y aun así el usuario terminaba en
+  // ?wompi=error. Ver docs de Next.js (redirect): "redirect should be called
+  // outside the try block when using try/catch statements".
+  let checkoutUrl: string | null = null;
   try {
     const checkout = await createWompiCheckout({
       clinicId: user.clinicId,
@@ -134,7 +141,7 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
       entityId: user.clinicId,
       metadata: { plan, reference: checkout.reference, paymentLinkId: checkout.paymentLinkId },
     });
-    redirect(checkout.checkoutUrl);
+    checkoutUrl = checkout.checkoutUrl;
   } catch (error) {
     logger.error("billing.checkout_initiate_failed", {
       clinicId: user.clinicId,
@@ -142,6 +149,8 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
       plan,
       error,
     });
-    redirect("/settings/plan?wompi=error");
   }
+
+  if (!checkoutUrl) redirect("/settings/plan?wompi=error");
+  redirect(checkoutUrl);
 }
