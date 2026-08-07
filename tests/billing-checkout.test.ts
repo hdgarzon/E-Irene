@@ -1,12 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
-import { chargeClinic } from "@/lib/billing/recurring";
-import { periodKeyFor } from "@/lib/db/billing";
+
+// createWompiCheckout persiste el vínculo payment_link → clínica (necesario
+// porque Wompi no devuelve nuestra referencia). Acá solo interesa la llamada
+// a la API de Wompi, así que la escritura en base se aísla.
+const recordCheckout = vi.fn();
+vi.mock("@/lib/db/billing-checkouts", () => ({
+  recordCheckout: (...a: unknown[]) => recordCheckout(...a),
+}));
+
+const { createWompiCheckout } = await import("@/lib/billing/wompi-checkout");
+const { chargeClinic } = await import("@/lib/billing/recurring");
+const { periodKeyFor } = await import("@/lib/db/billing");
 
 describe("createWompiCheckout", () => {
   beforeEach(() => {
     process.env.WOMPI_PRIVATE_KEY = "test_private_key";
     process.env.WOMPI_ENVIRONMENT = "sandbox";
+    recordCheckout.mockReset().mockResolvedValue(undefined);
     // El mock NO incluye un campo `url`: la respuesta real de Wompi tampoco
     // lo trae. El mock anterior lo inventaba, y por eso este test pasaba
     // mientras el checkout fallaba en producción.
@@ -97,6 +107,28 @@ describe("createWompiCheckout", () => {
 
     expect(result.checkoutUrl).toBe("https://checkout.wompi.co/l/test_ikE08d");
     expect(result.paymentLinkId).toBe("test_ikE08d");
+  });
+
+  it("persiste el vínculo payment_link → clínica (sin esto el pago llega sin dueño)", async () => {
+    // Regresión del fallo del 2026-08-07: Wompi descarta nuestra `reference`
+    // en los pagos por payment link y devuelve la suya, así que el id del
+    // link es el ÚNICO hilo que conecta el pago con la clínica. Si no se
+    // guarda, el webhook recibe un pago aprobado que no puede atribuir a
+    // nadie — con la clínica ya cobrada.
+    await createWompiCheckout({
+      clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+      plan: "pro",
+      redirectUrl: "https://e-irene.co/settings/plan",
+    });
+
+    expect(recordCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentLinkId: "pl-123",
+        clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+        plan: "pro",
+        amountInCents: 2_900_000,
+      }),
+    );
   });
 
   it("regresión: reproduce el 422 real de producción si vuelven a faltar single_use/collect_shipping", async () => {
