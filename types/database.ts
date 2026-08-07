@@ -131,6 +131,44 @@ export type Database = {
           },
         ]
       }
+      billing_checkouts: {
+        Row: {
+          amount_in_cents: number
+          clinic_id: string
+          created_at: string
+          id: string
+          plan: string
+          reference: string
+          wompi_payment_link_id: string
+        }
+        Insert: {
+          amount_in_cents: number
+          clinic_id: string
+          created_at?: string
+          id?: string
+          plan: string
+          reference: string
+          wompi_payment_link_id: string
+        }
+        Update: {
+          amount_in_cents?: number
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          plan?: string
+          reference?: string
+          wompi_payment_link_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_checkouts_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_events: {
         Row: {
           amount_in_cents: number

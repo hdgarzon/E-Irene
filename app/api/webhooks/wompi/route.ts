@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import {
   verifyWompiChecksum,
   extractWompiTimestamp,
-  parseBillingReference,
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
+import { resolveTransactionOwner } from "@/lib/db/billing-checkouts";
 import { PLANS } from "@/lib/plans";
 import { logger } from "@/lib/logger";
 
@@ -70,6 +70,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         amount_in_cents: number;
         reference: string;
         payment_source_id: string | null;
+        payment_link_id?: string | null;
       }
     | undefined;
   if (!transaction) {
@@ -77,15 +78,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "missing_transaction" }, { status: 400 });
   }
 
-  const parsedRef = parseBillingReference(transaction.reference);
-  if (!parsedRef || !(await clinicExists(parsedRef.clinicId))) {
-    // No es un error nuestro necesariamente (podría ser tráfico de prueba
-    // del Dashboard de Wompi con una referencia inventada) — se acusa
-    // recibo igual, sin reintentos.
+  // Wompi NO devuelve nuestra `reference` en los pagos por payment link:
+  // genera la suya. La resolución cubre ambos casos (ver
+  // lib/db/billing-checkouts.ts).
+  const owner = await resolveTransactionOwner(transaction);
+  if (!owner || !(await clinicExists(owner.clinicId))) {
+    // Podría ser tráfico de prueba del Dashboard de Wompi con una referencia
+    // ajena — se acusa recibo igual, sin reintentos.
     logger.warn("wompi_webhook.unknown_reference", { reference: transaction.reference });
     return NextResponse.json({ ok: true, skipped: true });
   }
-  const { clinicId, plan } = parsedRef;
+  const { clinicId, plan } = owner;
 
   const { isNew } = await recordBillingEvent({
     clinicId,

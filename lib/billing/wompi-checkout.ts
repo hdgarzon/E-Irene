@@ -1,6 +1,7 @@
 import { PLANS, type Plan } from "@/lib/plans";
 import { logger } from "@/lib/logger";
 import { buildBillingReference } from "./wompi";
+import { recordCheckout } from "@/lib/db/billing-checkouts";
 
 const WOMPI_BASE = {
   sandbox: "https://sandbox.wompi.co/v1",
@@ -124,6 +125,18 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   // el prefijo del id (`test_...`), verificado abriendo un link real de
   // sandbox: muestra "MODO DE PRUEBAS" y el monto correcto.
   const checkoutUrl = `${WOMPI_CHECKOUT_BASE}/${paymentLinkId}`;
+
+  // Se persiste ANTES de devolver la URL: es el único vínculo entre el pago y
+  // la clínica. Wompi descarta nuestra `reference` en los pagos por payment
+  // link y devuelve una propia, así que sin este registro un pago aprobado
+  // llega sin forma de saber a quién pertenece (ver migración 0031).
+  await recordCheckout({
+    paymentLinkId,
+    clinicId: input.clinicId,
+    plan: input.plan,
+    amountInCents,
+    reference,
+  });
 
   logger.info("wompi.checkout_created", {
     clinicId: input.clinicId,

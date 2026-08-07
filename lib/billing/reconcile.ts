@@ -1,7 +1,7 @@
 import { PLANS } from "@/lib/plans";
 import { logger } from "@/lib/logger";
 import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
-import { parseBillingReference } from "./wompi";
+import { resolveTransactionOwner } from "@/lib/db/billing-checkouts";
 
 /**
  * Reconciliación de un pago al volver del checkout.
@@ -87,7 +87,10 @@ export async function reconcilePlanPayment(
   const tx = await fetchWompiTransaction(transactionId);
   if (!tx) return { result: "ignored", reason: "transaccion_no_encontrada" };
 
-  const parsed = parseBillingReference(tx.reference);
+  // Wompi descarta nuestra referencia en los pagos por payment link, así que
+  // la clínica se resuelve por el id del link registrado al crear el checkout
+  // (ver lib/db/billing-checkouts.ts).
+  const parsed = await resolveTransactionOwner(tx);
   if (!parsed) return { result: "ignored", reason: "referencia_no_reconocida" };
 
   // Control de acceso: la transacción debe pertenecer a la clínica que la
