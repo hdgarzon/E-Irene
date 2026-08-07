@@ -14,7 +14,8 @@
 | Control de acceso por rol | admin/doctor/secretaria/paciente | RLS + `requireRole` |
 | Trazabilidad (audit trail) | `audit_logs` **inmutable** (solo INSERT; trigger bloquea UPDATE/DELETE) | migración 0001 |
 | Consentimiento informado | firma + hash SHA-256 del documento + IP + user-agent + timestamp | `lib/consent.ts`, `consents` |
-| Minimización de datos de audio | el audio **nunca se persiste**; solo texto cifrado | flujo de transcripción |
+| Minimización de datos de audio | el audio **nunca se persiste**; solo texto cifrado. Requiere `mip_opt_out=true` en la URL de Deepgram, sin el cual el proveedor persiste audio para entrenar modelos | `lib/providers/deepgram.ts`; test de regresión en `tests/providers.test.ts` |
+| Retención de transcripción | purga automática: 30 días tras validar el reporte, techo duro de 90 días, incluidas consultas abandonadas. Cada purga queda en `audit_logs` y en `transcript_purged_at` | migración 0031 |
 | Firma del profesional en reportes | validación con `validated_by`/`validated_at` | `reports` |
 | Almacenamiento seguro de archivos | buckets privados con RLS por clínica | migración 0003 |
 
@@ -37,7 +38,20 @@
 
 ## Pendiente para producción (no-código)
 
-- Acuerdos de tratamiento de datos / BAA con proveedores de IA y nube.
+- Acuerdos de tratamiento de datos / BAA con proveedores de IA y nube. **Sin ellos, la política de
+  tratamiento no puede afirmar que las transferencias internacionales tienen garantías
+  contractuales** — ver `docs/legal/politica-tratamiento-datos-borrador.md`, sección 4.1.
 - Rotación y custodia de `ENCRYPTION_KEY` en un KMS (hoy en variable de entorno).
-- Política de retención y respaldo de la historia clínica (10–20 años).
+- Política de retención y respaldo de la historia clínica (15 años, Resolución 839 de 2017).
 - Evaluación de impacto y plan de respuesta a incidentes.
+- Inscripción en el Registro Nacional de Bases de Datos (RNBD) ante la SIC, si aplica.
+
+## Brechas conocidas entre lo declarado y lo implementado
+
+| Brecha | Impacto | Estado |
+|---|---|---|
+| **No se verifica que quien se registra sea profesional habilitado** | Cualquiera crea una clínica y accede a historias clínicas | Diseñado, sin implementar — ver spec 2026-08-06 |
+| **No hay aviso de privacidad publicado ni casilla de aceptación** | No existe prueba de que el profesional aceptó la política | Redactado, sin implementar — ver `docs/legal/aviso-privacidad-borrador.md` |
+
+> Documentos legales preliminares en [docs/legal/](legal/). Los controles marcados arriba como
+> "sin implementar" **no deben presentarse como vigentes** ante terceros ni ante la autoridad.
