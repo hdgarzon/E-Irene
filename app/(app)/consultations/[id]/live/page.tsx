@@ -4,7 +4,7 @@ import { getAppointment } from "@/lib/db/appointments";
 import { getTranscriptionProvider } from "@/lib/providers";
 import { getVideoProvider } from "@/lib/video";
 import { DailyVideoProvider } from "@/lib/video/daily";
-import { requireUser } from "@/lib/auth";
+import { requireVerifiedProfessional } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { LiveConsultation } from "@/components/live-consultation";
 
@@ -14,7 +14,8 @@ export default async function LiveConsultationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireUser();
+  // Antes de acuñar el token de Deepgram: sin verificación no se transcribe.
+  const user = await requireVerifiedProfessional();
   const consultation = await getConsultation(id);
   if (!consultation) notFound();
   // Si ya terminó, no se puede volver a grabar.

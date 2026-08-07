@@ -15,7 +15,8 @@
 | Trazabilidad (audit trail) | `audit_logs` **inmutable** (solo INSERT; trigger bloquea UPDATE/DELETE) | migración 0001 |
 | Consentimiento informado | firma + hash SHA-256 del documento + IP + user-agent + timestamp | `lib/consent.ts`, `consents` |
 | Minimización de datos de audio | el audio **nunca se persiste**; solo texto cifrado. Requiere `mip_opt_out=true` en la URL de Deepgram, sin el cual el proveedor persiste audio para entrenar modelos | `lib/providers/deepgram.ts`; test de regresión en `tests/providers.test.ts` |
-| Retención de transcripción | purga automática: 30 días tras validar el reporte, techo duro de 90 días, incluidas consultas abandonadas. Cada purga queda en `audit_logs` y en `transcript_purged_at` | migración 0031 |
+| Retención de transcripción | purga automática: 30 días tras validar el reporte, techo duro de 90 días, incluidas consultas abandonadas. Cada purga queda en `audit_logs` y en `transcript_purged_at` | migración 0033 |
+| Verificación de habilitación profesional | cédula + tarjeta profesional con aprobación manual; RLS `auth_can_access_clinical()` bloquea crear pacientes/consultas sin verificar, y un trigger impide auto-verificarse | migración 0032; `lib/verification.ts` |
 | Firma del profesional en reportes | validación con `validated_by`/`validated_at` | `reports` |
 | Almacenamiento seguro de archivos | buckets privados con RLS por clínica | migración 0003 |
 
@@ -50,8 +51,8 @@
 
 | Brecha | Impacto | Estado |
 |---|---|---|
-| **No se verifica que quien se registra sea profesional habilitado** | Cualquiera crea una clínica y accede a historias clínicas | Diseñado, sin implementar — ver spec 2026-08-06 |
 | **No hay aviso de privacidad publicado ni casilla de aceptación** | No existe prueba de que el profesional aceptó la política | Redactado, sin implementar — ver `docs/legal/aviso-privacidad-borrador.md` |
+| **Cuentas anteriores a la verificación quedaron aprobadas automáticamente** | Nadie revisó sus credenciales | La migración 0032 las marca aparte; revisión retroactiva pendiente en `/admin/verificaciones` |
 
 > Documentos legales preliminares en [docs/legal/](legal/). Los controles marcados arriba como
 > "sin implementar" **no deben presentarse como vigentes** ante terceros ni ante la autoridad.

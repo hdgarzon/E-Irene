@@ -1339,29 +1339,59 @@ export type Database = {
         Row: {
           clinic_id: string
           created_at: string
+          document_enc: string | null
           email: string
           full_name: string
           id: string
+          id_document_path: string | null
+          license_document_path: string | null
+          license_number: string | null
+          profession: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
+          verification_decided_at: string | null
+          verification_notes: string | null
+          verification_status: Database["public"]["Enums"]["verification_status"]
+          verification_submitted_at: string | null
+          verified_by: string | null
         }
         Insert: {
           clinic_id: string
           created_at?: string
+          document_enc?: string | null
           email: string
           full_name: string
           id: string
+          id_document_path?: string | null
+          license_document_path?: string | null
+          license_number?: string | null
+          profession?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          verification_decided_at?: string | null
+          verification_notes?: string | null
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+          verification_submitted_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           clinic_id?: string
           created_at?: string
+          document_enc?: string | null
           email?: string
           full_name?: string
           id?: string
+          id_document_path?: string | null
+          license_document_path?: string | null
+          license_number?: string | null
+          profession?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          verification_decided_at?: string | null
+          verification_notes?: string | null
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+          verification_submitted_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
@@ -1371,6 +1401,13 @@ export type Database = {
             referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "users_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -1378,6 +1415,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auth_can_access_clinical: { Args: never; Returns: boolean }
       auth_clinic_id: { Args: never; Returns: string }
       auth_role: {
         Args: never
@@ -1446,6 +1484,12 @@ export type Database = {
       notification_channel: "email" | "whatsapp"
       notification_status: "pending" | "sent" | "failed"
       user_role: "admin" | "doctor" | "secretaria" | "paciente"
+      verification_status:
+        | "pending_documents"
+        | "pending_review"
+        | "verified"
+        | "rejected"
+        | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never

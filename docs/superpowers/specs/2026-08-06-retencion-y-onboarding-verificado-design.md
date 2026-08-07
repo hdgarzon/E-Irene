@@ -1,7 +1,7 @@
 # Retención de transcripciones y onboarding verificado del profesional
 
 **Fecha:** 2026-08-06
-**Estado:** retención implementada · onboarding diseñado, pendiente de implementar
+**Estado:** implementado y aplicado en producción (migraciones 0032 y 0033, verificadas el 2026-08-07)
 
 ## Problema
 
@@ -63,7 +63,7 @@ La transcripción se suprime cuando ocurre **lo primero** de:
 | 2 | `ended_at < now() - 90 días` | Techo duro: nada queda indefinido aunque nunca se valide |
 | 3 | `ended_at is null` y `started_at < now() - 90 días` | Consultas abandonadas (cierra B2) |
 
-Implementado en `supabase/migrations/0031_transcript_retention_v2.sql`, que reemplaza la función
+Implementado en `supabase/migrations/0033_transcript_retention_v2.sql`, que reemplaza la función
 `purge_expired_transcripts()` de 0021. El cron de las 3:00 a. m. definido en 0021 se conserva.
 
 **Cambios de diseño respecto de 0021:**
@@ -124,29 +124,56 @@ Responsable** (no Encargado, a diferencia de los datos de pacientes). Necesitan 
 conservación en la política, y conviene decidir si se conservan tras el rechazo — probablemente
 no, más allá de un período corto de impugnación.
 
-**Riesgo abierto mientras no se implemente:** hoy cualquiera puede registrarse y crear historias
-clínicas. Por eso la cláusula tercera del documento de vinculación describe el control como
-*procedimiento previsto* y no como control vigente: preferimos quedarnos cortos a certificar algo
-que no está en producción.
+**Hueco encontrado al implementar:** la política `users_update` permite `id = auth.uid()`, es
+decir editar la propia fila, y también que un admin de clínica edite a los miembros de su clínica.
+Sin protección adicional, un doctor podía ponerse `verification_status = 'verified'` con un PATCH
+directo a la API, y un admin podía aprobar a sus colegas — todo el control se caía sin tocar la
+interfaz. Lo cierra el trigger `enforce_verification_transition`: con sesión de usuario el único
+cambio de estado admitido es el propio envío a revisión, y `verified_by` /
+`verification_decided_at` solo los puede fijar service-role. La aprobación pasa por
+`requirePlatformAdmin()` en la aplicación y service-role en la base de datos.
+
+**Decisión incómoda del backfill:** las cuentas existentes quedan en `verified`. Nadie revisó sus
+credenciales, pero la alternativa —dejarlas en `pending_documents`— cortaría el acceso clínico a
+todas las cuentas en producción en el momento del despliegue, incluidas las que están atendiendo
+pacientes. Quedan marcadas con una nota en `verification_notes` y aparecen en la cola del admin
+para revisión retroactiva.
 
 ## Alcance de esta sesión
 
-**Implementado:** D1 y D2.
-**Documentado sin implementar:** D3, y las piezas de UI del aviso de privacidad
+**Implementado:** D1, D2 y D3.
+**Documentado sin implementar:** las piezas de UI del aviso de privacidad
 (`docs/legal/aviso-privacidad-borrador.md`, anexo).
 
 ## Verificación
 
 - `tests/providers.test.ts` — 12 pruebas en verde, incluidas las dos del opt-out.
-- La migración 0031 **no se ha ejecutado**: Docker no estaba disponible en la sesión. Debe
-  aplicarse con `npx supabase db reset` y verificarse antes de desplegar.
+- `tests/verification.test.ts` — 19 pruebas de la máquina de estados y de quién puede ejercer.
+- Suite completa: 226 en verde. `tests/rls.test.ts` falla por falta de Supabase local (Docker
+  apagado), no por estos cambios.
+- `tsc --noEmit` y `eslint` limpios.
+- Migraciones **0032 y 0033 aplicadas en producción** y verificadas contra el proyecto el
+  2026-08-07: columnas, `auth_can_access_clinical()`, trigger `trg_users_verification_guard`,
+  políticas `patients_insert` / `consults_insert` con la comprobación de verificación, bucket con
+  4 políticas, columna `transcript_purged_at`, purga v2 con techo de 90 días, índice y cron activo.
+  Datos consistentes: 0 chunks huérfanos, 0 consultas abandonadas vencidas.
+
+**Se aplicaron a mano desde el editor SQL, así que no quedaron en `supabase_migrations`.** Un
+`supabase db push` futuro intentará re-ejecutarlas y fallará (`create type` duplicado). Hay que
+registrarlas en el historial antes del próximo push.
 
 ## Pendientes derivados
 
-1. Aplicar y verificar la migración 0031.
-2. Suscribir DPA/BAA con Deepgram y OpenAI. Sin ellos la política no puede afirmar que las
+1. Registrar 0032 y 0033 en el historial de migraciones para que `db push` no las repita.
+2. Cobertura en `tests/rls.test.ts` para lo que solo se puede probar contra Postgres: que un
+   doctor sin verificar no pueda insertar pacientes, y que no pueda auto-verificarse.
+3. Aplicar la migración 0034 (permisos de las funciones nuevas, señalados por el linter).
+4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
+5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
+   ve al entrar a la aplicación).
+6. Suscribir DPA/BAA con Deepgram y OpenAI. Sin ellos la política no puede afirmar que las
    transferencias internacionales cuentan con garantías contractuales.
-3. Implementar D3.
-4. Implementar las piezas de UI del aviso de privacidad y el registro de la aceptación del
+7. Implementar las piezas de UI del aviso de privacidad y el registro de la aceptación del
    profesional (hoy no hay prueba de que aceptó nada).
-5. Mover `ENCRYPTION_KEY` a un KMS (pendiente heredado de `docs/COMPLIANCE.md`).
+8. Definir el plazo de conservación de los documentos de identidad en la política de tratamiento.
+9. Mover `ENCRYPTION_KEY` a un KMS (pendiente heredado de `docs/COMPLIANCE.md`).

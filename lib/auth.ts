@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canAccessClinical, type VerificationStatus } from "@/lib/verification";
 
 export type UserRole = "admin" | "doctor" | "secretaria" | "paciente";
 
@@ -12,6 +13,7 @@ export interface SessionUser {
   clinicId: string;
   clinicName: string;
   clinicSuspended: boolean;
+  verificationStatus: VerificationStatus;
 }
 
 /**
@@ -29,7 +31,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   // clinic_doctors), así que fijamos la FK directa por su nombre.
   const { data: profile } = await supabase
     .from("users")
-    .select("role, full_name, email, clinic_id, clinic:clinics!users_clinic_id_fkey(name, suspended_at)")
+    .select(
+      "role, full_name, email, clinic_id, verification_status, clinic:clinics!users_clinic_id_fkey(name, suspended_at)",
+    )
     .eq("id", user.id)
     .single();
 
@@ -43,6 +47,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     clinicId: profile.clinic_id,
     clinicName: profile.clinic?.name ?? "",
     clinicSuspended: Boolean(profile.clinic?.suspended_at),
+    verificationStatus: profile.verification_status,
   };
 });
 
@@ -62,6 +67,41 @@ export async function requireUser(): Promise<SessionUser> {
 export async function requireRole(roles: UserRole[]): Promise<SessionUser> {
   const user = await requireUser();
   if (!roles.includes(user.role)) redirect("/dashboard");
+  return user;
+}
+
+/**
+ * true si la clínica tiene al menos un profesional verificado. Solo importa
+ * para secretarías: no ejercen, pero registran pacientes por cuenta de quien
+ * sí lo hace.
+ */
+const clinicHasVerifiedProfessional = cache(async (): Promise<boolean> => {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .in("role", ["admin", "doctor"])
+    .eq("verification_status", "verified");
+  return (count ?? 0) > 0;
+});
+
+/**
+ * Exige verificación de habilitación profesional para las rutas que crean o
+ * manipulan registros clínicos. Redirige a /verificacion, que explica qué falta.
+ *
+ * Este guard es de experiencia de usuario: quien de verdad bloquea es la
+ * política RLS `auth_can_access_clinical()` (migración 0032), que también
+ * cubre las llamadas directas a la API.
+ */
+export async function requireVerifiedProfessional(): Promise<SessionUser> {
+  const user = await requireUser();
+  const allowed = canAccessClinical({
+    role: user.role,
+    status: user.verificationStatus,
+    clinicHasVerifiedProfessional:
+      user.role === "secretaria" ? await clinicHasVerifiedProfessional() : undefined,
+  });
+  if (!allowed) redirect("/verificacion");
   return user;
 }
 

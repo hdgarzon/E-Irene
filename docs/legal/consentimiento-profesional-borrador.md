@@ -60,9 +60,9 @@ conocimiento de las autoridades competentes y de los tribunales ético-disciplin
 
 ## TERCERA — Verificación de la habilitación profesional
 
-`[PROCEDIMIENTO PREVISTO — AÚN NO IMPLEMENTADO. Se describe porque su implementación está
-aprobada y en desarrollo. La abogada NO debe presentarlo como control vigente ante terceros
-mientras no se confirme que está en producción.]`
+`[IMPLEMENTADO EN CÓDIGO, PENDIENTE DE DESPLIEGUE (migración 0032). El control existe y está
+probado, pero aún no corre en producción. La abogada puede describirlo como procedimiento
+adoptado; NO debe presentarlo como vigente hasta que se confirme el despliegue.]`
 
 Como condición para acceder a las funcionalidades clínicas, el Profesional deberá:
 
