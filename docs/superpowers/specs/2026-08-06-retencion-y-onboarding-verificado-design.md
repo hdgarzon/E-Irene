@@ -186,8 +186,16 @@ quedó fijado.
 1. **Confirmar la primera purga real** el 2026-08-08/09: filas en `audit_logs` con
    `action='transcript.purge'` y `transcript_purged_at` fijado.
 2. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
-3. Cobertura en `tests/rls.test.ts` para lo que solo se puede probar contra Postgres: que un
-   doctor sin verificar no pueda insertar pacientes, y que no pueda auto-verificarse.
+3. **Correr `tests/rls.test.ts`.** Las 12 pruebas de verificación ya están escritas (sin verificar
+   no se crean pacientes ni consultas; nadie se auto-verifica ni se asigna revisor; un admin de
+   clínica no aprueba a sus colegas; suspender corta la escritura pero conserva la lectura), pero
+   **nunca se han ejecutado**: necesitan Docker y el stack local. Hasta entonces el control está
+   verificado leyendo el esquema, no ejercitándolo.
+
+   `bootstrapClinic` ahora aprueba al admin con service-role por defecto. Sin eso, las pruebas de
+   aislamiento multi-tenant que ya existían fallarían: una clínica recién creada nace en
+   `pending_documents` y su admin no puede insertar pacientes — que es exactamente lo que se
+   buscaba, pero rompería esas pruebas por la razón equivocada.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).
