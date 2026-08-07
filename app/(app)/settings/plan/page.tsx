@@ -1,19 +1,41 @@
 import Link from "next/link";
-import { ArrowLeft, Check, Info } from "lucide-react";
+import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { PLANS, PLAN_ORDER, limitLabel } from "@/lib/plans";
 import { initiatePlanUpgradeAction } from "@/app/(app)/settings/actions";
+import { reconcilePlanPayment, type ReconcileOutcome } from "@/lib/billing/reconcile";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 
 interface PlanPageProps {
-  searchParams: Promise<{ wompi?: string }>;
+  searchParams: Promise<{ wompi?: string; id?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
-  await requireRole(["admin", "doctor"]);
+  const user = await requireRole(["admin", "doctor"]);
+  const { wompi, id: transactionId } = await searchParams;
+
+  // Wompi devuelve al usuario con ?id=<transaction_id>. Se verifica el pago
+  // contra la API de Wompi y se activa el plan si corresponde — red de
+  // seguridad para que un webhook no entregado no deje a la clínica pagando
+  // sin recibir el plan (ver lib/billing/reconcile.ts). Es idempotente: si el
+  // webhook ya lo procesó, esto no hace nada.
+  let reconciled: ReconcileOutcome | null = null;
+  if (transactionId) {
+    try {
+      reconciled = await reconcilePlanPayment(transactionId, user.clinicId);
+    } catch (error) {
+      logger.error("billing.reconcile_on_return_failed", {
+        clinicId: user.clinicId,
+        transactionId,
+        error,
+      });
+    }
+  }
+
+  // Después de reconciliar, para que el plan mostrado ya refleje la activación.
   const overview = await getClinicOverview();
-  const { wompi } = await searchParams;
 
   function features(plan: (typeof PLAN_ORDER)[number]) {
     const l = PLANS[plan];
@@ -44,7 +66,41 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         </p>
       </div>
 
-      {wompi === "return" && (
+      {(reconciled?.result === "activated" || reconciled?.result === "already_processed") && (
+        <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
+            <p>
+              <span className="font-semibold text-navy">Pago confirmado.</span> Tu plan ya está
+              activo.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {reconciled?.result === "not_approved" && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-foreground/90">
+          <div className="flex items-start gap-2">
+            <Clock className="mt-0.5 size-4 shrink-0 text-amber-700" />
+            <p>
+              Tu pago está en proceso (estado: {reconciled.status}). Algunos medios, como PSE o
+              Nequi, pueden tardar unos minutos. Tu plan se activará automáticamente al
+              confirmarse.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {reconciled?.result === "ignored" && (
+        <div className="rounded-2xl border border-coral/40 bg-coral/5 p-4 text-sm text-destructive">
+          <p>
+            No pudimos confirmar este pago automáticamente. Si el cobro se realizó, escribinos y lo
+            resolvemos — el pago queda registrado.
+          </p>
+        </div>
+      )}
+
+      {wompi === "return" && !reconciled && (
         <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
             <Info className="mt-0.5 size-4 shrink-0 text-mint" />

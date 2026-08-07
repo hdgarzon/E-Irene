@@ -117,7 +117,11 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
     return;
   }
 
-  const redirectUrl = `${appBaseUrl()}/settings/plan?wompi=return`;
+  // Sin query params propios: Wompi agrega `?id=<transaction_id>` al volver, y
+  // ese id es lo que permite reconciliar el pago aunque el webhook no llegue
+  // (ver lib/billing/reconcile.ts). Mandar una URL que ya trae "?" arriesga
+  // que el parámetro de Wompi quede pegado y se pierda.
+  const redirectUrl = `${appBaseUrl()}/settings/plan`;
 
   // IMPORTANTE: `redirect()` funciona LANZANDO una excepción (NEXT_REDIRECT),
   // así que no puede ir dentro del `try` — el `catch` la atraparía y trataría
