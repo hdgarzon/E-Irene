@@ -158,16 +158,36 @@ para revisión retroactiva.
   4 políticas, columna `transcript_purged_at`, purga v2 con techo de 90 días, índice y cron activo.
   Datos consistentes: 0 chunks huérfanos, 0 consultas abandonadas vencidas.
 
+- **0034 aplicada.** Permisos comprobados: `enforce_verification_transition` sin EXECUTE para
+  `anon` ni `authenticated`; `auth_can_access_clinical` sin `anon` y **con `authenticated`**, que
+  es imprescindible porque las expresiones de las políticas RLS se evalúan con los privilegios de
+  quien consulta. El linter dejó de reportar las dos alertas de `anon` y la de la función de
+  trigger. Queda la de `authenticated` sobre `auth_can_access_clinical`, inherente al diseño y
+  compartida con `auth_clinic_id`, `auth_role` e `is_platform_admin`.
+
 **Se aplicaron a mano desde el editor SQL, así que no quedaron en `supabase_migrations`.** Un
 `supabase db push` futuro intentará re-ejecutarlas y fallará (`create type` duplicado). Hay que
 registrarlas en el historial antes del próximo push.
 
+### Estado de la purga (2026-08-07)
+
+Ninguna consulta vence todavía, pero dos tienen reporte validado el 2026-07-09, así que cumplen
+los 30 días **el 2026-08-08**. La corrida del cron de las 03:00 UTC de esa fecha debería ser la
+primera purga real.
+
+Es la comprobación pendiente que más vale: hasta que ocurra, **la rama que escribe en `audit_logs`
+nunca se ha ejecutado** (`select count(*) from audit_logs where action='transcript.purge'` = 0), y
+es justamente la que produce la evidencia de borrado que promete la política de tratamiento. Hay
+que confirmar el 8 o el 9 que aparecieron las filas de auditoría y que `transcript_purged_at`
+quedó fijado.
+
 ## Pendientes derivados
 
-1. Registrar 0032 y 0033 en el historial de migraciones para que `db push` no las repita.
-2. Cobertura en `tests/rls.test.ts` para lo que solo se puede probar contra Postgres: que un
+1. **Confirmar la primera purga real** el 2026-08-08/09: filas en `audit_logs` con
+   `action='transcript.purge'` y `transcript_purged_at` fijado.
+2. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
+3. Cobertura en `tests/rls.test.ts` para lo que solo se puede probar contra Postgres: que un
    doctor sin verificar no pueda insertar pacientes, y que no pueda auto-verificarse.
-3. Aplicar la migración 0034 (permisos de las funciones nuevas, señalados por el linter).
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).
