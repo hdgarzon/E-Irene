@@ -169,33 +169,52 @@ para revisión retroactiva.
 `supabase db push` futuro intentará re-ejecutarlas y fallará (`create type` duplicado). Hay que
 registrarlas en el historial antes del próximo push.
 
-### Estado de la purga (2026-08-07)
+### Ejercitado contra Postgres (2026-08-07)
+
+`supabase db reset` aplicó **las 34 migraciones en secuencia sin error** — la primera vez que se
+corre la cadena completa, ya que 0032–0034 se habían aplicado sueltas desde el editor SQL.
+
+Suite completa: **261 pruebas, 33 archivos, todo en verde y nada saltado.**
+
+`tests/rls.test.ts` (12 pruebas de verificación). Las aserciones negativas comprueban el **código
+de error**, no solo que hubo error: sin eso, un fallo por una columna mal escrita las haría pasar
+y creeríamos tener un control que no existe. Comprobado que el bloqueo viene de donde debe:
+
+- `42501` (violación de política de fila) al crear pacientes o consultas sin verificar.
+- `P0001` con los mensajes exactos del trigger al intentar auto-verificarse, asignarse como
+  revisor, fijar la fecha de decisión o aprobar a un colega.
+- Contrapartida positiva: enviarse a revisión y crear pacientes tras la aprobación funcionan sin
+  error, lo que descarta que las negativas pasen por un fallo genérico.
+
+`bootstrapClinic` aprueba al admin con service-role por defecto. Sin eso, las pruebas de
+aislamiento multi-tenant que ya existían fallarían: una clínica recién creada nace en
+`pending_documents` y su admin no puede insertar pacientes — que es exactamente lo buscado, pero
+rompería esas pruebas por la razón equivocada.
+
+`tests/retention.test.ts` (7 pruebas). Cubre las dos fugas de 0021 —consultas abandonadas y
+fragmentos huérfanos con `transcript_enc` ya nulo— el techo de 90 días, la idempotencia, y una
+prueba negativa que confirma que la purga es selectiva y no un borrado indiscriminado.
+
+**La rama que escribe en `audit_logs` ya está ejercitada:** una purga deja exactamente una fila
+por clínica con `purged_count`. La evidencia de supresión que promete la política de tratamiento
+está demostrada, no solo afirmada.
+
+### Estado de la purga en producción (2026-08-07)
 
 Ninguna consulta vence todavía, pero dos tienen reporte validado el 2026-07-09, así que cumplen
 los 30 días **el 2026-08-08**. La corrida del cron de las 03:00 UTC de esa fecha debería ser la
 primera purga real.
 
-Es la comprobación pendiente que más vale: hasta que ocurra, **la rama que escribe en `audit_logs`
-nunca se ha ejecutado** (`select count(*) from audit_logs where action='transcript.purge'` = 0), y
-es justamente la que produce la evidencia de borrado que promete la política de tratamiento. Hay
-que confirmar el 8 o el 9 que aparecieron las filas de auditoría y que `transcript_purged_at`
-quedó fijado.
+El mecanismo ya está probado en local (ver arriba), así que lo que queda es confirmar que en
+producción efectivamente corrió: que aparecen filas en `audit_logs` con `action='transcript.purge'`
+y que `transcript_purged_at` quedó fijado en esas dos consultas.
 
 ## Pendientes derivados
 
 1. **Confirmar la primera purga real** el 2026-08-08/09: filas en `audit_logs` con
    `action='transcript.purge'` y `transcript_purged_at` fijado.
 2. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
-3. **Correr `tests/rls.test.ts`.** Las 12 pruebas de verificación ya están escritas (sin verificar
-   no se crean pacientes ni consultas; nadie se auto-verifica ni se asigna revisor; un admin de
-   clínica no aprueba a sus colegas; suspender corta la escritura pero conserva la lectura), pero
-   **nunca se han ejecutado**: necesitan Docker y el stack local. Hasta entonces el control está
-   verificado leyendo el esquema, no ejercitándolo.
-
-   `bootstrapClinic` ahora aprueba al admin con service-role por defecto. Sin eso, las pruebas de
-   aislamiento multi-tenant que ya existían fallarían: una clínica recién creada nace en
-   `pending_documents` y su admin no puede insertar pacientes — que es exactamente lo que se
-   buscaba, pero rompería esas pruebas por la razón equivocada.
+3. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver más abajo.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).

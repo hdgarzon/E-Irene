@@ -118,6 +118,12 @@ d("aislamiento multi-tenant (RLS)", () => {
 dv("verificación profesional (RLS)", () => {
   let doc: { client: SupabaseClient; clinicId: string; userId: string };
 
+  // Las aserciones negativas comprueban el CÓDIGO, no solo que hubo error: sin
+  // esto, un fallo por una columna mal escrita haría pasar la prueba y
+  // creeríamos tener un control que no existe.
+  const RLS_VIOLATION = "42501"; // política de fila
+  const RAISE_EXCEPTION = "P0001"; // raise del trigger
+
   beforeAll(async () => {
     // Sin aprobar: es el estado en que nace toda cuenta nueva.
     doc = await bootstrapClinic("Clínica sin verificar", { verified: false });
@@ -138,7 +144,7 @@ dv("verificación profesional (RLS)", () => {
     const { error } = await doc.client
       .from("patients")
       .insert({ clinic_id: doc.clinicId, full_name_enc: encrypt("Paciente") });
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RLS_VIOLATION);
   });
 
   it("sin verificar NO puede abrir consultas", async () => {
@@ -155,7 +161,7 @@ dv("verificación profesional (RLS)", () => {
       patient_id: patient!.id,
       doctor_id: doc.userId,
     });
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RLS_VIOLATION);
   });
 
   it("NO puede auto-verificarse con un PATCH a su propia fila", async () => {
@@ -163,7 +169,8 @@ dv("verificación profesional (RLS)", () => {
       .from("users")
       .update({ verification_status: "verified" })
       .eq("id", doc.userId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(/solo puedes enviar tu verificación a revisión/i);
 
     // Y el estado no se movió.
     const { data } = await service()
@@ -180,7 +187,7 @@ dv("verificación profesional (RLS)", () => {
       .from("users")
       .update({ verification_status: "verified" })
       .eq("id", doc.userId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RAISE_EXCEPTION);
 
     // Se deja como estaba para no arrastrar estado a las pruebas siguientes.
     await setVerification(doc.userId, "pending_documents");
@@ -191,7 +198,8 @@ dv("verificación profesional (RLS)", () => {
       .from("users")
       .update({ verified_by: doc.userId })
       .eq("id", doc.userId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(/solo el revisor puede asignar/i);
   });
 
   it("NO puede fijar la fecha de decisión", async () => {
@@ -199,7 +207,8 @@ dv("verificación profesional (RLS)", () => {
       .from("users")
       .update({ verification_decided_at: new Date().toISOString() })
       .eq("id", doc.userId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(/solo el revisor puede fijar la decisión/i);
   });
 
   it("un admin de clínica NO puede verificar a otro miembro de su clínica", async () => {
@@ -220,7 +229,8 @@ dv("verificación profesional (RLS)", () => {
       .from("users")
       .update({ verification_status: "verified" })
       .eq("id", colegaId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(/de otro usuario/i);
 
     await setVerification(doc.userId, "pending_documents");
   });
@@ -252,7 +262,7 @@ dv("verificación profesional (RLS)", () => {
     const { error } = await doc.client
       .from("patients")
       .insert({ clinic_id: doc.clinicId, full_name_enc: encrypt("Tras suspensión") });
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(RLS_VIOLATION);
   });
 
   it("pero suspendido conserva la lectura: sigue siendo responsable de esas historias", async () => {
