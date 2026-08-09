@@ -1,10 +1,17 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { hasAcceptedCurrentPolicy } from "@/lib/db/policy-acceptances";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+
+  // Sin aceptación vigente no hay acceso: ante la SIC, la carga de demostrar la
+  // autorización recae en el Responsable. La compuerta vive en /terminos, fuera
+  // de este grupo de rutas, para no redirigirse a sí misma.
+  if (!(await hasAcceptedCurrentPolicy(user.id))) redirect("/terminos");
 
   return (
     <div className="flex min-h-dvh bg-cloud">

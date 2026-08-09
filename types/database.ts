@@ -1335,6 +1335,60 @@ export type Database = {
           },
         ]
       }
+      policy_acceptances: {
+        Row: {
+          accepted_at: string
+          clinic_id: string
+          created_at: string
+          document_hash: string
+          document_version: string
+          id: string
+          ip: string | null
+          marketing_opt_in: boolean
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          clinic_id: string
+          created_at?: string
+          document_hash: string
+          document_version: string
+          id?: string
+          ip?: string | null
+          marketing_opt_in?: boolean
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string
+          clinic_id?: string
+          created_at?: string
+          document_hash?: string
+          document_version?: string
+          id?: string
+          ip?: string | null
+          marketing_opt_in?: boolean
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_acceptances_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_acceptances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           clinic_id: string

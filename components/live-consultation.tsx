@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { MicOff, Square } from "lucide-react";
+import { MicOff, Square, ShieldCheck } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
 // Imports directos a los módulos (no al barrel @/lib/providers, que re-exporta
 // mock.ts → node:crypto, incompatible con el bundle del cliente).
@@ -340,6 +340,21 @@ export function LiveConsultation({
         <span className="font-mono text-lg font-semibold text-navy">{mmss(elapsed)}</span>
       </div>
 
+      {/* Recordatorio en el momento oportuno de lo que el paciente ya firmó en
+          el consentimiento. No lo sustituye: está para que el profesional pueda
+          decírselo en voz alta al empezar. */}
+      {!done && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+          <p>
+            <strong className="font-medium text-navy">Esta sesión se está transcribiendo.</strong>{" "}
+            El audio no se graba ni se guarda: solo se conserva el texto, cifrado, y se borra
+            automáticamente una vez validas el reporte. El paciente puede pedir que se detenga en
+            cualquier momento.
+          </p>
+        </div>
+      )}
+
       {micOk === false && (
         <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <MicOff className="size-3.5" />
@@ -397,7 +412,11 @@ export function LiveConsultation({
       </div>
 
       <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-line bg-card px-5 py-4">
-        <p className="text-xs text-muted-foreground">🔒 El audio no se almacena. Solo el texto, cifrado.</p>
+        {/* Durante la sesión esto ya lo dice el aviso de arriba, más completo;
+            aquí solo queda como recordatorio una vez terminada. */}
+        <p className="text-xs text-muted-foreground">
+          {done ? "🔒 El audio no se almacenó. Solo el texto, cifrado." : ""}
+        </p>
         <Button onClick={finalize} disabled={pending} variant="default">
           <Square className="size-4" />
           {pending ? "Generando reporte…" : "Finalizar consulta"}

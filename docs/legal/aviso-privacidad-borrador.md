@@ -82,12 +82,22 @@ Disponible permanentemente en **`[https://e-irene.co/privacidad]`**.
 
 ---
 
-# PIEZA 2 — Aceptación en el registro del profesional
+# PIEZA 2 — Aceptación del profesional
 
-> Va bajo el botón de registro en `components/auth/signup-form.tsx`. Debe ser una **casilla sin
-> marcar por defecto**: una casilla premarcada no constituye autorización válida. Al enviarse hay
-> que guardar versión del documento, huella criptográfica, dirección IP, agente de usuario y
-> marca temporal — el mismo patrón que ya se usa con el consentimiento del paciente.
+> **IMPLEMENTADO** en `/terminos`, como compuerta de acceso y no como casilla en el formulario de
+> registro. La razón es de cobertura: a los miembros que un administrador da de alta desde el
+> equipo se les crea la cuenta directamente, sin pasar por el registro, y las cuentas anteriores a
+> este control tampoco habrían pasado por ahí. Una casilla en el registro habría dejado a todos
+> ellos sin aceptación registrada.
+>
+> Con la compuerta, quien no tenga aceptada la versión vigente no entra a la aplicación, venga por
+> donde venga. Y cuando el texto cambie, basta con subir la versión para que todos vuelvan a
+> pasar por ella — que es lo que exige la sección 10 de la política para cambios sustanciales.
+>
+> Las casillas **no vienen marcadas por defecto**: una casilla premarcada no constituye
+> autorización válida. Al aceptar se guarda versión del documento, huella SHA-256, dirección IP,
+> agente de usuario y marca temporal — el mismo patrón del consentimiento del paciente. El
+> registro es **inmutable**: una prueba que se puede editar no prueba nada.
 
 **Texto de la casilla:**
 
@@ -128,12 +138,12 @@ Disponible permanentemente en **`[https://e-irene.co/privacidad]`**.
 
 | # | Pieza | Dónde | Estado |
 |---|---|---|---|
-| 1 | Página `/privacidad` | Nueva ruta en `app/` | No existe |
-| 2 | Enlace en el pie de página | Landing y layout de la app | No existe |
-| 3 | Casillas de aceptación | `components/auth/signup-form.tsx` | No existen |
-| 4 | Registro de la aceptación | Nueva tabla, análoga a `consents` | No existe |
-| 5 | Aviso previo a la sesión | `components/live-consultation.tsx` | No existe |
+| 1 | Página `/privacidad` | `app/privacidad/page.tsx` | ✅ Pública, sin exigir sesión |
+| 2 | Enlace en el pie de página | Landing y layout de autenticación | ✅ |
+| 3 | Casillas de aceptación | `components/accept-policy-form.tsx` | ✅ Contractual y comercial, separadas |
+| 4 | Registro de la aceptación | Tabla `policy_acceptances` (migración 0035) | ✅ Inmutable, con hash + IP + user-agent |
+| 5 | Aviso previo a la sesión | `components/live-consultation.tsx` | ✅ |
 
-> **Advertencia:** mientras las piezas 3 y 4 no estén implementadas, E-Irene **no cuenta con
-> prueba de que el profesional aceptó la política**. Ante un requerimiento de la SIC, la carga de
-> demostrar la autorización recae en el Responsable.
+El texto que se publica en `/privacidad` y el que se acepta en `/terminos` **salen de la misma
+constante** (`POLICY_TEXT` en `lib/legal.ts`). No pueden divergir: si divergieran, el hash
+guardado como prueba no correspondería al texto publicado, y la prueba perdería su valor.

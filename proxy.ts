@@ -16,7 +16,10 @@ import { createServerClient } from "@supabase/ssr";
  */
 
 // Rutas accesibles SIN sesión.
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad"]);
+// `/privacidad` es público a propósito: el aviso debe poder leerse ANTES de
+// crear una cuenta, y el login y el registro enlazan a él. Un aviso de
+// privacidad que exige iniciar sesión no informa a nadie.
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad", "/privacidad"]);
 // Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
 // /enlace: links de paciente con token, ver app/enlace/[token];
 // /join: sala de videollamada del paciente, ver app/join/[token];
