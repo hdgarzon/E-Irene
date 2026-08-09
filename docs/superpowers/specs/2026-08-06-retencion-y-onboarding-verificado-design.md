@@ -165,9 +165,44 @@ para revisión retroactiva.
   trigger. Queda la de `authenticated` sobre `auth_can_access_clinical`, inherente al diseño y
   compartida con `auth_clinic_id`, `auth_role` e `is_platform_admin`.
 
-**Se aplicaron a mano desde el editor SQL, así que no quedaron en `supabase_migrations`.** Un
-`supabase db push` futuro intentará re-ejecutarlas y fallará (`create type` duplicado). Hay que
-registrarlas en el historial antes del próximo push.
+### Historial de migraciones reparado (2026-08-09)
+
+Las migraciones se venían aplicando desde el dashboard, que asigna a cada una una versión de
+timestamp y guarda como `name` el nombre completo del archivo:
+
+```
+version = 20260807052247   name = 0031_billing_checkouts
+```
+
+La CLI, en cambio, deriva la versión del nombre del archivo: `0031_billing_checkouts.sql` →
+version `0031`, name `billing_checkouts`. Comprobado empíricamente, es lo que `supabase db reset`
+escribe en el historial local.
+
+El desajuste no eran solo 0032–0034: la CLI no reconocía como aplicada **ninguna de 0015–0034**, y
+un `db push` habría intentado re-ejecutar veinte migraciones sobre una base que ya las tenía.
+Verificado objeto por objeto que todas estaban efectivamente aplicadas antes de tocar el registro
+(la tabla `billing_scheduled_charges` y su trigger, las columnas de verificación,
+`transcript_purged_at`). 0029 resultó ser un archivo solo de comentarios: el cron de facturación
+corre en Vercel, no en Postgres.
+
+Reparado con la vía oficial, en dos pasos:
+
+```bash
+supabase migration repair --status reverted <los 15 timestamps>
+supabase migration repair --status applied 0015 … 0034
+```
+
+`migration repair --status applied` **sí acepta versiones que no son timestamp**, cosa que estaba
+en duda al preparar la alternativa en SQL. Resultado: `db push --dry-run` responde "Remote
+database is up to date", y el historial remoto quedó idéntico al local — 34 filas, `0001`–`0034`,
+sin timestamps.
+
+**Nota para el futuro:** aplicar migraciones desde el dashboard vuelve a desalinear el historial.
+Conviene usar `supabase db push` como vía normal.
+
+⚠️ Cuando la CLI sugiere `supabase db pull` ante este error, **no** es la salida correcta aquí:
+generaría un archivo nuevo con el esquema completo del remoto encima de los 34 existentes. Esa
+sugerencia asume que el remoto tiene cambios que el repo no conoce, y no era el caso.
 
 ### Ejercitado contra Postgres (2026-08-07)
 
@@ -232,13 +267,7 @@ política de tratamiento le promete al titular y a la SIC.
 
 1. ~~Confirmar la primera purga real.~~ **Hecho el 2026-08-09.** Ver arriba.
 2. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver arriba.
-3. **Reparar el historial de migraciones del remoto** con `scripts/repair-migration-history.sql`.
-   Al prepararlo se descubrió que el desajuste no eran solo 0032–0034: las migraciones se han
-   venido aplicando desde el dashboard, que asigna versiones de timestamp, mientras que la CLI
-   deriva la versión del nombre del archivo (`0031_billing_checkouts.sql` → `0031`). La CLI no
-   reconoce como aplicadas **ninguna de 0015–0034**, así que un `db push` intentaría re-ejecutar
-   veinte migraciones sobre una base que ya las tiene. Verificado objeto por objeto que todas
-   están efectivamente aplicadas; el script solo corrige el registro.
+3. ~~Reparar el historial de migraciones del remoto.~~ **Hecho el 2026-08-09.** Ver abajo.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).
