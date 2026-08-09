@@ -110,7 +110,10 @@ export default function Home() {
       <footer className="border-t border-gray-line bg-cloud">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
           <span>© {new Date().getFullYear()} E-Irene. Plataforma clínica de salud mental.</span>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <Link href="/privacidad" className="hover:text-navy">
+              Aviso de privacidad
+            </Link>
             <Link href="/seguridad" className="hover:text-navy">
               Seguridad y cumplimiento
             </Link>

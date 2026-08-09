@@ -55,8 +55,23 @@ export class DeepgramTranscriptionProvider implements TranscriptionProvider {
   }
 }
 
+/**
+ * `mip_opt_out=true` NO ES OPCIONAL — es el sustento técnico de lo que el
+ * paciente firma.
+ *
+ * En el plan hosted de Deepgram, las peticiones entran por defecto al Model
+ * Improvement Partnership Program, que persiste audio para entrenar modelos.
+ * Con el opt-out, los datos "se retienen únicamente durante el tiempo necesario
+ * para procesar la solicitud" (developers.deepgram.com/docs/the-deepgram-model-
+ * improvement-partnership-program, verificado ago-2026).
+ *
+ * Sin este parámetro, el punto 2 del consentimiento en lib/consent.ts ("el audio
+ * NO se almacena ni se graba en ningún momento") sería falso, sobre datos
+ * sensibles de salud (Ley 1581/2012, art. 5). Cuesta el descuento del 50% del
+ * programa; ese costo es el precio de poder firmar esa frase. No quitar.
+ */
 const DEEPGRAM_LISTEN_BASE =
-  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true";
+  "wss://api.deepgram.com/v1/listen?model=nova-3&language=es&encoding=opus&smart_format=true&interim_results=true&punctuate=true&mip_opt_out=true";
 
 /**
  * Modo texto in-person: una sola pista con ambos hablantes mezclados.

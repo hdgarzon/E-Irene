@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { getAnalysisProvider, getTranscriptionProvider } from "@/lib/providers";
+import { DEEPGRAM_LISTEN_URL, DEEPGRAM_LISTEN_URL_VIDEO } from "@/lib/providers/deepgram";
 import { reportSchema } from "@/lib/providers/types";
 import { bareAnalysisContext } from "@/lib/clinical-state";
 
@@ -108,5 +109,20 @@ describe("providers (mock por defecto)", () => {
     expect(s.mode).toBe("mock");
     expect(s.sessionToken).toMatch(/^mock_/);
     expect(s.expiresInMs).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Sin el opt-out, Deepgram persiste el audio para entrenar sus modelos y el
+ * consentimiento que firma el paciente pasa a ser falso. Es una garantía legal,
+ * no una preferencia: si alguien reescribe la URL, esto tiene que romperse.
+ */
+describe("Deepgram: opt-out del Model Improvement Program", () => {
+  it("la URL de audio in-person no envía datos al programa de mejora", () => {
+    expect(DEEPGRAM_LISTEN_URL).toContain("mip_opt_out=true");
+  });
+
+  it("la URL de videollamada no envía datos al programa de mejora", () => {
+    expect(DEEPGRAM_LISTEN_URL_VIDEO).toContain("mip_opt_out=true");
   });
 });

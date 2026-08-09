@@ -14,7 +14,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {children}
       </div>
       <p className="mt-6 max-w-sm text-center text-xs text-muted-foreground">
-        Datos protegidos bajo la Ley 1581 (Habeas Data). El audio de las sesiones nunca se almacena.
+        Datos protegidos bajo la Ley 1581 (Habeas Data). El audio de las sesiones nunca se almacena.{" "}
+        <Link href="/privacidad" className="underline hover:text-navy">
+          Aviso de privacidad
+        </Link>
+        .
       </p>
     </div>
   );

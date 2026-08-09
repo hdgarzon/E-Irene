@@ -1,0 +1,279 @@
+# Retención de transcripciones y onboarding verificado del profesional
+
+**Fecha:** 2026-08-06
+**Estado:** implementado y aplicado en producción (migraciones 0032 y 0033, verificadas el 2026-08-07)
+
+## Problema
+
+Una auditoría de cumplimiento previa a la constitución de la sociedad encontró tres brechas entre
+lo que la plataforma **declara** y lo que **hace**. Las tres tienen consecuencia legal directa,
+porque el consentimiento que firma el paciente y la política de tratamiento que se va a publicar
+afirman cosas concretas sobre el manejo de datos sensibles de salud.
+
+### B1 — El audio sí se retenía en el proveedor de transcripción
+
+`lib/providers/deepgram.ts` construía la URL del WebSocket sin `mip_opt_out=true`. En el plan
+hosted, Deepgram incluye las peticiones por defecto en su Model Improvement Partnership Program,
+que persiste audio para entrenar modelos.
+
+El punto 2 de `CONSENT_TEXT` (`lib/consent.ts`) declara al paciente que "el audio y el video NO se
+almacenan ni se graban en ningún momento". Esa afirmación era falsa, sobre datos sensibles
+(Ley 1581/2012, art. 5) transferidos a un tercero en EE. UU.
+
+### B2 — Dos fugas en la purga de transcripciones
+
+`supabase/migrations/0021_transcript_retention_cron.sql`:
+
+- El `delete from transcript_chunks` exigía `transcript_enc is not null` en la consulta padre.
+  Si la consolidación falló, o si una corrida previa ya anuló la columna, los chunks quedaban
+  huérfanos y **nunca** se purgaban.
+- Toda la purga exigía `ended_at is not null`. Una consulta abandonada —el profesional cierra el
+  navegador y la sesión nunca se cierra formalmente— conservaba su transcripción **indefinidamente**.
+
+### B3 — Nadie verifica que quien se registra sea profesional
+
+`components/auth/signup-form.tsx` pide nombre de clínica, nombre y correo. Con eso se crea una
+clínica y se obtiene acceso a historias clínicas.
+
+## Decisiones
+
+### D1 — Opt-out del programa de mejora de modelos
+
+`mip_opt_out=true` se agrega a `DEEPGRAM_LISTEN_BASE`, de modo que cubre las dos URLs derivadas
+(in-person y video) sin posibilidad de divergencia.
+
+**Costo aceptado:** el opt-out renuncia al descuento del 50 % de Deepgram. Es el precio de poder
+sostener lo que dice el consentimiento; no es negociable mientras esa frase esté en el documento.
+
+**Protección contra regresión:** `tests/providers.test.ts` afirma que ambas URLs contienen el
+parámetro. Es una garantía legal, no una preferencia de configuración — si alguien reescribe la
+URL, el test debe romperse.
+
+### D2 — Nueva regla de retención
+
+El principio: **la transcripción no es la historia clínica.** El reporte validado sí lo es, y va
+15 años (Resolución 839/2017: 5 en archivo de gestión + 10 en central). La transcripción es un
+documento de trabajo intermedio que deja de tener propósito cuando el reporte se valida.
+
+La transcripción se suprime cuando ocurre **lo primero** de:
+
+| # | Condición | Razón |
+|---|---|---|
+| 1 | Existe reporte con `validated_at` y pasaron 30 días | Ya cumplió su función; el colchón cubre correcciones |
+| 2 | `ended_at < now() - 90 días` | Techo duro: nada queda indefinido aunque nunca se valide |
+| 3 | `ended_at is null` y `started_at < now() - 90 días` | Consultas abandonadas (cierra B2) |
+
+Implementado en `supabase/migrations/0033_transcript_retention_v2.sql`, que reemplaza la función
+`purge_expired_transcripts()` de 0021. El cron de las 3:00 a. m. definido en 0021 se conserva.
+
+**Cambios de diseño respecto de 0021:**
+
+- Se elimina el guard `transcript_enc is not null` del borrado de chunks: se borran por pertenecer
+  a una consulta vencida, no por el estado de otra columna (cierra B2).
+- Nueva columna `consultations.transcript_purged_at`. Sin ella la política promete una supresión
+  que **no se puede demostrar** ante la SIC ni ante un titular que ejerza su derecho de supresión.
+  También sirve de predicado de la purga, reemplazando al de 0021.
+- Cada purga inserta una fila en `audit_logs` **por clínica** (`clinic_id` es `not null`, y así
+  cada clínica ve la suya vía RLS).
+- Se usa un único statement con CTEs modificatorios en vez de statements sueltos: todos operan
+  sobre el mismo snapshot de `expired`, sin riesgo de divergencia entre el borrado y el update.
+- Backfill: las consultas ya purgadas bajo la regla de 0021 reciben `transcript_purged_at` para no
+  reevaluarse en cada corrida, y se limpian los chunks huérfanos que 0021 dejó atrás.
+  El backfill se limita a consultas con `ended_at` de más de 30 días: marcar solo por
+  `transcript_enc is null` atraparía consultas recién terminadas cuya consolidación falló —que
+  tienen chunks vivos— y al darlas por purgadas sus chunks no se borrarían nunca, reintroduciendo
+  la fuga que la migración corrige.
+
+**Acoplamiento a vigilar:** los plazos de 30/90 días están en la migración y en la política de
+tratamiento publicada (`docs/legal/politica-tratamiento-datos-borrador.md`, sección 5). Cambiar
+uno obliga a cambiar el otro.
+
+### D3 — Onboarding verificado (diseñado, no implementado)
+
+**Nivel elegido:** carga de documento + revisión manual. La consulta pública de ReTHUS en SISPRO
+no expone una API documentada, así que automatizarla sería scraping frágil sobre un servicio
+estatal — mal cimiento para un control de cumplimiento. La revisión manual es defendible desde el
+día uno y deja rastro auditable.
+
+**Máquina de estados de la cuenta:**
+
+```
+pending_documents ──(sube cédula + tarjeta profesional)──> pending_review
+pending_review ──(admin aprueba)──> verified
+pending_review ──(admin rechaza)──> rejected ──(vuelve a subir)──> pending_review
+verified ──(revocación: inhabilitación reportada)──> suspended
+```
+
+**Restricción de acceso mientras no esté `verified`:** sin crear pacientes, sin abrir consultas y
+sin transcripción. Se permite explorar la aplicación y configurar la clínica, para que el
+profesional pueda avanzar mientras espera.
+
+**Componentes:**
+
+| Componente | Responsabilidad |
+|---|---|
+| Columnas de verificación en `users` | Estado, fecha, quién aprobó, motivo de rechazo |
+| Bucket privado de documentos | Cédula y tarjeta profesional, con RLS por clínica |
+| Guard de rol | Bloquea las rutas clínicas si el estado no es `verified` |
+| Pantalla de estado | Qué falta, qué se subió, en qué va la revisión |
+| Cola en `/admin/doctores` | Ver documentos, aprobar o rechazar con motivo |
+| Registro en `audit_logs` | Quién aprobó, cuándo, sobre qué documentos |
+
+**Punto sensible:** los documentos de identidad son datos personales de los que **E-Irene es
+Responsable** (no Encargado, a diferencia de los datos de pacientes). Necesitan su propio plazo de
+conservación en la política, y conviene decidir si se conservan tras el rechazo — probablemente
+no, más allá de un período corto de impugnación.
+
+**Hueco encontrado al implementar:** la política `users_update` permite `id = auth.uid()`, es
+decir editar la propia fila, y también que un admin de clínica edite a los miembros de su clínica.
+Sin protección adicional, un doctor podía ponerse `verification_status = 'verified'` con un PATCH
+directo a la API, y un admin podía aprobar a sus colegas — todo el control se caía sin tocar la
+interfaz. Lo cierra el trigger `enforce_verification_transition`: con sesión de usuario el único
+cambio de estado admitido es el propio envío a revisión, y `verified_by` /
+`verification_decided_at` solo los puede fijar service-role. La aprobación pasa por
+`requirePlatformAdmin()` en la aplicación y service-role en la base de datos.
+
+**Decisión incómoda del backfill:** las cuentas existentes quedan en `verified`. Nadie revisó sus
+credenciales, pero la alternativa —dejarlas en `pending_documents`— cortaría el acceso clínico a
+todas las cuentas en producción en el momento del despliegue, incluidas las que están atendiendo
+pacientes. Quedan marcadas con una nota en `verification_notes` y aparecen en la cola del admin
+para revisión retroactiva.
+
+## Alcance de esta sesión
+
+**Implementado:** D1, D2 y D3.
+**Documentado sin implementar:** las piezas de UI del aviso de privacidad
+(`docs/legal/aviso-privacidad-borrador.md`, anexo).
+
+## Verificación
+
+- `tests/providers.test.ts` — 12 pruebas en verde, incluidas las dos del opt-out.
+- `tests/verification.test.ts` — 19 pruebas de la máquina de estados y de quién puede ejercer.
+- Suite completa: 226 en verde. `tests/rls.test.ts` falla por falta de Supabase local (Docker
+  apagado), no por estos cambios.
+- `tsc --noEmit` y `eslint` limpios.
+- Migraciones **0032 y 0033 aplicadas en producción** y verificadas contra el proyecto el
+  2026-08-07: columnas, `auth_can_access_clinical()`, trigger `trg_users_verification_guard`,
+  políticas `patients_insert` / `consults_insert` con la comprobación de verificación, bucket con
+  4 políticas, columna `transcript_purged_at`, purga v2 con techo de 90 días, índice y cron activo.
+  Datos consistentes: 0 chunks huérfanos, 0 consultas abandonadas vencidas.
+
+- **0034 aplicada.** Permisos comprobados: `enforce_verification_transition` sin EXECUTE para
+  `anon` ni `authenticated`; `auth_can_access_clinical` sin `anon` y **con `authenticated`**, que
+  es imprescindible porque las expresiones de las políticas RLS se evalúan con los privilegios de
+  quien consulta. El linter dejó de reportar las dos alertas de `anon` y la de la función de
+  trigger. Queda la de `authenticated` sobre `auth_can_access_clinical`, inherente al diseño y
+  compartida con `auth_clinic_id`, `auth_role` e `is_platform_admin`.
+
+### Historial de migraciones reparado (2026-08-09)
+
+Las migraciones se venían aplicando desde el dashboard, que asigna a cada una una versión de
+timestamp y guarda como `name` el nombre completo del archivo:
+
+```
+version = 20260807052247   name = 0031_billing_checkouts
+```
+
+La CLI, en cambio, deriva la versión del nombre del archivo: `0031_billing_checkouts.sql` →
+version `0031`, name `billing_checkouts`. Comprobado empíricamente, es lo que `supabase db reset`
+escribe en el historial local.
+
+El desajuste no eran solo 0032–0034: la CLI no reconocía como aplicada **ninguna de 0015–0034**, y
+un `db push` habría intentado re-ejecutar veinte migraciones sobre una base que ya las tenía.
+Verificado objeto por objeto que todas estaban efectivamente aplicadas antes de tocar el registro
+(la tabla `billing_scheduled_charges` y su trigger, las columnas de verificación,
+`transcript_purged_at`). 0029 resultó ser un archivo solo de comentarios: el cron de facturación
+corre en Vercel, no en Postgres.
+
+Reparado con la vía oficial, en dos pasos:
+
+```bash
+supabase migration repair --status reverted <los 15 timestamps>
+supabase migration repair --status applied 0015 … 0034
+```
+
+`migration repair --status applied` **sí acepta versiones que no son timestamp**, cosa que estaba
+en duda al preparar la alternativa en SQL. Resultado: `db push --dry-run` responde "Remote
+database is up to date", y el historial remoto quedó idéntico al local — 34 filas, `0001`–`0034`,
+sin timestamps.
+
+**Nota para el futuro:** aplicar migraciones desde el dashboard vuelve a desalinear el historial.
+Conviene usar `supabase db push` como vía normal.
+
+⚠️ Cuando la CLI sugiere `supabase db pull` ante este error, **no** es la salida correcta aquí:
+generaría un archivo nuevo con el esquema completo del remoto encima de los 34 existentes. Esa
+sugerencia asume que el remoto tiene cambios que el repo no conoce, y no era el caso.
+
+### Ejercitado contra Postgres (2026-08-07)
+
+`supabase db reset` aplicó **las 34 migraciones en secuencia sin error** — la primera vez que se
+corre la cadena completa, ya que 0032–0034 se habían aplicado sueltas desde el editor SQL.
+
+Suite completa: **261 pruebas, 33 archivos, todo en verde y nada saltado.**
+
+`tests/rls.test.ts` (12 pruebas de verificación). Las aserciones negativas comprueban el **código
+de error**, no solo que hubo error: sin eso, un fallo por una columna mal escrita las haría pasar
+y creeríamos tener un control que no existe. Comprobado que el bloqueo viene de donde debe:
+
+- `42501` (violación de política de fila) al crear pacientes o consultas sin verificar.
+- `P0001` con los mensajes exactos del trigger al intentar auto-verificarse, asignarse como
+  revisor, fijar la fecha de decisión o aprobar a un colega.
+- Contrapartida positiva: enviarse a revisión y crear pacientes tras la aprobación funcionan sin
+  error, lo que descarta que las negativas pasen por un fallo genérico.
+
+`bootstrapClinic` aprueba al admin con service-role por defecto. Sin eso, las pruebas de
+aislamiento multi-tenant que ya existían fallarían: una clínica recién creada nace en
+`pending_documents` y su admin no puede insertar pacientes — que es exactamente lo buscado, pero
+rompería esas pruebas por la razón equivocada.
+
+`tests/retention.test.ts` (7 pruebas). Cubre las dos fugas de 0021 —consultas abandonadas y
+fragmentos huérfanos con `transcript_enc` ya nulo— el techo de 90 días, la idempotencia, y una
+prueba negativa que confirma que la purga es selectiva y no un borrado indiscriminado.
+
+**La rama que escribe en `audit_logs` ya está ejercitada:** una purga deja exactamente una fila
+por clínica con `purged_count`. La evidencia de supresión que promete la política de tratamiento
+está demostrada, no solo afirmada.
+
+### Purga confirmada en producción (2026-08-09)
+
+El 2026-08-07 se predijo que dos consultas con reporte validado el 2026-07-09 cumplirían los 30
+días el 08-08, y que el cron de las 03:00 UTC sería la primera purga real. Ocurrió exactamente
+así:
+
+```
+transcript.purge  {"purged_count": 1}  2026-08-08 03:00:00+00
+transcript.purge  {"purged_count": 1}  2026-08-09 03:00:00+00
+```
+
+Dos corridas y no una porque los reportes se validaron a las 02:50 y a las 17:50: el primero
+cumplió los 30 días antes del cron del día 8, el segundo después, y purgó al día siguiente. El
+plazo se aplica por consulta, no por lote.
+
+Estado tras las purgas, coherente en todas las tablas:
+
+| Métrica | Antes | Después |
+|---|---|---|
+| Consultas con `transcript_purged_at` | 1 | 3 |
+| Consultas con `transcript_enc` | 4 | 2 |
+| Fragmentos de transcripción | 189 | 139 |
+| Fragmentos huérfanos | 0 | 0 |
+| Consultas vencidas sin purgar | 0 | 0 |
+
+Con esto el ciclo queda cerrado de punta a punta: la regla de retención se ejerció sola, borró
+solo lo que debía, y **dejó evidencia auditable de haberlo hecho**. Es lo que la sección 5 de la
+política de tratamiento le promete al titular y a la SIC.
+
+## Pendientes derivados
+
+1. ~~Confirmar la primera purga real.~~ **Hecho el 2026-08-09.** Ver arriba.
+2. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver arriba.
+3. ~~Reparar el historial de migraciones del remoto.~~ **Hecho el 2026-08-09.** Ver abajo.
+4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
+5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
+   ve al entrar a la aplicación).
+6. Suscribir DPA/BAA con Deepgram y OpenAI. Sin ellos la política no puede afirmar que las
+   transferencias internacionales cuentan con garantías contractuales.
+7. Implementar las piezas de UI del aviso de privacidad y el registro de la aceptación del
+   profesional (hoy no hay prueba de que aceptó nada).
+8. Definir el plazo de conservación de los documentos de identidad en la política de tratamiento.
+9. Mover `ENCRYPTION_KEY` a un KMS (pendiente heredado de `docs/COMPLIANCE.md`).

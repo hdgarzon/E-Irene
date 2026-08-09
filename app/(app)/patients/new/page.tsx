@@ -2,8 +2,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createPatientAction } from "@/app/(app)/patients/actions";
 import { PatientForm } from "@/components/patient-form";
+import { requireVerifiedProfessional } from "@/lib/auth";
 
-export default function NewPatientPage() {
+export default async function NewPatientPage() {
+  // Crear un paciente abre una historia clínica: exige habilitación verificada.
+  await requireVerifiedProfessional();
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link

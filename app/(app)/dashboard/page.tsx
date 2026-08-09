@@ -20,6 +20,7 @@ import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { VerificationBanner } from "@/components/verification-banner";
 import { cn } from "@/lib/utils";
 import { acknowledgeRiskAlertAction } from "./actions";
 
@@ -113,6 +114,10 @@ export default async function DashboardPage() {
           {formatFullDate(new Date().toISOString())}
         </p>
       </div>
+
+      {/* Verificación pendiente: sin ella las rutas clínicas redirigen sin más
+          contexto, así que el aviso va antes que nada. */}
+      {user && <VerificationBanner status={user.verificationStatus} />}
 
       {/* Alertas de riesgo — lo más importante arriba */}
       {isClinician && allRiskAlerts.length > 0 && (

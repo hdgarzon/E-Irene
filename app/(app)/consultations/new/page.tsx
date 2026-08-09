@@ -6,6 +6,7 @@ import { getActiveConsent } from "@/lib/db/consents";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { canStartConsultation, limitLabel, PLANS } from "@/lib/plans";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
+import { requireVerifiedProfessional } from "@/lib/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +17,9 @@ export default async function NewConsultationPage({
 }: {
   searchParams: Promise<{ patientId?: string }>;
 }) {
+  // Abrir una consulta es un acto clínico: exige habilitación verificada.
+  await requireVerifiedProfessional();
+
   const { patientId } = await searchParams;
   if (!patientId) redirect("/patients");
   const patient = await getPatient(patientId);
