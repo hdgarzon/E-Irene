@@ -199,22 +199,41 @@ prueba negativa que confirma que la purga es selectiva y no un borrado indiscrim
 por clínica con `purged_count`. La evidencia de supresión que promete la política de tratamiento
 está demostrada, no solo afirmada.
 
-### Estado de la purga en producción (2026-08-07)
+### Purga confirmada en producción (2026-08-09)
 
-Ninguna consulta vence todavía, pero dos tienen reporte validado el 2026-07-09, así que cumplen
-los 30 días **el 2026-08-08**. La corrida del cron de las 03:00 UTC de esa fecha debería ser la
-primera purga real.
+El 2026-08-07 se predijo que dos consultas con reporte validado el 2026-07-09 cumplirían los 30
+días el 08-08, y que el cron de las 03:00 UTC sería la primera purga real. Ocurrió exactamente
+así:
 
-El mecanismo ya está probado en local (ver arriba), así que lo que queda es confirmar que en
-producción efectivamente corrió: que aparecen filas en `audit_logs` con `action='transcript.purge'`
-y que `transcript_purged_at` quedó fijado en esas dos consultas.
+```
+transcript.purge  {"purged_count": 1}  2026-08-08 03:00:00+00
+transcript.purge  {"purged_count": 1}  2026-08-09 03:00:00+00
+```
+
+Dos corridas y no una porque los reportes se validaron a las 02:50 y a las 17:50: el primero
+cumplió los 30 días antes del cron del día 8, el segundo después, y purgó al día siguiente. El
+plazo se aplica por consulta, no por lote.
+
+Estado tras las purgas, coherente en todas las tablas:
+
+| Métrica | Antes | Después |
+|---|---|---|
+| Consultas con `transcript_purged_at` | 1 | 3 |
+| Consultas con `transcript_enc` | 4 | 2 |
+| Fragmentos de transcripción | 189 | 139 |
+| Fragmentos huérfanos | 0 | 0 |
+| Consultas vencidas sin purgar | 0 | 0 |
+
+Con esto el ciclo queda cerrado de punta a punta: la regla de retención se ejerció sola, borró
+solo lo que debía, y **dejó evidencia auditable de haberlo hecho**. Es lo que la sección 5 de la
+política de tratamiento le promete al titular y a la SIC.
 
 ## Pendientes derivados
 
-1. **Confirmar la primera purga real** el 2026-08-08/09: filas en `audit_logs` con
-   `action='transcript.purge'` y `transcript_purged_at` fijado.
-2. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
-3. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver más abajo.
+1. ~~Confirmar la primera purga real.~~ **Hecho el 2026-08-09.** Ver arriba.
+2. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver arriba.
+3. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
+   Es lo único que queda del trabajo técnico de este spec.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).
