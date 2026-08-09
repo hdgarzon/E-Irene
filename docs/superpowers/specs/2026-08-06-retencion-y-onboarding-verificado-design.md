@@ -232,8 +232,13 @@ política de tratamiento le promete al titular y a la SIC.
 
 1. ~~Confirmar la primera purga real.~~ **Hecho el 2026-08-09.** Ver arriba.
 2. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver arriba.
-3. Registrar 0032, 0033 y 0034 en el historial de migraciones para que `db push` no las repita.
-   Es lo único que queda del trabajo técnico de este spec.
+3. **Reparar el historial de migraciones del remoto** con `scripts/repair-migration-history.sql`.
+   Al prepararlo se descubrió que el desajuste no eran solo 0032–0034: las migraciones se han
+   venido aplicando desde el dashboard, que asigna versiones de timestamp, mientras que la CLI
+   deriva la versión del nombre del archivo (`0031_billing_checkouts.sql` → `0031`). La CLI no
+   reconoce como aplicadas **ninguna de 0015–0034**, así que un `db push` intentaría re-ejecutar
+   veinte migraciones sobre una base que ya las tiene. Verificado objeto por objeto que todas
+   están efectivamente aplicadas; el script solo corrige el registro.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
 5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
    ve al entrar a la aplicación).
