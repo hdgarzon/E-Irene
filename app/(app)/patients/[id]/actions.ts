@@ -6,13 +6,22 @@ import { createPatientLink } from "@/lib/db/patient-links";
 import { buildPatientLinkUrl } from "@/lib/patient-links";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildPatientLinkEmail } from "@/lib/email/templates";
-import { recordNotification } from "@/lib/db/notifications";
+import {
+  recordNotification,
+  statusForDeliveryMode,
+  isSimulatedMode,
+} from "@/lib/db/notifications";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 import type { AssessmentType } from "@/lib/psychometrics";
 import type { PatientLinkPurpose } from "@/lib/db/patient-links";
 
-export type GenerateLinkResult = { ok: true; url: string } | { ok: false; error: string };
+export type GenerateLinkResult =
+  /** `delivered` false = el canal de correo no está configurado y el enlace hay
+   *  que hacérselo llegar al paciente a mano. La interfaz debe decirlo: antes
+   *  afirmaba "enviado al correo del paciente" pasara lo que pasara. */
+  | { ok: true; url: string; delivered: boolean }
+  | { ok: false; error: string };
 
 async function generateAndSendLink(
   patientId: string,
@@ -47,8 +56,10 @@ async function generateAndSendLink(
       patientId,
       channel: "email",
       type: purpose === "consent" ? "consent_link_sent" : "assessment_link_sent",
-      status: "sent",
-      payload: { linkId: link.id },
+      status: statusForDeliveryMode(email.mode),
+      // `mode` faltaba: sin él no había forma de distinguir después qué
+      // enlaces salieron de verdad y cuáles solo se registraron.
+      payload: { linkId: link.id, mode: email.mode },
     });
     await logAudit({
       clinicId: user.clinicId,
@@ -59,7 +70,7 @@ async function generateAndSendLink(
       metadata: { purpose, assessmentType, patientId },
     });
 
-    return { ok: true, url };
+    return { ok: true, url, delivered: !isSimulatedMode(email.mode) };
   } catch (error) {
     logger.error("patient_link.generate_failed", {
       clinicId: user.clinicId,

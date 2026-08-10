@@ -1536,7 +1536,7 @@ export type Database = {
       clinic_plan: "free" | "pro" | "clinica" | "enterprise"
       consultation_status: "in_progress" | "ended" | "analyzed"
       notification_channel: "email" | "whatsapp"
-      notification_status: "pending" | "sent" | "failed"
+      notification_status: "pending" | "sent" | "failed" | "simulated"
       user_role: "admin" | "doctor" | "secretaria" | "paciente"
       verification_status:
         | "pending_documents"

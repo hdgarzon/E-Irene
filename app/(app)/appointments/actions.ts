@@ -16,7 +16,7 @@ import { getActiveConsent } from "@/lib/db/consents";
 import { startConsultation, getInProgressConsultationByAppointment } from "@/lib/db/consultations";
 import { getPatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
-import { recordNotification } from "@/lib/db/notifications";
+import { recordNotification, statusForDeliveryMode } from "@/lib/db/notifications";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildReminderEmail } from "@/lib/email/templates";
 import { getWhatsAppProvider, buildReminderWhatsApp } from "@/lib/whatsapp/providers";
@@ -204,7 +204,7 @@ export async function sendReminderAction(appointmentId: string): Promise<Reminde
       appointmentId,
       channel,
       type: "appointment_reminder",
-      status: "sent",
+      status: statusForDeliveryMode(mode),
       payload: { mode },
     });
     await logAudit({

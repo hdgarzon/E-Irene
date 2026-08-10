@@ -11,7 +11,7 @@ import { createRiskAlert } from "@/lib/db/risk-alerts";
 import { getLatestClinicalState, appendClinicalState } from "@/lib/db/clinical-state";
 import { getLatestAssessments } from "@/lib/db/assessments";
 import { getActivePlanForPatient } from "@/lib/db/treatment-plans";
-import { recordNotification } from "@/lib/db/notifications";
+import { recordNotification, statusForDeliveryMode } from "@/lib/db/notifications";
 import { getAnalysisProvider } from "@/lib/providers";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildReportReadyEmail, buildRiskAlertEmail } from "@/lib/email/templates";
@@ -89,11 +89,17 @@ export async function runConsultationAnalysis(params: {
       // (p. ej. tras un fallo posterior al de esta alerta) no debe reenviar
       // el aviso al doctor.
       if (isNew) {
+        // Queda en el audit log si el aviso salió de verdad o si el canal
+        // estaba en modo simulado. Es la alerta de ideación suicida: importa
+        // poder responder después "¿se le avisó al doctor?" sin adivinar.
+        let alertEmailMode: string | null = null;
         try {
           const doctor = await getMemberContact(consultation.doctorId);
           if (doctor?.email) {
             const appUrl = appBaseUrl();
-            await getEmailProvider().send(
+            const email = getEmailProvider();
+            alertEmailMode = email.mode;
+            await email.send(
               buildRiskAlertEmail({
                 to: doctor.email,
                 doctorName: doctor.fullName,
@@ -118,7 +124,10 @@ export async function runConsultationAnalysis(params: {
           action: "risk_alert.created",
           entityType: "consultation",
           entityId: consultationId,
-          metadata: { categories: alertCategories.map((c) => `${c.key}:${c.level}`) },
+          metadata: {
+            categories: alertCategories.map((c) => `${c.key}:${c.level}`),
+            emailMode: alertEmailMode ?? "sin_correo_del_doctor",
+          },
         });
       }
     }
@@ -160,7 +169,8 @@ export async function runConsultationAnalysis(params: {
     // envío no debe marcar el análisis como fallido: el reporte ya existe.
     if (patient?.email) {
       try {
-        await getEmailProvider().send(
+        const email = getEmailProvider();
+        await email.send(
           buildReportReadyEmail({
             to: patient.email,
             patientName: patient.fullName,
@@ -170,7 +180,8 @@ export async function runConsultationAnalysis(params: {
         await recordNotification(clinicId, {
           patientId: consultation.patientId,
           type: "report_ready",
-          status: "sent",
+          status: statusForDeliveryMode(email.mode),
+          payload: { mode: email.mode },
         });
       } catch (error) {
         logger.warn("report_ready_email.send_failed", { clinicId, consultationId, error });
