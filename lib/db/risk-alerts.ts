@@ -8,7 +8,7 @@ import { isPhq9SelfHarmRisk, type AssessmentType } from "@/lib/psychometrics";
 import { getPatientForLink } from "@/lib/db/patients";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildPhq9RiskAlertEmail } from "@/lib/email/templates";
-import { recordNotificationPublic } from "@/lib/db/notifications";
+import { recordNotificationPublic, statusForDeliveryMode } from "@/lib/db/notifications";
 import { logAuditPublic } from "@/lib/db/audit";
 import { appBaseUrl } from "@/lib/app-url";
 
@@ -266,7 +266,8 @@ export async function alertOnRiskyAssessment(params: {
 
     const notifyDoctor = async (doctor: DoctorContact): Promise<void> => {
       try {
-        await getEmailProvider().send(
+        const email = getEmailProvider();
+        await email.send(
           buildPhq9RiskAlertEmail({
             to: doctor.email,
             doctorName: doctor.fullName,
@@ -279,7 +280,8 @@ export async function alertOnRiskyAssessment(params: {
           await recordNotificationPublic(params.clinicId, {
             patientId: params.patientId,
             type: "risk_alert",
-            status: "sent",
+            status: statusForDeliveryMode(email.mode),
+            payload: { mode: email.mode },
           });
         } catch (recordError) {
           logger.warn("risk_alert.record_notification_failed", {
