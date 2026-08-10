@@ -38,14 +38,30 @@ export default async function JoinPage({
 
   const videoProvider = getVideoProvider();
   const isMock = !(videoProvider instanceof DailyVideoProvider);
-  const patientToken = isMock
-    ? "mock-token"
-    : await videoProvider.createMeetingToken({
-        roomName: appointment!.videoRoomName!,
-        userName: appointment!.patientName,
-        isOwner: false,
-        expiresInSeconds: (appointment!.durationMin + 30) * 60,
-      });
+
+  // Sin proveedor de video configurado, la sala es falsa (mock.video) y la
+  // llamada no puede establecerse. Antes se renderizaba igual y el paciente se
+  // quedaba mirando una pantalla que nunca conecta, sin saber por qué.
+  if (isMock) {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-3 px-4 text-center">
+        <h1 className="font-heading text-xl font-bold text-navy">
+          La videollamada no está disponible
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          No podemos conectarte en este momento por una configuración pendiente de la plataforma.
+          Comunícate con tu clínica para continuar tu cita por otro medio.
+        </p>
+      </div>
+    );
+  }
+
+  const patientToken = await videoProvider.createMeetingToken({
+    roomName: appointment!.videoRoomName!,
+    userName: appointment!.patientName,
+    isOwner: false,
+    expiresInSeconds: (appointment!.durationMin + 30) * 60,
+  });
 
   return (
     <JoinCall
