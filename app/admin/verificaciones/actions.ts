@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { decideVerification, getDocumentUrl } from "@/lib/db/verification";
+import { storeDocumentHashes } from "@/lib/db/verification-documents";
 import { logAuditPublic } from "@/lib/db/audit";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildVerificationDecisionEmail } from "@/lib/email/templates";
@@ -40,6 +41,15 @@ export async function decideVerificationAction(
       reviewerId: reviewer.id,
       notes: decision === "verified" ? (notes || null) : notes,
     });
+
+    // Huella de lo que el revisor tuvo a la vista, antes de que la purga
+    // borre los archivos a los 30 días. Es lo que deja la decisión auditable
+    // sin conservar imágenes de documentos de identidad de por vida.
+    try {
+      await storeDocumentHashes(userId);
+    } catch (hashError) {
+      logger.error("verification.hash_failed", { userId, error: hashError });
+    }
 
     // El correo va después de la decisión y no la condiciona: si falla el
     // envío, la decisión ya está tomada y no debe revertirse. Sin este aviso,

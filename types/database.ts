@@ -1394,10 +1394,13 @@ export type Database = {
           clinic_id: string
           created_at: string
           document_enc: string | null
+          documents_purged_at: string | null
           email: string
           full_name: string
           id: string
+          id_document_hash: string | null
           id_document_path: string | null
+          license_document_hash: string | null
           license_document_path: string | null
           license_number: string | null
           profession: string | null
@@ -1413,10 +1416,13 @@ export type Database = {
           clinic_id: string
           created_at?: string
           document_enc?: string | null
+          documents_purged_at?: string | null
           email: string
           full_name: string
           id: string
+          id_document_hash?: string | null
           id_document_path?: string | null
+          license_document_hash?: string | null
           license_document_path?: string | null
           license_number?: string | null
           profession?: string | null
@@ -1432,10 +1438,13 @@ export type Database = {
           clinic_id?: string
           created_at?: string
           document_enc?: string | null
+          documents_purged_at?: string | null
           email?: string
           full_name?: string
           id?: string
+          id_document_hash?: string | null
           id_document_path?: string | null
+          license_document_hash?: string | null
           license_document_path?: string | null
           license_number?: string | null
           profession?: string | null

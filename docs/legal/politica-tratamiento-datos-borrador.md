@@ -157,7 +157,14 @@ Por su sensibilidad, se detalla el flujo:
 | **Consentimientos** | Igual que la historia clínica | Prueba de la autorización |
 | **Registros de auditoría** | `[10]` años | Trazabilidad y defensa jurídica |
 | **Datos de facturación** | `[10]` años | Obligaciones tributarias y comerciales |
+| **Documentos de identidad del profesional** (cédula y tarjeta profesional) | **30 días** desde la decisión de verificación; después se suprimen y solo se conserva su huella SHA-256 | Minimización: cumplida la verificación, la imagen deja de ser necesaria |
 | **Cuenta del profesional** | Mientras esté vigente la relación, más `[2]` años | Ejecución del contrato y prescripción |
+
+**Sobre los documentos de identidad del profesional:** se conservan solo mientras cumplen su
+función. Al decidir la verificación se calcula y guarda la huella SHA-256 de cada archivo, de
+modo que la decisión sigue siendo auditable —queda acreditado sobre qué documentos se resolvió—
+sin necesidad de conservar imágenes de documentos de identidad de forma indefinida. Transcurridos
+los 30 días, los archivos se eliminan del almacenamiento y la supresión queda registrada.
 
 **La supresión de la transcripción es automática y verificable:** se ejecuta mediante un proceso
 programado diario y cada ejecución queda registrada en el log de auditoría inmutable, con fecha y
