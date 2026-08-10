@@ -269,8 +269,12 @@ política de tratamiento le promete al titular y a la SIC.
 2. ~~Correr las pruebas contra Postgres.~~ **Hecho el 2026-08-07.** Ver arriba.
 3. ~~Reparar el historial de migraciones del remoto.~~ **Hecho el 2026-08-09.** Ver abajo.
 4. Revisar retroactivamente las 11 cuentas heredadas desde `/admin/verificaciones`.
-5. Notificar por correo al profesional cuando su verificación se aprueba o rechaza (hoy solo lo
-   ve al entrar a la aplicación).
+5. ~~Notificar por correo la decisión de verificación.~~ **Hecho.** El correo se envía después de
+   la decisión y no la condiciona: si falla el envío, la decisión ya está tomada y no se revierte.
+   El motivo del rechazo viaja en el correo a propósito — es información sobre el propio
+   destinatario y es justo lo que necesita para subsanar; quien fue rechazado no tiene motivo para
+   volver a entrar y nunca sabría qué corregir. Las notas del revisor **no** viajan en el correo de
+   aprobación.
 6. Suscribir DPA/BAA con Deepgram y OpenAI. Sin ellos la política no puede afirmar que las
    transferencias internacionales cuentan con garantías contractuales.
 7. Implementar las piezas de UI del aviso de privacidad y el registro de la aceptación del

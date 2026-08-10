@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { decideVerification, getDocumentUrl } from "@/lib/db/verification";
 import { logAuditPublic } from "@/lib/db/audit";
+import { getEmailProvider } from "@/lib/email/providers";
+import { buildVerificationDecisionEmail } from "@/lib/email/templates";
+import { appBaseUrl } from "@/lib/app-url";
 import { logger } from "@/lib/logger";
 
 export type ReviewState = { error?: string; success?: string };
@@ -31,12 +34,30 @@ export async function decideVerificationAction(
   }
 
   try {
-    const { previousStatus, clinicId } = await decideVerification({
+    const { previousStatus, clinicId, email, fullName } = await decideVerification({
       userId,
       decision,
       reviewerId: reviewer.id,
       notes: decision === "verified" ? (notes || null) : notes,
     });
+
+    // El correo va después de la decisión y no la condiciona: si falla el
+    // envío, la decisión ya está tomada y no debe revertirse. Sin este aviso,
+    // quien fue rechazado no tiene motivo para volver a entrar y nunca sabría
+    // qué corregir.
+    try {
+      await getEmailProvider().send(
+        buildVerificationDecisionEmail({
+          to: email,
+          doctorName: fullName,
+          decision,
+          notes: decision === "verified" ? null : notes,
+          actionUrl: `${appBaseUrl()}${decision === "verified" ? "/dashboard" : "/verificacion"}`,
+        }),
+      );
+    } catch (mailError) {
+      logger.error("verification.email_failed", { userId, decision, error: mailError });
+    }
 
     // Queda en el audit trail inmutable de la clínica del profesional: quién
     // decidió, qué decidió y desde qué estado.

@@ -188,12 +188,17 @@ export async function decideVerification(params: {
   decision: Extract<VerificationStatus, "verified" | "rejected" | "suspended">;
   reviewerId: string;
   notes?: string | null;
-}): Promise<{ previousStatus: VerificationStatus; clinicId: string }> {
+}): Promise<{
+  previousStatus: VerificationStatus;
+  clinicId: string;
+  email: string;
+  fullName: string;
+}> {
   const admin = createAdminClient();
 
   const { data: current, error: readError } = await admin
     .from("users")
-    .select("verification_status, clinic_id")
+    .select("verification_status, clinic_id, email, full_name")
     .eq("id", params.userId)
     .single();
   if (readError) throw readError;
@@ -219,5 +224,10 @@ export async function decideVerification(params: {
     .eq("verification_status", current.verification_status);
   if (error) throw error;
 
-  return { previousStatus: current.verification_status, clinicId: current.clinic_id };
+  return {
+    previousStatus: current.verification_status,
+    clinicId: current.clinic_id,
+    email: current.email,
+    fullName: current.full_name,
+  };
 }
