@@ -290,4 +290,10 @@ política de tratamiento le promete al titular y a la SIC.
    el almacenamiento real, así que hay que pasar por la API de Storage. Si el borrado del archivo
    falla, la fila **no** se marca como purgada y se reintenta al día siguiente, en vez de dar por
    hecho un borrado que no ocurrió.
+
+   **Ejercitada contra Storage real** (`tests/verification-documents-purge.test.ts`, 7 pruebas):
+   la huella coincide con el contenido real del archivo; una decisión reciente no se toca; cumplido
+   el plazo los archivos desaparecen del bucket, las rutas quedan nulas y se fija
+   `documents_purged_at`; **la huella sobrevive al borrado**; queda una fila en `audit_logs`; y una
+   segunda corrida no vuelve a registrar la purga.
 9. Mover `ENCRYPTION_KEY` a un KMS (pendiente heredado de `docs/COMPLIANCE.md`).
