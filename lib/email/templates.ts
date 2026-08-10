@@ -12,6 +12,23 @@ function wrap(title: string, body: string): string {
   </div></body></html>`;
 }
 
+/**
+ * Variante para correos que E-Irene envía **al profesional** por su cuenta, no
+ * por cuenta de una clínica. El pie de `wrap()` ("mensaje automático de tu
+ * profesional de salud mental") es correcto para pacientes y falso aquí.
+ */
+function wrapPlatform(title: string, body: string): string {
+  return `<!doctype html><html><body style="margin:0;background:#f6f9fc;font-family:Arial,sans-serif">
+  <div style="max-width:520px;margin:0 auto;padding:24px">
+    <div style="background:#0a2540;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;font-weight:bold">E-Irene</div>
+    <div style="background:#fff;padding:24px;border:1px solid #e3e8ee;border-top:0;border-radius:0 0 12px 12px;color:#0a2540">
+      <h2 style="margin-top:0;color:#0a2540">${title}</h2>
+      ${body}
+    </div>
+    <p style="color:#5b6b7c;font-size:12px;margin-top:16px">Mensaje automático de E-Irene sobre tu cuenta profesional.</p>
+  </div></body></html>`;
+}
+
 export function buildReminderEmail(input: {
   to: string;
   patientName: string;
@@ -173,6 +190,91 @@ export function buildPhq9RiskAlertEmail(input: {
          </a>
        </p>
        <p style="font-size:13px;color:#5b6b7c">Por privacidad del paciente, el detalle clínico no se envía por correo.</p>`,
+    ),
+  };
+}
+
+/**
+ * Decisión sobre la verificación de habilitación profesional.
+ *
+ * Sin este correo, el profesional solo se entera de la decisión si vuelve a
+ * entrar a la plataforma — y quien fue rechazado no tiene motivo para volver,
+ * así que nunca sabría qué corregir.
+ *
+ * El motivo del rechazo sí viaja en el correo: es información sobre el propio
+ * destinatario y es justo lo que necesita para poder subsanar.
+ */
+export function buildVerificationDecisionEmail(input: {
+  to: string;
+  doctorName: string;
+  decision: "verified" | "rejected" | "suspended";
+  notes?: string | null;
+  actionUrl: string;
+}): EmailMessage {
+  const nombre = input.doctorName.split(" ")[0] || input.doctorName;
+
+  if (input.decision === "verified") {
+    return {
+      to: input.to,
+      subject: "Tu verificación profesional fue aprobada",
+      text:
+        `Hola ${nombre}, verificamos tu habilitación profesional y tu cuenta ya tiene acceso ` +
+        `completo a E-Irene: puedes registrar pacientes y transcribir sesiones. ${input.actionUrl}`,
+      html: wrapPlatform(
+        "Verificación aprobada",
+        `<p>Hola <strong>${nombre}</strong>,</p>
+         <p>Verificamos tu habilitación profesional. Tu cuenta ya tiene <strong>acceso completo</strong>:
+         puedes registrar pacientes y transcribir sesiones.</p>
+         <p style="margin:20px 0">
+           <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+             Entrar a la plataforma
+           </a>
+         </p>`,
+      ),
+    };
+  }
+
+  const esRechazo = input.decision === "rejected";
+  const titulo = esRechazo ? "No pudimos verificar tu habilitación" : "Tu verificación fue suspendida";
+  const motivo = input.notes?.trim();
+
+  return {
+    to: input.to,
+    subject: esRechazo
+      ? "No pudimos verificar tu habilitación profesional"
+      : "Tu verificación profesional fue suspendida",
+    text:
+      `Hola ${nombre}, ${titulo.toLowerCase()}.` +
+      (motivo ? ` Motivo: ${motivo}.` : "") +
+      (esRechazo
+        ? ` Puedes volver a enviar tus documentos aquí: ${input.actionUrl}`
+        : ` Escríbenos para revisar tu caso.`),
+    html: wrapPlatform(
+      titulo,
+      `<p>Hola <strong>${nombre}</strong>,</p>
+       <p>${
+         esRechazo
+           ? "Revisamos los documentos que enviaste y no pudimos confirmar tu habilitación profesional."
+           : "Suspendimos la verificación de tu cuenta, por lo que no podrás registrar pacientes ni transcribir sesiones."
+       }</p>
+       ${
+         motivo
+           ? `<p style="background:#fdecec;border-radius:8px;padding:12px;font-size:14px;color:#9b1c1c">
+                <strong>Motivo:</strong> ${motivo}
+              </p>`
+           : ""
+       }
+       ${
+         esRechazo
+           ? `<p>Puedes corregir lo señalado y volver a enviar tus documentos:</p>
+              <p style="margin:20px 0">
+                <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+                  Reenviar documentos
+                </a>
+              </p>`
+           : `<p>Si crees que se trata de un error, responde a este correo para revisar tu caso.</p>`
+       }
+       <p style="font-size:13px;color:#5b6b7c">Los registros clínicos que ya creaste siguen accesibles: continúas siendo responsable de esas historias.</p>`,
     ),
   };
 }
