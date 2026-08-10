@@ -279,5 +279,21 @@ política de tratamiento le promete al titular y a la SIC.
    transferencias internacionales cuentan con garantías contractuales.
 7. Implementar las piezas de UI del aviso de privacidad y el registro de la aceptación del
    profesional (hoy no hay prueba de que aceptó nada).
-8. Definir el plazo de conservación de los documentos de identidad en la política de tratamiento.
+8. ~~Definir el plazo de conservación de los documentos de identidad.~~ **Hecho.** 30 días desde
+   la decisión (migración 0037). Al decidir se guarda el SHA-256 de cada archivo, calculado **en
+   el servidor** —una huella que el propio interesado envía desde el navegador no prueba nada— de
+   modo que la decisión sigue siendo auditable sin conservar imágenes de documentos de identidad
+   de forma indefinida.
+
+   La purga corre en `/api/cron/purge-documents` y no en pg_cron, a diferencia de la de
+   transcripciones: borrar filas de `storage.objects` desde SQL dejaría los archivos huérfanos en
+   el almacenamiento real, así que hay que pasar por la API de Storage. Si el borrado del archivo
+   falla, la fila **no** se marca como purgada y se reintenta al día siguiente, en vez de dar por
+   hecho un borrado que no ocurrió.
+
+   **Ejercitada contra Storage real** (`tests/verification-documents-purge.test.ts`, 7 pruebas):
+   la huella coincide con el contenido real del archivo; una decisión reciente no se toca; cumplido
+   el plazo los archivos desaparecen del bucket, las rutas quedan nulas y se fija
+   `documents_purged_at`; **la huella sobrevive al borrado**; queda una fila en `audit_logs`; y una
+   segunda corrida no vuelve a registrar la purga.
 9. Mover `ENCRYPTION_KEY` a un KMS (pendiente heredado de `docs/COMPLIANCE.md`).
