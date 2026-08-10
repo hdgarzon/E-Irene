@@ -7,6 +7,7 @@ import { getClinicOverview } from "@/lib/db/clinic";
 import { canStartConsultation, limitLabel, PLANS } from "@/lib/plans";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
 import { requireVerifiedProfessional } from "@/lib/auth";
+import { isVideoSimulated } from "@/lib/channel-status";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -86,6 +87,12 @@ export default async function NewConsultationPage({
               Se transcribirá la sesión en tiempo real. El audio nunca se almacena; solo el texto,
               cifrado.
             </p>
+            {isVideoSimulated() && (
+              <p className="mx-auto mt-3 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                La videollamada no está configurada en esta instalación: las citas por video no
+                podrán conectarse. La consulta presencial y la transcripción funcionan con normalidad.
+              </p>
+            )}
             <form action={start} className="mt-6 space-y-4 text-left">
               <div className="space-y-1.5">
                 <Label htmlFor="reason">Motivo de la consulta (opcional)</Label>
