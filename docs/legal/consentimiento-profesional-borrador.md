@@ -60,9 +60,10 @@ conocimiento de las autoridades competentes y de los tribunales ético-disciplin
 
 ## TERCERA — Verificación de la habilitación profesional
 
-`[IMPLEMENTADO EN CÓDIGO, PENDIENTE DE DESPLIEGUE (migración 0032). El control existe y está
-probado, pero aún no corre en producción. La abogada puede describirlo como procedimiento
-adoptado; NO debe presentarlo como vigente hasta que se confirme el despliegue.]`
+`[CONTROL VIGENTE EN PRODUCCIÓN desde el 9 de agosto de 2026 (migración 0032). Puede describirse
+como control efectivo, no como procedimiento previsto. Única salvedad: las 11 cuentas anteriores
+al despliegue quedaron verificadas automáticamente y su revisión retroactiva sigue pendiente —
+ver sección 4.3 del memo.]`
 
 Como condición para acceder a las funcionalidades clínicas, el Profesional deberá:
 
@@ -275,5 +276,5 @@ usuario y marca temporal — el mismo esquema que ya se aplica al consentimiento
 | 3 | Exigibilidad de la limitación de responsabilidad; ¿póliza de RC? | Octava |
 | 4 | Nivel de servicio comprometido | Octava.2 |
 | 5 | ¿Arbitraje o jurisdicción ordinaria en contrato de adhesión? | Undécima |
-| 6 | Confirmar redacción de la cláusula tercera como "procedimiento previsto" | Tercera |
+| 6 | ~~Confirmar redacción de la cláusula tercera~~ — resuelto: el control está vigente | Tercera |
 | 7 | ¿Se requiere formato diferenciado para instituciones frente a independientes? | Primera |

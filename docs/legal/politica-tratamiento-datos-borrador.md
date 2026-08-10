@@ -239,11 +239,16 @@ información. Las implementadas a la fecha:
 - **Minimización:** el audio no se persiste; la transcripción se suprime automáticamente.
 - **Trazabilidad del consentimiento:** huella SHA-256 del documento firmado, dirección IP, agente
   de usuario y marca temporal.
+- **Verificación de habilitación profesional:** el acceso a las funciones clínicas exige aportar
+  documento de identidad y tarjeta profesional, y aprobación manual. El control se aplica en la
+  base de datos, no solo en la interfaz.
+- **Trazabilidad de la aceptación de esta política:** versión, huella SHA-256, dirección IP,
+  agente de usuario y marca temporal, en registro inmutable.
 
 `[Pendientes conocidos, que la abogada debe considerar antes de publicar: custodia de la clave de
 cifrado en un módulo de gestión de claves (hoy reside en variable de entorno); procedimiento
-formal de respuesta a incidentes; y verificación de habilitación profesional en el registro, hoy
-no implementada.]`
+formal de respuesta a incidentes; y revisión retroactiva de las 11 cuentas anteriores al
+despliegue de la verificación, que quedaron aprobadas automáticamente.]`
 
 ---
 

@@ -58,8 +58,13 @@ valida, lo que apunta a encargo — pero es la decisión con más consecuencias 
 
 ## 4. Hallazgos técnicos que motivaron este trabajo
 
-Encontramos tres cosas en la auditoría interna. **Dos ya están corregidas en código**; la
-tercera sigue abierta y afecta lo que los documentos pueden afirmar.
+La auditoría interna encontró cuatro brechas entre lo que la plataforma **declaraba** y lo que
+**hacía**. **Las cuatro están corregidas y desplegadas en producción** (9 de agosto de 2026), y
+los documentos que acompañan este memo describen el estado actual, no el planeado.
+
+Queda **una sola cosa abierta que sí es jurídica**: los acuerdos de tratamiento con los
+proveedores extranjeros (ver 4.1). Mientras no existan, la sección 4.1 de la política de
+tratamiento no puede afirmarse tal como está redactada.
 
 ### 4.1 Retención de audio en el proveedor de transcripción — CORREGIDO
 
@@ -83,18 +88,41 @@ indefinidamente: fragmentos huérfanos cuando fallaba la consolidación, y consu
 cerraron formalmente. Ambas están corregidas, y ahora cada purga queda registrada en el log de
 auditoría inmutable — es decir, **la supresión es demostrable**, no solo prometida.
 
-### 4.3 Verificación del profesional — PENDIENTE
+No es teoría: el proceso **ya se ejecutó solo en producción** los días 8 y 9 de agosto de 2026,
+borró las transcripciones que habían cumplido su plazo y dejó la constancia correspondiente. Si
+la Superintendencia pregunta cómo se acredita la supresión, la respuesta es una consulta a ese
+registro.
 
-Hoy el registro solo pide nombre de la clínica, nombre y correo. **No hay ninguna verificación
-de que quien se inscribe sea un profesional habilitado.**
+### 4.3 Verificación del profesional — CORREGIDO
 
-El diseño acordado (carga de cédula y tarjeta profesional, cuenta en estado *pendiente* con
-acceso restringido, aprobación manual con registro de quién aprobó y cuándo) está documentado
-pero **no implementado todavía**.
+Hasta agosto de 2026 el registro solo pedía nombre de la clínica, nombre y correo: cualquiera
+creaba una clínica y quedaba con acceso a historias clínicas.
 
-Por eso el consentimiento del profesional describe ese control como **procedimiento previsto** y
-no como control vigente. Te pedimos no ajustar esa redacción hasta que confirmemos que está en
-producción: preferimos quedarnos cortos a certificar algo que aún no existe.
+Hoy, para acceder a las funciones clínicas el profesional debe aportar copia de su documento de
+identidad y de su tarjeta profesional, y esperar aprobación manual. Mientras tanto la cuenta
+queda en estado *pendiente de verificación*, sin poder crear pacientes ni transcribir sesiones.
+De cada aprobación o rechazo queda constancia de quién decidió y cuándo.
+
+El control **no vive en la interfaz sino en la base de datos** (políticas de fila): una llamada
+directa a la API tampoco puede crear registros clínicos sin verificación, y un disparador impide
+que alguien se auto-apruebe o que el administrador de una clínica apruebe a sus colegas. Está
+verificado con pruebas automatizadas que se ejecutan contra la base real.
+
+**Salvedad que debes conocer:** las **11 cuentas que ya existían** al momento del despliegue
+quedaron marcadas como verificadas de forma automática, porque dejarlas bloqueadas habría cortado
+el acceso clínico a profesionales que estaban atendiendo pacientes. **Nadie revisó sus
+credenciales todavía.** Están señaladas aparte en la consola de administración para revisión
+retroactiva, que sigue pendiente.
+
+### 4.4 Aceptación de la política — CORREGIDO
+
+Tampoco existía prueba de que el profesional hubiera aceptado nada. Hoy, quien no haya aceptado
+la versión vigente del aviso de privacidad no accede a la plataforma, y la aceptación queda
+registrada de forma **inmutable** con la versión del documento, su huella SHA-256, la dirección
+IP, el agente de usuario y la marca temporal. La autorización para comunicaciones comerciales se
+recaba en casilla separada y opcional.
+
+El aviso está publicado en `/privacidad`, accesible **sin necesidad de iniciar sesión**.
 
 ## 5. Preguntas abiertas
 
