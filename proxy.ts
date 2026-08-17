@@ -19,7 +19,11 @@ import { createServerClient } from "@supabase/ssr";
 // `/privacidad` es público a propósito: el aviso debe poder leerse ANTES de
 // crear una cuenta, y el login y el registro enlazan a él. Un aviso de
 // privacidad que exige iniciar sesión no informa a nadie.
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad", "/privacidad"]);
+// `/sw.js`: el service worker debe poder registrarse sin sesión (se registra
+// en cualquier página pública). Un service worker script NUNCA puede llegar
+// como redirect (aquí, hacia /login) — el navegador rechaza directamente esa
+// respuesta ("script resource is behind a redirect, which is disallowed").
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad", "/privacidad", "/sw.js"]);
 // Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
 // /enlace: links de paciente con token, ver app/enlace/[token];
 // /join: sala de videollamada del paciente, ver app/join/[token];
@@ -143,6 +147,6 @@ export async function proxy(request: NextRequest) {
 // de lo contrario el `matcher` se ignora y el proxy corre en cada request.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mp3|wav|woff2?|ttf|otf|pdf)$).*)",
   ],
 };
