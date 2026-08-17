@@ -2,9 +2,7 @@
 
 import { useActionState } from "react";
 import { setPasswordAction, type SetPasswordState } from "@/app/auth/set-password/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LandingLiquidGlassButton } from "@/components/landing-liquid-glass-button";
 
 export function SetPasswordForm({
   clinicName,
@@ -19,41 +17,60 @@ export function SetPasswordForm({
   );
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="clinicName">Nombre de la clínica</Label>
-        <Input id="clinicName" name="clinicName" required defaultValue={clinicName} />
+    <form action={formAction} className="space-y-4 text-left">
+      <div>
+        <label htmlFor="clinicName" className="landing-field-label">
+          Nombre de la clínica
+        </label>
+        <input
+          id="clinicName"
+          name="clinicName"
+          required
+          defaultValue={clinicName}
+          className="landing-field-input"
+        />
         {state.fieldErrors?.clinicName && (
-          <p className="text-sm text-destructive">{state.fieldErrors.clinicName}</p>
+          <p className="landing-field-error">{state.fieldErrors.clinicName}</p>
         )}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="fullName">Tu nombre completo</Label>
-        <Input id="fullName" name="fullName" required defaultValue={fullName} />
-        {state.fieldErrors?.fullName && (
-          <p className="text-sm text-destructive">{state.fieldErrors.fullName}</p>
-        )}
+      <div>
+        <label htmlFor="fullName" className="landing-field-label">
+          Tu nombre completo
+        </label>
+        <input
+          id="fullName"
+          name="fullName"
+          required
+          defaultValue={fullName}
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.fullName && <p className="landing-field-error">{state.fieldErrors.fullName}</p>}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Contraseña</Label>
-        <Input id="password" name="password" type="password" autoComplete="new-password" required />
-        {state.fieldErrors?.password && (
-          <p className="text-sm text-destructive">{state.fieldErrors.password}</p>
-        )}
-        <p className="text-xs text-muted-foreground">Mínimo 8 caracteres.</p>
-      </div>
-
-      {state.error && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
+      <div>
+        <label htmlFor="password" className="landing-field-label">
+          Contraseña
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          required
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.password && <p className="landing-field-error">{state.fieldErrors.password}</p>}
+        <p style={{ fontFamily: "var(--font-landing-sans)", fontWeight: 300, fontSize: 12, color: "#46617d", opacity: 0.8, marginTop: 6 }}>
+          Mínimo 8 caracteres.
         </p>
-      )}
+      </div>
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      {state.error && <p className="landing-form-error">{state.error}</p>}
+
+      <LandingLiquidGlassButton type="submit" disabled={pending} className="w-full">
         {pending ? "Guardando…" : "Guardar y entrar"}
-      </Button>
+      </LandingLiquidGlassButton>
     </form>
   );
 }
