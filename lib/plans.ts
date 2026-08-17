@@ -91,7 +91,7 @@ export function limitLabel(n: number): string {
 
 /**
  * Cuota mensual de transcripción en segundos; null = ilimitado (enterprise).
- * Es el valor que se pasa a begin_transcription_session (ver migración 0038):
+ * Es el valor que se pasa a begin_transcription_session (ver migración 0039):
  * el límite de cumplimiento vive aquí, no en la base de datos (criterio de la
  * migración 0014).
  */

@@ -27,7 +27,7 @@ export default async function LiveConsultationPage({
     : null;
   const isVideo = appointment?.modality === "video";
 
-  // Cuota mensual de transcripción del plan (lib/plans.ts + migración 0038):
+  // Cuota mensual de transcripción del plan (lib/plans.ts + migración 0039):
   // se verifica ANTES de acuñar cualquier token. beginTranscriptionSession
   // además abre el registro de consumo (idempotente por consulta: recargar la
   // página no duplica horas; el modo video tampoco — sus 2 conexiones Deepgram

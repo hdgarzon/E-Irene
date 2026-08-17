@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { transcriptionLimitSeconds, type Plan } from "@/lib/plans";
 
 /**
- * Medición y cuota de transcripción (ver migración 0038_transcription_usage):
+ * Medición y cuota de transcripción (ver migración 0039_transcription_usage):
  * la cuota mide la duración de la consulta con sesión de transcripción
  * otorgada, UNA vez por consulta — aunque el modo video abra 2 conexiones
  * Deepgram. La tabla está bloqueada (RLS sin políticas); todo pasa por RPCs

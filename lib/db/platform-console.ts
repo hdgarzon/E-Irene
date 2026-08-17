@@ -197,7 +197,7 @@ export interface ClinicMapEntry {
   suspended: boolean;
   doctors: { id: string; fullName: string; email: string; role: UserRole }[];
   patientCount: number;
-  /** Segundos de transcripción consumidos en el mes en curso (migración 0038). */
+  /** Segundos de transcripción consumidos en el mes en curso (migración 0039). */
   transcriptionSecondsMonth: number;
 }
 

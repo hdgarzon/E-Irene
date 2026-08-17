@@ -3,14 +3,16 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 
 /**
- * Integración de la cuota de transcripción (migración 0038): begin/finalize,
+ * Integración de la cuota de transcripción (migración 0039): begin/finalize,
  * aislamiento multi-tenant y bloqueo de acceso directo a la tabla. Igual que
  * rls.test.ts, solo corre contra un Supabase local con migraciones aplicadas.
  */
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const hasSupabase = Boolean(URL && ANON);
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// bootstrapClinic necesita service-role para verificar al admin (ver abajo).
+const hasSupabase = Boolean(URL && ANON && SERVICE);
 
 const d = hasSupabase ? describe : describe.skip;
 
@@ -22,16 +24,39 @@ function anon(): SupabaseClient {
   });
 }
 
+/** Cliente que salta RLS, para aprobar la verificación como lo haría el
+ *  admin de plataforma (ver tests/rls.test.ts). */
+function service(): SupabaseClient {
+  return createClient(URL!, SERVICE!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+/**
+ * Crea una clínica con su admin y lo verifica: desde la migración
+ * 0032_professional_verification, insertar en patients/consultations exige
+ * auth_can_access_clinical(), que requiere verification_status = 'verified'.
+ * Sin este paso, todos los begin()/createConsultation() de este archivo
+ * fallarían por RLS antes de llegar a probar la cuota.
+ */
 async function bootstrapClinic(name: string) {
   const client = anon();
   const email = `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@e-irene.test`;
-  const { error: signErr } = await client.auth.signUp({ email, password: "Password123!" });
+  const { data: signUp, error: signErr } = await client.auth.signUp({
+    email,
+    password: "Password123!",
+  });
   expect(signErr).toBeNull();
   const { data: clinicId, error: rpcErr } = await client.rpc("create_clinic_and_admin", {
     clinic_name: name,
     full_name: "Doctor Test",
   });
   expect(rpcErr).toBeNull();
+  const { error: verifyErr } = await service()
+    .from("users")
+    .update({ verification_status: "verified" })
+    .eq("id", signUp.user!.id);
+  expect(verifyErr).toBeNull();
   return { client, clinicId: clinicId as string };
 }
 
