@@ -145,8 +145,28 @@ export async function proxy(request: NextRequest) {
 
 // IMPORTANTE: en Next 16 el export DEBE llamarse `config` (no `proxyConfig`),
 // de lo contrario el `matcher` se ignora y el proxy corre en cada request.
+//
+// `missing: next-router-prefetch/purpose:prefetch` — cada prefetch de <Link>
+// (Next los dispara solo con que el link esté en pantalla, no hace falta ni
+// hover) volvía a pasar por acá, y como el nonce de la CSP es aleatorio por
+// request, ese prefetch quedaba con un nonce distinto al de la navegación
+// real que el usuario termina haciendo. Next reutiliza datos de ese prefetch
+// al navegar, y el navegador terminaba bloqueando TODOS los scripts de la
+// página (nonce de los <script> ≠ nonce del header CSP) — sin este `missing`
+// pasaba en cualquier página después de la primera, apenas había un <Link>
+// visible de por medio. Documentado como el patrón recomendado por Next.js
+// para esta combinación (proxy + nonce por request + prefetch de Link).
+// La autorización real no depende de esto: requireUser()/requireRole() en
+// cada página y Server Action la exigen igual, con o sin este guard.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mp3|wav|woff2?|ttf|otf|pdf)$).*)",
+    {
+      source:
+        "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mp3|wav|woff2?|ttf|otf|pdf)$).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };
