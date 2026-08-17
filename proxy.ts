@@ -37,7 +37,10 @@ const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad", "/privacid
 // 307 hacia /login no es un fallo visible, la invocación simplemente termina
 // y el cobro recurrente nunca corre
 // (https://vercel.com/docs/cron-jobs/manage-cron-jobs#cron-jobs-and-redirects).
-const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join", "/api/webhooks", "/api/cron"];
+// /capability: páginas de detalle de la landing pública (ver
+// app/(marketing)/capability/[slug]), enlazadas desde las tarjetas de
+// Curriculum — deben poder verse sin sesión igual que "/".
+const PUBLIC_PREFIXES = ["/auth", "/enlace", "/join", "/api/webhooks", "/api/cron", "/capability"];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;

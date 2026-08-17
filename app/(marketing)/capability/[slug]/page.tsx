@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { LandingCapabilityDetail } from "@/components/landing-capability-detail";
 import { capabilityDetailConfig } from "@/lib/landing-content";
 
@@ -26,6 +27,10 @@ export default async function CapabilityPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  // Ver comentario en app/(marketing)/page.tsx: la CSP con nonce por request
+  // exige render dinámico, incompatible con el prerender de generateStaticParams.
+  await connection();
+
   const { slug } = await params;
   const data = capabilityDetailConfig.capabilities[slug];
   if (!data) notFound();
