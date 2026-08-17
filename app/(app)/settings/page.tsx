@@ -2,32 +2,14 @@ import Link from "next/link";
 import { Users, CreditCard, ChevronRight } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview } from "@/lib/db/clinic";
-import { PLANS, limitLabel } from "@/lib/plans";
-
-function UsageBar({ used, max, label }: { used: number; max: number; label: string }) {
-  const pct = Number.isFinite(max) ? Math.min((used / max) * 100, 100) : Math.min(used, 100) / 4;
-  return (
-    <div>
-      <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="text-navy">
-          {used} / {limitLabel(max)}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-purple"}`}
-          style={{ width: `${Number.isFinite(max) ? pct : 25}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
+import { PLANS, transcriptionUsageLabel } from "@/lib/plans";
+import { UsageBar } from "@/components/usage-bar";
 
 export default async function SettingsPage() {
   const user = await requireRole(["admin", "doctor"]);
   const isAdmin = user.role === "admin";
-  const overview = await getClinicOverview();
+  const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
   const limits = PLANS[overview.plan];
 
   return (
@@ -47,6 +29,12 @@ export default async function SettingsPage() {
         <div className="mt-4 space-y-3">
           <UsageBar used={overview.patientCount} max={limits.maxPatients} label="Pacientes" />
           <UsageBar used={overview.doctorCount} max={limits.maxDoctors} label="Profesionales" />
+          <UsageBar
+            used={usage.usedSeconds / 3600}
+            max={limits.transcriptionHours}
+            label="Transcripción este mes"
+            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
+          />
         </div>
       </div>
 

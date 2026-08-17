@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { Building2, Users, Ban, RotateCcw, Stethoscope } from "lucide-react";
 import type { ClinicMapEntry } from "@/lib/db/platform-console";
 import { setClinicPlanAction, setClinicSuspendedAction } from "@/app/admin/actions";
-import { PLANS, type Plan } from "@/lib/plans";
+import { PLANS, transcriptionHoursLabel, type Plan } from "@/lib/plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -36,7 +36,8 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
             </div>
             <p className="text-xs text-muted-foreground">
               {clinic.doctors.length} profesional{clinic.doctors.length === 1 ? "" : "es"} ·{" "}
-              {clinic.patientCount} paciente{clinic.patientCount === 1 ? "" : "s"}
+              {clinic.patientCount} paciente{clinic.patientCount === 1 ? "" : "s"} ·{" "}
+              {transcriptionHoursLabel(clinic.transcriptionSecondsMonth)} h transcritas este mes
             </p>
           </div>
         </div>

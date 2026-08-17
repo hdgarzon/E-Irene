@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlatformClinicOverview } from "@/lib/db/platform-admin";
+import { getPlatformTranscriptionUsage } from "@/lib/db/transcription-usage";
 import type { UserRole } from "@/lib/auth";
 
 // ============================ Doctores / personal ===========================
@@ -196,18 +197,23 @@ export interface ClinicMapEntry {
   suspended: boolean;
   doctors: { id: string; fullName: string; email: string; role: UserRole }[];
   patientCount: number;
+  /** Segundos de transcripción consumidos en el mes en curso (migración 0038). */
+  transcriptionSecondsMonth: number;
 }
 
 /**
- * Clínicas con sus doctores y conteo de pacientes (el "mapa").
+ * Clínicas con sus doctores, conteo de pacientes y consumo de transcripción
+ * del mes (el "mapa").
  *
  * El conteo de pacientes viene de get_platform_clinic_overview() (SECURITY
  * DEFINER, solo count, sin PII) — NO de leer filas de `patients`, a las que el
- * super-admin ya no tiene acceso vía RLS (ver migración 0015).
+ * super-admin ya no tiene acceso vía RLS (ver migración 0015). El consumo de
+ * transcripción viene de get_platform_transcription_usage() (misma línea:
+ * solo segundos y conteos, nunca contenido clínico).
  */
 export async function getClinicMap(): Promise<ClinicMapEntry[]> {
   const supabase = await createClient();
-  const [{ data, error }, overview] = await Promise.all([
+  const [{ data, error }, overview, usage] = await Promise.all([
     supabase
       .from("clinics")
       .select(
@@ -216,10 +222,12 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
       )
       .order("created_at", { ascending: false }),
     getPlatformClinicOverview(),
+    getPlatformTranscriptionUsage(),
   ]);
   if (error) throw error;
 
   const patientCountByClinic = new Map(overview.map((o) => [o.clinicId, o.patientCount]));
+  const usageByClinic = new Map(usage.map((u) => [u.clinicId, u.usedSeconds]));
 
   return (
     data as unknown as {
@@ -238,5 +246,6 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
       .filter((u) => u.role !== "paciente")
       .map((u) => ({ id: u.id, fullName: u.full_name, email: u.email, role: u.role })),
     patientCount: patientCountByClinic.get(c.id) ?? 0,
+    transcriptionSecondsMonth: usageByClinic.get(c.id) ?? 0,
   }));
 }

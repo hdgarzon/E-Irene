@@ -88,3 +88,26 @@ export function canStartConsultation(plan: Plan, consultationsThisMonth: number)
 export function limitLabel(n: number): string {
   return Number.isFinite(n) ? String(n) : "Ilimitado";
 }
+
+/**
+ * Cuota mensual de transcripción en segundos; null = ilimitado (enterprise).
+ * Es el valor que se pasa a begin_transcription_session (ver migración 0038):
+ * el límite de cumplimiento vive aquí, no en la base de datos (criterio de la
+ * migración 0014).
+ */
+export function transcriptionLimitSeconds(plan: Plan): number | null {
+  const hours = PLANS[plan].transcriptionHours;
+  return Number.isFinite(hours) ? hours * 3600 : null;
+}
+
+/** Segundos de transcripción → horas legibles: "0", "1,5", "20". */
+export function transcriptionHoursLabel(seconds: number): string {
+  return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 }).format(seconds / 3600);
+}
+
+/** Contador de consumo mensual: "1,5 h / 2 h" o "3,2 h / Ilimitado". */
+export function transcriptionUsageLabel(usedSeconds: number, plan: Plan): string {
+  const used = transcriptionHoursLabel(usedSeconds);
+  const max = PLANS[plan].transcriptionHours;
+  return Number.isFinite(max) ? `${used} h / ${max} h` : `${used} h / Ilimitado`;
+}

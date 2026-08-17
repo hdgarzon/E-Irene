@@ -8,6 +8,7 @@ import { getActiveConsent } from "@/lib/db/consents";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { canStartConsultation } from "@/lib/plans";
 import { startConsultation, appendChunk, endConsultation, setAnalysisStatus } from "@/lib/db/consultations";
+import { finalizeTranscriptionSession } from "@/lib/db/transcription-usage";
 import { updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
 import { upsertSoapNote } from "@/lib/db/soap-notes";
 import { runConsultationAnalysis } from "@/lib/consultation-analysis";
@@ -176,6 +177,22 @@ export async function validateReportAction(reportId: string, consultationId: str
 export async function endConsultationAction(consultationId: string): Promise<void> {
   const user = await requireUser();
   const transcript = await endConsultation(consultationId);
+
+  // Cierra el registro de consumo con la duración real (ended_at ya quedó
+  // fijado arriba). Si esta llamada se pierde, begin_transcription_session
+  // tiene una red de seguridad que finaliza sesiones huérfanas — por eso un
+  // fallo aquí se registra pero no bloquea el cierre de la consulta.
+  try {
+    await finalizeTranscriptionSession(consultationId);
+  } catch (error) {
+    logger.error("transcription_usage.finalize_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      consultationId,
+      error,
+    });
+  }
+
   await logAudit({
     clinicId: user.clinicId,
     actorId: user.id,

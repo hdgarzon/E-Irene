@@ -1223,6 +1223,44 @@ export type Database = {
           },
         ]
       }
+      transcription_usage: {
+        Row: {
+          clinic_id: string
+          consultation_id: string
+          created_at: string
+          finalized_at: string | null
+          id: string
+          seconds: number
+          started_at: string
+        }
+        Insert: {
+          clinic_id: string
+          consultation_id: string
+          created_at?: string
+          finalized_at?: string | null
+          id?: string
+          seconds?: number
+          started_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          consultation_id?: string
+          created_at?: string
+          finalized_at?: string | null
+          id?: string
+          seconds?: number
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcription_usage_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       treatment_plan_items: {
         Row: {
           clinic_id: string
@@ -1484,6 +1522,10 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      begin_transcription_session: {
+        Args: { p_consultation_id: string; p_limit_seconds: number | null }
+        Returns: Json
+      }
       check_rate_limit: {
         Args: { p_key: string; p_max: number; p_window_seconds: number }
         Returns: boolean
@@ -1491,6 +1533,10 @@ export type Database = {
       create_clinic_and_admin: {
         Args: { clinic_name: string; full_name: string }
         Returns: string
+      }
+      finalize_transcription_session: {
+        Args: { p_consultation_id: string }
+        Returns: undefined
       }
       get_platform_appointment_status: {
         Args: never
@@ -1515,6 +1561,18 @@ export type Database = {
           slug: string
           suspended_at: string
         }[]
+      }
+      get_platform_transcription_usage: {
+        Args: never
+        Returns: {
+          clinic_id: string
+          sessions: number
+          used_seconds: number
+        }[]
+      }
+      get_transcription_usage: {
+        Args: never
+        Returns: Json
       }
       is_platform_admin: { Args: never; Returns: boolean }
       platform_set_clinic_plan: {

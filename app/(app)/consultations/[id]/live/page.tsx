@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getConsultation } from "@/lib/db/consultations";
 import { getAppointment } from "@/lib/db/appointments";
+import { beginTranscriptionSession } from "@/lib/db/transcription-usage";
 import { getTranscriptionProvider } from "@/lib/providers";
 import { getVideoProvider } from "@/lib/video";
 import { DailyVideoProvider } from "@/lib/video/daily";
@@ -26,14 +27,23 @@ export default async function LiveConsultationPage({
     : null;
   const isVideo = appointment?.modality === "video";
 
+  // Cuota mensual de transcripción del plan (lib/plans.ts + migración 0038):
+  // se verifica ANTES de acuñar cualquier token. beginTranscriptionSession
+  // además abre el registro de consumo (idempotente por consulta: recargar la
+  // página no duplica horas; el modo video tampoco — sus 2 conexiones Deepgram
+  // cuentan la duración de la consulta UNA sola vez). Con la cuota agotada no
+  // se crea sesión de ningún proveedor (mock incluido) y la UI lo explica.
+  const quota = await beginTranscriptionSession(id, user.clinicId);
+
   // El token efímero de Deepgram se acuña aquí (servidor); el navegador abre
   // el WebSocket directo con él. La API key real nunca llega al cliente.
   // En modo video se necesita igual (transcribe el mic local del doctor).
   const transcriptionProvider = getTranscriptionProvider();
   const needsDeepgramSession = transcriptionProvider.mode === "deepgram" || isVideo;
-  const session = needsDeepgramSession
-    ? await transcriptionProvider.createSession(id)
-    : null;
+  const session =
+    quota.allowed && needsDeepgramSession
+      ? await transcriptionProvider.createSession(id)
+      : null;
 
   // Si Daily.co falla al acuñar el token (red caída, key inválida), no debe
   // tumbar toda la página — el doctor debe poder seguir con la transcripción
@@ -80,6 +90,8 @@ export default async function LiveConsultationPage({
       sessionToken={session?.sessionToken}
       videoRoomUrl={videoRoomUrl}
       videoToken={videoToken}
+      quotaExceeded={!quota.allowed}
+      canManagePlan={user.role === "admin"}
     />
   );
 }

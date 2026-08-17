@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { MicOff, Square, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { CircleAlert, MicOff, Square, ShieldCheck } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
 // Imports directos a los módulos (no al barrel @/lib/providers, que re-exporta
 // mock.ts → node:crypto, incompatible con el bundle del cliente).
@@ -33,6 +34,8 @@ export function LiveConsultation({
   sessionToken,
   videoRoomUrl,
   videoToken,
+  quotaExceeded,
+  canManagePlan,
 }: {
   consultationId: string;
   patientName: string;
@@ -47,6 +50,11 @@ export function LiveConsultation({
   sessionToken?: string;
   videoRoomUrl?: string;
   videoToken?: string;
+  /** Cuota mensual de transcripción agotada: no hay sesión (ni mock) y se
+   *  explica por qué. La videollamada, si la hay, sigue funcionando. */
+  quotaExceeded?: boolean;
+  /** true = el usuario puede cambiar el plan (admin) → se enlaza a /settings/plan. */
+  canManagePlan?: boolean;
 }) {
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
   const [done, setDone] = useState(false);
@@ -72,7 +80,9 @@ export function LiveConsultation({
   const isSimulatedTranscript =
     transcriptionMode === "mock" || (transcriptionMode === "video" && transcriptionIsSimulated);
   useEffect(() => {
-    if (!isSimulatedTranscript) return;
+    // Con la cuota agotada tampoco corre el guion mock: es la misma feature
+    // de producto y simularla escribiría chunks de una sesión que no existe.
+    if (!isSimulatedTranscript || quotaExceeded) return;
 
     const md = navigator.mediaDevices;
     if (md?.getUserMedia) {
@@ -108,7 +118,7 @@ export function LiveConsultation({
       clearInterval(streamer);
       clearInterval(clock);
     };
-  }, [isSimulatedTranscript, consultationId]);
+  }, [isSimulatedTranscript, consultationId, quotaExceeded]);
 
   // ── Modo real: micrófono → MediaRecorder → WebSocket directo a Deepgram ──
   useEffect(() => {
@@ -338,6 +348,12 @@ export function LiveConsultation({
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             {done ? (
               <span className="text-mint">Transcripción finalizada</span>
+            ) : quotaExceeded ? (
+              <span>
+                {transcriptionMode === "video"
+                  ? "Videollamada en curso · sin transcripción (cuota agotada)"
+                  : "Sin transcripción — cuota mensual del plan agotada"}
+              </span>
             ) : (
               <>
                 <span className="inline-block size-2 animate-pulse rounded-full bg-destructive" />
@@ -355,8 +371,9 @@ export function LiveConsultation({
 
       {/* Recordatorio en el momento oportuno de lo que el paciente ya firmó en
           el consentimiento. No lo sustituye: está para que el profesional pueda
-          decírselo en voz alta al empezar. */}
-      {!done && (
+          decírselo en voz alta al empezar. Se oculta con la cuota agotada: no
+          hay sesión de transcripción que recordar. */}
+      {!done && !quotaExceeded && (
         <div className="flex items-start gap-2.5 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
           <p>
@@ -365,6 +382,32 @@ export function LiveConsultation({
             automáticamente una vez validas el reporte. El paciente puede pedir que se detenga en
             cualquier momento.
           </p>
+        </div>
+      )}
+
+      {!done && quotaExceeded && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs">
+          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium text-navy">
+              Se agotaron las horas de transcripción del plan este mes
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              Esta consulta no se transcribirá ni generará reporte automático
+              {transcriptionMode === "video" ? " (la videollamada sigue disponible)" : ""}.{" "}
+              {canManagePlan ? (
+                <>
+                  Amplía tu plan en{" "}
+                  <Link href="/settings/plan" className="underline hover:text-navy">
+                    Plan y facturación
+                  </Link>
+                  .
+                </>
+              ) : (
+                "Pide al administrador de la clínica ampliar el plan."
+              )}
+            </p>
+          </div>
         </div>
       )}
 
@@ -405,7 +448,9 @@ export function LiveConsultation({
         className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-gray-line bg-card p-5"
       >
         {chunks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Escuchando…</p>
+          <p className="text-sm text-muted-foreground">
+            {quotaExceeded ? "Transcripción no disponible: cuota del plan agotada." : "Escuchando…"}
+          </p>
         ) : (
           chunks.map((c, idx) => (
             <div key={idx} className={c.speaker === "Doctor" ? "" : "flex flex-col items-end"}>
