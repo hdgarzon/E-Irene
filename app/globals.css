@@ -179,4 +179,66 @@
   .landing-nav-link:hover::after {
     transform: scaleX(1);
   }
+
+  /* ── Formularios de auth con el mismo lenguaje visual de la landing ── */
+  .landing-auth-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(18, 40, 63, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(18, 40, 63, 0.08);
+    padding: 32px;
+  }
+
+  .landing-field-label {
+    display: block;
+    font-family: var(--font-landing-sans);
+    font-weight: 500;
+    font-size: 13px;
+    color: #33506e;
+    margin-bottom: 6px;
+  }
+
+  .landing-field-input {
+    width: 100%;
+    font-family: var(--font-landing-sans);
+    font-weight: 300;
+    font-size: 15px;
+    color: #12283f;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(18, 40, 63, 0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .landing-field-input::placeholder {
+    color: rgba(70, 97, 125, 0.5);
+  }
+
+  .landing-field-input:focus {
+    outline: none;
+    border-color: rgba(13, 90, 176, 0.5);
+    box-shadow: 0 0 0 3px rgba(13, 90, 176, 0.12);
+  }
+
+  .landing-field-error {
+    font-family: var(--font-landing-sans);
+    font-weight: 400;
+    font-size: 13px;
+    color: #c0392b;
+    margin-top: 6px;
+  }
+
+  .landing-form-error {
+    font-family: var(--font-landing-sans);
+    font-weight: 400;
+    font-size: 13px;
+    color: #c0392b;
+    background: rgba(192, 57, 43, 0.08);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
 }

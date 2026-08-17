@@ -3,9 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { signInAction, type AuthState } from "@/app/(auth)/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LandingLiquidGlassButton } from "@/components/landing-liquid-glass-button";
 
 export function LoginForm({ redirect }: { redirect: string }) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -14,38 +12,48 @@ export function LoginForm({ redirect }: { redirect: string }) {
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4 text-left">
       <input type="hidden" name="redirect" value={redirect} />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Correo electrónico</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
-        {state.fieldErrors?.email && (
-          <p className="text-sm text-destructive">{state.fieldErrors.email}</p>
-        )}
+      <div>
+        <label htmlFor="email" className="landing-field-label">
+          Correo electrónico
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.email && <p className="landing-field-error">{state.fieldErrors.email}</p>}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Contraseña</Label>
-        <Input id="password" name="password" type="password" autoComplete="current-password" required />
-        {state.fieldErrors?.password && (
-          <p className="text-sm text-destructive">{state.fieldErrors.password}</p>
-        )}
+      <div>
+        <label htmlFor="password" className="landing-field-label">
+          Contraseña
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.password && <p className="landing-field-error">{state.fieldErrors.password}</p>}
       </div>
 
-      {state.error && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
-      )}
+      {state.error && <p className="landing-form-error">{state.error}</p>}
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      <LandingLiquidGlassButton type="submit" disabled={pending} className="w-full">
         {pending ? "Ingresando…" : "Iniciar sesión"}
-      </Button>
+      </LandingLiquidGlassButton>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p style={{ fontFamily: "var(--font-landing-sans)", fontWeight: 300, fontSize: 13, color: "#46617d" }} className="text-center">
         ¿No tienes cuenta?{" "}
-        <Link href="/signup" className="font-medium text-primary hover:underline">
+        <Link href="/signup" className="landing-nav-link">
           Crear cuenta
         </Link>
       </p>

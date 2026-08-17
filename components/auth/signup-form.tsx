@@ -3,9 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { signUpAction, type AuthState } from "@/app/(auth)/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LandingLiquidGlassButton } from "@/components/landing-liquid-glass-button";
 import { VerifyCodeForm } from "@/components/auth/verify-code-form";
 
 export function SignupForm() {
@@ -18,10 +16,12 @@ export function SignupForm() {
     return (
       <div className="space-y-4 text-center">
         <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold">Revisa tu correo</h2>
-          <p className="text-sm text-muted-foreground">
-            Enviamos un código de 6 dígitos a <strong>{state.email}</strong>. Ingrésalo para
-            confirmar tu cuenta y elegir una contraseña.
+          <h2 style={{ fontFamily: "var(--font-landing-serif)", fontWeight: 400, fontSize: 20, color: "#12283f" }}>
+            Revisa tu correo
+          </h2>
+          <p style={{ fontFamily: "var(--font-landing-sans)", fontWeight: 300, fontSize: 14, color: "#46617d" }}>
+            Enviamos un código de 6 dígitos a <strong style={{ fontWeight: 500 }}>{state.email}</strong>.
+            Ingrésalo para confirmar tu cuenta y elegir una contraseña.
           </p>
         </div>
         <VerifyCodeForm email={state.email} />
@@ -30,44 +30,61 @@ export function SignupForm() {
   }
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="clinicName">Nombre de la clínica</Label>
-        <Input id="clinicName" name="clinicName" required placeholder="Consultorio Dra. Irene" />
+    <form action={formAction} className="space-y-4 text-left">
+      <div>
+        <label htmlFor="clinicName" className="landing-field-label">
+          Nombre de la clínica
+        </label>
+        <input
+          id="clinicName"
+          name="clinicName"
+          required
+          placeholder="Consultorio Dra. Irene"
+          className="landing-field-input"
+        />
         {state.fieldErrors?.clinicName && (
-          <p className="text-sm text-destructive">{state.fieldErrors.clinicName}</p>
+          <p className="landing-field-error">{state.fieldErrors.clinicName}</p>
         )}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="fullName">Tu nombre completo</Label>
-        <Input id="fullName" name="fullName" required placeholder="Irene Pérez" />
-        {state.fieldErrors?.fullName && (
-          <p className="text-sm text-destructive">{state.fieldErrors.fullName}</p>
-        )}
+      <div>
+        <label htmlFor="fullName" className="landing-field-label">
+          Tu nombre completo
+        </label>
+        <input
+          id="fullName"
+          name="fullName"
+          required
+          placeholder="Irene Pérez"
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.fullName && <p className="landing-field-error">{state.fieldErrors.fullName}</p>}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Correo electrónico</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
-        {state.fieldErrors?.email && (
-          <p className="text-sm text-destructive">{state.fieldErrors.email}</p>
-        )}
+      <div>
+        <label htmlFor="email" className="landing-field-label">
+          Correo electrónico
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          className="landing-field-input"
+        />
+        {state.fieldErrors?.email && <p className="landing-field-error">{state.fieldErrors.email}</p>}
       </div>
 
-      {state.error && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
-      )}
+      {state.error && <p className="landing-form-error">{state.error}</p>}
 
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Enviando enlace…" : "Crear cuenta gratis"}
-      </Button>
+      <LandingLiquidGlassButton type="submit" disabled={pending} className="w-full">
+        {pending ? "Enviando código…" : "Crear cuenta gratis"}
+      </LandingLiquidGlassButton>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p style={{ fontFamily: "var(--font-landing-sans)", fontWeight: 300, fontSize: 13, color: "#46617d" }} className="text-center">
         ¿Ya tienes cuenta?{" "}
-        <Link href="/login" className="font-medium text-primary hover:underline">
+        <Link href="/login" className="landing-nav-link">
           Iniciar sesión
         </Link>
       </p>

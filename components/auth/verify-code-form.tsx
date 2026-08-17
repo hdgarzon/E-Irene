@@ -2,9 +2,7 @@
 
 import { useActionState } from "react";
 import { verifyEmailCodeAction, type AuthState } from "@/app/(auth)/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LandingLiquidGlassButton } from "@/components/landing-liquid-glass-button";
 
 export function VerifyCodeForm({ email }: { email: string }) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -16,9 +14,11 @@ export function VerifyCodeForm({ email }: { email: string }) {
     <form action={formAction} className="space-y-4 text-left">
       <input type="hidden" name="email" value={email} />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="code">Código de 6 dígitos</Label>
-        <Input
+      <div>
+        <label htmlFor="code" className="landing-field-label">
+          Código de 6 dígitos
+        </label>
+        <input
           id="code"
           name="code"
           inputMode="numeric"
@@ -26,18 +26,15 @@ export function VerifyCodeForm({ email }: { email: string }) {
           maxLength={6}
           placeholder="123456"
           required
+          className="landing-field-input"
         />
       </div>
 
-      {state.error && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
-      )}
+      {state.error && <p className="landing-form-error">{state.error}</p>}
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      <LandingLiquidGlassButton type="submit" disabled={pending} className="w-full">
         {pending ? "Verificando…" : "Confirmar código"}
-      </Button>
+      </LandingLiquidGlassButton>
     </form>
   );
 }

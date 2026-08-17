@@ -6,12 +6,20 @@ interface LiquidGlassButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
   className?: string;
+  type?: "button" | "submit";
+  disabled?: boolean;
 }
 
 /** Botón con efecto de refracción tipo "vidrio líquido" vía un mapa de
  * desplazamiento SVG generado en un canvas oculto a partir de las
  * dimensiones reales del botón. */
-export function LandingLiquidGlassButton({ children, onClick, className = "" }: LiquidGlassButtonProps) {
+export function LandingLiquidGlassButton({
+  children,
+  onClick,
+  className = "",
+  type = "button",
+  disabled = false,
+}: LiquidGlassButtonProps) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const [filterId] = useState(() => `lgb-${Math.random().toString(36).slice(2, 8)}`);
   const [mapUrl, setMapUrl] = useState("");
@@ -116,6 +124,8 @@ export function LandingLiquidGlassButton({ children, onClick, className = "" }: 
       )}
       <button
         ref={btnRef}
+        type={type}
+        disabled={disabled}
         onClick={onClick}
         className={className}
         style={{
@@ -134,7 +144,8 @@ export function LandingLiquidGlassButton({ children, onClick, className = "" }: 
           fontSize: 14,
           fontWeight: 300,
           letterSpacing: "0.5px",
-          cursor: "pointer",
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.6 : 1,
           overflow: "hidden",
           transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
