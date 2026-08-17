@@ -44,7 +44,16 @@ export function VideoCall({
     // avoidEval: true evita que @daily-co/daily-js necesite 'unsafe-eval' en
     // el CSP de producción (ver proxy.ts) — a cambio exige `script-src
     // https://*.daily.co`, ya agregado ahí.
-    const call = Daily.createCallObject({ dailyConfig: { avoidEval: true } });
+    //
+    // strictMode: false — sin esto, React StrictMode (activo en `next dev`,
+    // nunca en producción) revienta con "Duplicate DailyIframe instances":
+    // monta este efecto dos veces seguidas y la limpieza de la primera pasada
+    // (call.leave() + destroy() más abajo) no siempre termina antes de que la
+    // segunda intente crear la suya. Es el propio strictMode de Daily —
+    // homónimo del de React, pero un flag distinto— el que trata eso como
+    // error por defecto; desactivarlo solo evita el falso positivo del doble
+    // montaje, la limpieza real sigue intacta.
+    const call = Daily.createCallObject({ dailyConfig: { avoidEval: true }, strictMode: false });
     callRef.current = call;
 
     call.on("track-started", (ev) => {

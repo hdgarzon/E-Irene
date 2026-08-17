@@ -70,6 +70,13 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
   await expect(page).toHaveURL(/consultations\/.+\/live/);
   await expect(page.getByText(/videollamada en curso/i)).toBeVisible();
 
+  // Sin DEEPGRAM_API_KEY, el modo video transmite el mismo guion simulado que
+  // el modo in-person (MOCK_SESSION, cada línea cada 700ms) — hay que esperar
+  // a que se persista al menos una antes de finalizar, igual que hace
+  // consultation.spec.ts con el modo mock de audio.
+  await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
+  await expect(page.getByText(/momentos aparece/)).toBeVisible();
+
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
   await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible({ timeout: 20_000 });
@@ -138,10 +145,18 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
   // videollamada del lado paciente (JoinCall).
   await patientPage.goto(`/join/${token}`);
   await expect(patientPage.getByRole("heading", { name: "Enlace no válido" })).not.toBeVisible();
-  await expect(patientPage.getByRole("heading", { name: /Hola, Paciente Join/ })).toBeVisible();
-  await expect(patientPage.getByText(/Esta llamada no se graba/)).toBeVisible();
+  // VIDEO_PROVIDER=mock está forzado para todo el webServer de e2e
+  // (playwright.config.ts): sin proveedor real, /join/[token] avisa que la
+  // videollamada no está disponible en vez de armar la llamada (JoinCall
+  // nunca se monta) — ver app/join/[token]/page.tsx, commit 978ed9b.
+  await expect(
+    patientPage.getByRole("heading", { name: "La videollamada no está disponible" }),
+  ).toBeVisible();
 
-  // La doctora cancela la cita: el mismo token deja de ser válido.
+  // La doctora cancela la cita: el mismo token deja de ser válido. El botón
+  // de estado vive en /appointments, no en /consultations/.../live donde la
+  // dejó "iniciar videollamada".
+  await page.goto("/appointments");
   await page.getByRole("button", { name: /Agendada/ }).click();
   await page.getByRole("menuitem", { name: "Cancelada" }).click();
   await expect(page.getByRole("button", { name: /Cancelada/ })).toBeVisible();
