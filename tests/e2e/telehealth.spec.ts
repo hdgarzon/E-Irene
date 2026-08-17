@@ -144,7 +144,10 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
     patientPage.getByRole("heading", { name: "La videollamada no está disponible" }),
   ).toBeVisible();
 
-  // La doctora cancela la cita: el mismo token deja de ser válido.
+  // La doctora cancela la cita: el mismo token deja de ser válido. El control
+  // de estado vive en la agenda, no en la consulta en vivo donde quedó `page`
+  // tras "iniciar videollamada".
+  await page.goto("/appointments");
   await page.getByRole("button", { name: /Agendada/ }).click();
   await page.getByRole("menuitem", { name: "Cancelada" }).click();
   await expect(page.getByRole("button", { name: /Cancelada/ })).toBeVisible();
