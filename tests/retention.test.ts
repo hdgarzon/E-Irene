@@ -97,6 +97,12 @@ async function consultaCon(
   return c!.id as string;
 }
 
+/** Corre el cron de purga y falla el test si el RPC devuelve error en vez de tragárselo. */
+async function purgar(f: Awaited<ReturnType<typeof fixture>>) {
+  const { error } = await f.s.rpc("purge_expired_transcripts");
+  expect(error).toBeNull();
+}
+
 async function estado(f: Awaited<ReturnType<typeof fixture>>, id: string) {
   const { data: c } = await f.s
     .from("consultations")
@@ -120,7 +126,7 @@ d("purga de transcripciones", () => {
     });
 
     expect((await estado(f, id)).chunks).toBe(2);
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     const e = await estado(f, id);
     expect(e.transcript).toBeNull();
@@ -136,7 +142,7 @@ d("purga de transcripciones", () => {
       validatedAt: hace(10),
     });
 
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     const e = await estado(f, id);
     expect(e.transcript).not.toBeNull();
@@ -148,7 +154,7 @@ d("purga de transcripciones", () => {
     const f = await fixture("Ret Techo");
     const id = await consultaCon(f, { startedAt: hace(100), endedAt: hace(100) });
 
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     const e = await estado(f, id);
     expect(e.transcript).toBeNull();
@@ -159,7 +165,7 @@ d("purga de transcripciones", () => {
     const f = await fixture("Ret Abandonada");
     const id = await consultaCon(f, { startedAt: hace(100), endedAt: null });
 
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     const e = await estado(f, id);
     expect(e.transcript).toBeNull();
@@ -173,7 +179,7 @@ d("purga de transcripciones", () => {
     await f.s.from("consultations").update({ transcript_enc: null }).eq("id", id);
     expect((await estado(f, id)).chunks).toBe(2);
 
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     expect((await estado(f, id)).chunks).toBe(0);
   }, 30000);
@@ -182,7 +188,7 @@ d("purga de transcripciones", () => {
     const f = await fixture("Ret Auditoría");
     await consultaCon(f, { startedAt: hace(100), endedAt: hace(100) });
 
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
 
     const { data } = await f.s
       .from("audit_logs")
@@ -199,8 +205,8 @@ d("purga de transcripciones", () => {
     const f = await fixture("Ret Idempotente");
     await consultaCon(f, { startedAt: hace(100), endedAt: hace(100) });
 
-    await f.s.rpc("purge_expired_transcripts");
-    await f.s.rpc("purge_expired_transcripts");
+    await purgar(f);
+    await purgar(f);
 
     const { count } = await f.s
       .from("audit_logs")
