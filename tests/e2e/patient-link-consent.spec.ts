@@ -1,27 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signUpAndActivate } from "./helpers/signup";
 
-const MAILPIT_URL = "http://127.0.0.1:54324";
-
-async function getLatestLinkUrl(toEmail: string): Promise<string> {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const searchRes = await fetch(
-      `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:${toEmail}`)}`,
-    );
-    const search = await searchRes.json();
-    const messageId = search.messages?.[0]?.ID;
-    if (messageId) {
-      const msgRes = await fetch(`${MAILPIT_URL}/api/v1/message/${messageId}`);
-      const msg = await msgRes.json();
-      const match = /(https?:\/\/\S*\/enlace\/\S+)/.exec(msg.Text ?? "");
-      if (match) return match[1].replace(/[).,]+$/, "");
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`No llegó el correo con link a ${toEmail}`);
-}
-
 test("link de consentimiento: generar, abrir sin sesión, firmar", async ({ page, browser }) => {
   const staffEmail = `linkstaff_${Date.now()}@e-irene.test`;
   const patientEmail = `linkpatient_${Date.now()}@e-irene.test`;
@@ -36,9 +15,16 @@ test("link de consentimiento: generar, abrir sin sesión, firmar", async ({ page
   const patientUrl = page.url();
 
   await page.getByRole("button", { name: /generar link de consentimiento/i }).click();
-  await expect(page.getByText(/link generado y enviado/i)).toBeVisible();
 
-  const linkUrl = await getLatestLinkUrl(patientEmail);
+  // Sin RESEND_API_KEY (como en este entorno), el link no sale por correo de
+  // verdad — la app ya no lo simula en silencio (ver 99fcffe): avisa que hay
+  // que compartirlo a mano y lo deja visible en pantalla, que es de donde se
+  // toma acá (no de un inbox que nunca recibiría nada).
+  const linkParagraph = page.getByText(/Compártelo tú \(no se envió por correo\):/i);
+  await expect(linkParagraph).toBeVisible();
+  const linkText = await linkParagraph.innerText();
+  const linkUrl = linkText.match(/(https?:\/\/\S+)/)?.[1];
+  if (!linkUrl) throw new Error("No se encontró el link generado en la página");
   const relativeUrl = new URL(linkUrl).pathname;
 
   // Contexto de navegador nuevo, sin cookies de la sesión del personal: simula

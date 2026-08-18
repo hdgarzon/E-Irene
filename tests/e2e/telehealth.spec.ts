@@ -134,14 +134,20 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
   await patientPage.goto("/join/token-que-no-existe");
   await expect(patientPage.getByRole("heading", { name: "Enlace no válido" })).toBeVisible();
 
-  // Token real, cita vigente dentro de la ventana horaria → arma la
-  // videollamada del lado paciente (JoinCall).
+  // Token real, cita vigente dentro de la ventana horaria → el enlace es
+  // válido. Sin DAILY_API_KEY (VIDEO_PROVIDER=mock en toda la suite e2e), la
+  // sala es falsa y la app ya no lo simula en silencio (ver 978ed9b): en vez
+  // de armar la videollamada (JoinCall), avisa que no está disponible.
   await patientPage.goto(`/join/${token}`);
   await expect(patientPage.getByRole("heading", { name: "Enlace no válido" })).not.toBeVisible();
-  await expect(patientPage.getByRole("heading", { name: /Hola, Paciente Join/ })).toBeVisible();
-  await expect(patientPage.getByText(/Esta llamada no se graba/)).toBeVisible();
+  await expect(
+    patientPage.getByRole("heading", { name: "La videollamada no está disponible" }),
+  ).toBeVisible();
 
-  // La doctora cancela la cita: el mismo token deja de ser válido.
+  // La doctora cancela la cita: el mismo token deja de ser válido. El control
+  // de estado vive en la agenda, no en la consulta en vivo donde quedó `page`
+  // tras "iniciar videollamada".
+  await page.goto("/appointments");
   await page.getByRole("button", { name: /Agendada/ }).click();
   await page.getByRole("menuitem", { name: "Cancelada" }).click();
   await expect(page.getByRole("button", { name: /Cancelada/ })).toBeVisible();

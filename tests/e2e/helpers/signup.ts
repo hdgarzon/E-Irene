@@ -1,6 +1,23 @@
 import { expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 
 const MAILPIT_URL = "http://127.0.0.1:54324";
+const SUPABASE_URL = "http://127.0.0.1:54321";
+
+/**
+ * Marca al profesional como verificado saltándose la subida de documentos y
+ * la revisión manual (migración 0032): ningún spec de e2e ejercita ese flujo
+ * en sí, así que hacerlo por UI en cada test solo agregaría pasos sin cubrir
+ * nada nuevo. Mismo patrón que grantPlatformAdmin en platform-admin.spec.ts.
+ */
+async function verifyProfessional(email: string) {
+  const admin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const { error } = await admin
+    .from("users")
+    .update({ verification_status: "verified" })
+    .eq("email", email);
+  if (error) throw error;
+}
 
 /**
  * Busca en Mailpit (inbox local de dev) el código de activación de 6 dígitos
@@ -52,5 +69,15 @@ export async function signUpAndActivate(
   await expect(page).toHaveURL(/\/auth\/set-password/);
   await page.fill("#password", password);
   await page.getByRole("button", { name: /guardar y entrar/i }).click();
+
+  // Sin aceptación vigente de la política, el layout de (app) redirige aquí
+  // (ver app/(app)/layout.tsx) — cubre por igual a quien se registra que a
+  // quien un admin da de alta directo, así que toda cuenta nueva pasa por acá.
+  await expect(page).toHaveURL(/\/terminos/);
+  await page.getByLabel(/he leído y acepto/i).check();
+  await page.getByRole("button", { name: /aceptar y continuar/i }).click();
+
   await expect(page).toHaveURL(/\/dashboard/);
+
+  await verifyProfessional(opts.email);
 }
