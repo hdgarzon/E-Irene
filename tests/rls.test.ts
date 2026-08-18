@@ -101,6 +101,68 @@ d("aislamiento multi-tenant (RLS)", () => {
     expect(error).not.toBeNull(); // RLS bloquea
   });
 
+  // Las políticas UPDATE de 0001_init.sql solo declaran USING, sin WITH CHECK
+  // explícito — pero Postgres reutiliza esa misma condición USING como CHECK
+  // implícito de la fila resultante cuando no hay un WITH CHECK propio (ver
+  // CREATE POLICY en la doc de Postgres). Por eso A no puede reasignar su
+  // paciente a la clínica de B aunque no haya un WITH CHECK explícito en la
+  // migración: no es un hueco, ya está cubierto. Verificado también con un
+  // script aislado contra Supabase local antes de escribir esta prueba.
+  it("A NO puede reasignar su propio paciente a la clínica de B (UPDATE)", async () => {
+    const { data: patient } = await A.client
+      .from("patients")
+      .select("id")
+      .limit(1)
+      .single();
+    const { error } = await A.client
+      .from("patients")
+      .update({ clinic_id: B.clinicId })
+      .eq("id", patient!.id);
+    expect(error).not.toBeNull(); // RLS bloquea
+
+    // Y el paciente sigue siendo de A.
+    const { data: stillA } = await service()
+      .from("patients")
+      .select("clinic_id")
+      .eq("id", patient!.id)
+      .single();
+    expect(stillA?.clinic_id).toBe(A.clinicId);
+  });
+
+  it("A NO puede reasignar su propio reporte a la clínica de B (UPDATE)", async () => {
+    const { data: patient } = await A.client.from("patients").select("id").limit(1).single();
+    const { data: consultation, error: consultErr } = await A.client
+      .from("consultations")
+      .insert({ clinic_id: A.clinicId, patient_id: patient!.id, doctor_id: A.userId })
+      .select("id")
+      .single();
+    expect(consultErr).toBeNull();
+    const { data: report, error: reportErr } = await service()
+      .from("reports")
+      .insert({
+        clinic_id: A.clinicId,
+        consultation_id: consultation!.id,
+        patient_id: patient!.id,
+        payload_enc: encrypt("{}"),
+      })
+      .select("id")
+      .single();
+    expect(reportErr).toBeNull();
+
+    const { error } = await A.client
+      .from("reports")
+      .update({ clinic_id: B.clinicId })
+      .eq("id", report!.id);
+    expect(error).not.toBeNull(); // RLS bloquea
+
+    const { data: stillA } = await service()
+      .from("reports")
+      .select("clinic_id")
+      .eq("id", report!.id)
+      .single();
+    expect(stillA?.clinic_id).toBe(A.clinicId);
+  });
+
   it("B NO puede leer la clínica de A", async () => {
     const { data } = await B.client.from("clinics").select("id").eq("id", A.clinicId);
     expect(data ?? []).toHaveLength(0);
