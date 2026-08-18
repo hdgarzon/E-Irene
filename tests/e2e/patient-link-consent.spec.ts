@@ -56,7 +56,9 @@ test("link de consentimiento: generar, abrir sin sesión, firmar", async ({ page
   await patientPage.getByRole("button", { name: /firmar consentimiento/i }).click();
 
   await expect(patientPage).toHaveURL(/\/enlace\/.+\/gracias$/);
-  await expect(patientPage.getByText("¡Gracias!")).toBeVisible();
+  // getByText resuelve dos nodos: el <h1> y el route-announcer de accesibilidad
+  // de Next.js (también anuncia el texto de la página al navegar).
+  await expect(patientPage.getByRole("heading", { name: "¡Gracias!" })).toBeVisible();
 
   // Reabrir el mismo link: ya debe mostrarse como usado.
   await patientPage.goto(relativeUrl);

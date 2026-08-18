@@ -70,6 +70,15 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
   await expect(page).toHaveURL(/consultations\/.+\/live/);
   await expect(page.getByText(/videollamada en curso/i)).toBeVisible();
 
+  // Sin DEEPGRAM_API_KEY, el modo video transmite el mismo guion simulado que
+  // el modo in-person (MOCK_SESSION, una línea cada 700ms). El texto aparece
+  // en pantalla apenas actualiza el estado local, pero appendChunkAction (el
+  // que persiste el fragmento) se dispara sin esperarlo — hay que darle un
+  // margen real, no solo esperar a que el texto se vea, o "finalizar
+  // consulta" puede correr antes de que el primer fragmento llegue a la base
+  // de datos y el reporte de IA nunca se genera (transcript vacío).
+  await expect(page.getByText(/no puedo respirar bien/)).toBeVisible();
+
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
   await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible({ timeout: 20_000 });
