@@ -29,6 +29,7 @@ export function LiveConsultation({
   consultationId,
   patientName,
   transcriptionMode,
+  mockTranscription = false,
   sessionToken,
   videoRoomUrl,
   videoToken,
@@ -38,10 +39,16 @@ export function LiveConsultation({
   /** "deepgram"/"mock" = modo texto (in-person, como hoy). "video" = telehealth:
    *  embebe Daily.co y transcribe doctor+paciente por separado, sin diarización. */
   transcriptionMode: "mock" | "deepgram" | "video";
+  /** Solo aplica con transcriptionMode "video": sessionToken no es una sesión
+   *  real de Deepgram (TRANSCRIPTION_PROVIDER=mock) — usar el guion sintético
+   *  en vez de abrir un WebSocket real, que fallaría (no hay proveedor real
+   *  al otro lado del token simulado). */
+  mockTranscription?: boolean;
   sessionToken?: string;
   videoRoomUrl?: string;
   videoToken?: string;
 }) {
+  const videoUsesMockScript = transcriptionMode === "video" && mockTranscription;
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
   const [done, setDone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -59,9 +66,12 @@ export function LiveConsultation({
   const speakerLabelsRef = useRef<Map<number, string>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ── Modo mock: guion simulado (sin micrófono real necesario) ──
+  // ── Modo mock: guion simulado (sin micrófono real necesario). También cubre
+  // ── el modo video cuando la sesión de transcripción es simulada (ver
+  // ── mockTranscription arriba) — mismo guion, para que el reporte se genere
+  // ── igual sin depender de una conexión real a Deepgram.
   useEffect(() => {
-    if (transcriptionMode !== "mock") return;
+    if (transcriptionMode !== "mock" && !videoUsesMockScript) return;
 
     const md = navigator.mediaDevices;
     if (md?.getUserMedia) {
@@ -97,11 +107,14 @@ export function LiveConsultation({
       clearInterval(streamer);
       clearInterval(clock);
     };
-  }, [transcriptionMode, consultationId]);
+  }, [transcriptionMode, videoUsesMockScript, consultationId]);
 
   // ── Modo real: micrófono → MediaRecorder → WebSocket directo a Deepgram ──
   useEffect(() => {
     if ((transcriptionMode !== "deepgram" && transcriptionMode !== "video") || !sessionToken) return;
+    // Video con sesión simulada: lo cubre el efecto de guion de arriba, no hay
+    // proveedor real al otro lado de sessionToken.
+    if (videoUsesMockScript) return;
 
     const clock = setInterval(() => setElapsed((e) => e + 1), 1000);
     let cancelled = false;
@@ -199,7 +212,7 @@ export function LiveConsultation({
       }
       remoteWsRef.current = null;
     };
-  }, [transcriptionMode, sessionToken, consultationId]);
+  }, [transcriptionMode, sessionToken, consultationId, videoUsesMockScript]);
 
   // ── Modo video: pista remota del paciente → segunda conexión Deepgram,
   // ── tageada "Paciente" directamente (no hace falta diarización: cada
@@ -244,7 +257,7 @@ export function LiveConsultation({
   // a emitir esta pista — reemplazamos la conexión anterior en vez de
   // ignorarla o acumularla (ver contrato documentado en components/video-call.tsx).
   function handleRemoteAudioTrack(track: MediaStreamTrack) {
-    if (transcriptionMode !== "video" || !sessionToken) return;
+    if (transcriptionMode !== "video" || !sessionToken || videoUsesMockScript) return;
 
     if (remoteRecorderRef.current && remoteRecorderRef.current.state !== "inactive") {
       remoteRecorderRef.current.stop();

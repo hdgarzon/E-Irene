@@ -71,6 +71,11 @@ export default async function LiveConsultationPage({
       consultationId={id}
       patientName={consultation.patientName}
       transcriptionMode={videoReady ? "video" : transcriptionProvider.mode === "deepgram" ? "deepgram" : "mock"}
+      // Modo video con TRANSCRIPTION_PROVIDER=mock (suite E2E, o dev sin
+      // DEEPGRAM_API_KEY): no hay sesión real de Deepgram a la que conectarse
+      // (sessionToken es un token simulado) — LiveConsultation debe usar el
+      // guion sintético en vez de abrir un WebSocket real que fallaría.
+      mockTranscription={transcriptionProvider.mode !== "deepgram"}
       sessionToken={session?.sessionToken}
       videoRoomUrl={videoRoomUrl}
       videoToken={videoToken}

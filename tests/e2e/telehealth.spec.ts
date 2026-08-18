@@ -70,6 +70,13 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
   await expect(page).toHaveURL(/consultations\/.+\/live/);
   await expect(page.getByText(/videollamada en curso/i)).toBeVisible();
 
+  // Sin DAILY_API_KEY/DEEPGRAM_API_KEY (proveedores mock en toda la suite
+  // e2e) el guion sintético transmite unas líneas antes de finalizar — igual
+  // que consultation.spec.ts. Si se finaliza antes de que llegue ninguna, la
+  // transcripción queda vacía y el análisis nunca se dispara.
+  await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
+  await expect(page.getByText(/momentos aparece/)).toBeVisible();
+
   await page.getByRole("button", { name: /finalizar consulta/i }).click();
   await expect(page).toHaveURL(/consultations\/[^/]+$/);
   await expect(page.getByText(/Apoyo clínico, no diagnóstico/)).toBeVisible({ timeout: 20_000 });
