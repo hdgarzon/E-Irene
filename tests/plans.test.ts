@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { canAddPatient, canAddDoctor, canStartConsultation, limitLabel, planLimits } from "@/lib/plans";
+import {
+  canAddPatient,
+  canAddDoctor,
+  canStartConsultation,
+  limitLabel,
+  planLimits,
+  transcriptionLimitSeconds,
+  transcriptionHoursLabel,
+  transcriptionUsageLabel,
+} from "@/lib/plans";
 
 describe("plans (límites por plan)", () => {
   it("Free limita pacientes a 5", () => {
@@ -33,5 +42,24 @@ describe("plans (límites por plan)", () => {
     expect(canStartConsultation("free", 5)).toBe(false);
     expect(canStartConsultation("enterprise", 119)).toBe(true);
     expect(canStartConsultation("enterprise", 120)).toBe(false);
+  });
+
+  it("transcriptionLimitSeconds convierte horas del plan; enterprise es null (ilimitado)", () => {
+    expect(transcriptionLimitSeconds("free")).toBe(2 * 3600);
+    expect(transcriptionLimitSeconds("pro")).toBe(20 * 3600);
+    expect(transcriptionLimitSeconds("clinica")).toBe(100 * 3600);
+    expect(transcriptionLimitSeconds("enterprise")).toBeNull();
+  });
+
+  it("transcriptionHoursLabel formatea horas con coma decimal (es-CO)", () => {
+    expect(transcriptionHoursLabel(0)).toBe("0");
+    expect(transcriptionHoursLabel(5400)).toBe("1,5");
+    expect(transcriptionHoursLabel(20 * 3600)).toBe("20");
+  });
+
+  it("transcriptionUsageLabel muestra 'usado / límite' o Ilimitado", () => {
+    expect(transcriptionUsageLabel(5400, "free")).toBe("1,5 h / 2 h");
+    expect(transcriptionUsageLabel(0, "pro")).toBe("0 h / 20 h");
+    expect(transcriptionUsageLabel(5400, "enterprise")).toBe("1,5 h / Ilimitado");
   });
 });

@@ -2,11 +2,19 @@ import Link from "next/link";
 import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview } from "@/lib/db/clinic";
-import { PLANS, PLAN_ORDER, limitLabel } from "@/lib/plans";
+import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
+import {
+  PLANS,
+  PLAN_ORDER,
+  limitLabel,
+  transcriptionLimitSeconds,
+  transcriptionUsageLabel,
+} from "@/lib/plans";
 import { initiatePlanUpgradeAction } from "@/app/(app)/settings/actions";
 import { reconcilePlanPayment, type ReconcileOutcome } from "@/lib/billing/reconcile";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
+import { UsageBar } from "@/components/usage-bar";
 
 interface PlanPageProps {
   searchParams: Promise<{ wompi?: string; id?: string }>;
@@ -35,7 +43,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   }
 
   // Después de reconciliar, para que el plan mostrado ya refleje la activación.
-  const overview = await getClinicOverview();
+  // El consumo de transcripción no depende de la reconciliación: se pide en
+  // paralelo.
+  const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
+  const limitSeconds = transcriptionLimitSeconds(overview.plan);
+  const quotaExhausted = limitSeconds !== null && usage.usedSeconds >= limitSeconds;
 
   function features(plan: (typeof PLAN_ORDER)[number]) {
     const l = PLANS[plan];
@@ -117,6 +129,29 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           <p>No se pudo iniciar el pago. Intentá de nuevo o contactá soporte.</p>
         </div>
       )}
+
+      <div className="rounded-2xl border border-gray-line bg-card p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading font-semibold text-navy">Consumo del mes</h2>
+          <span className="text-xs text-muted-foreground">
+            {usage.sessions} consulta{usage.sessions === 1 ? "" : "s"} con transcripción
+          </span>
+        </div>
+        <div className="mt-3">
+          <UsageBar
+            used={usage.usedSeconds / 3600}
+            max={PLANS[overview.plan].transcriptionHours}
+            label="Horas de transcripción"
+            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
+          />
+        </div>
+        {quotaExhausted && (
+          <p className="mt-3 text-xs text-destructive">
+            Cuota agotada: las nuevas consultas no se transcribirán hasta el próximo mes o hasta
+            ampliar el plan.
+          </p>
+        )}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {PLAN_ORDER.map((plan) => {
