@@ -60,8 +60,29 @@ jobs:
       - name: Build de producción
         run: npm run build
 
+      # Los binarios (~150 MB) se cachean entre corridas. Sin esto, cada corrida
+      # los baja de nuevo y el paso depende de la velocidad de los mirrors: el
+      # 19-ago-2026 pasó de tardar 20s a colgarse 17 min, agotando el timeout
+      # del job y bloqueando el despliegue con el código en perfecto estado.
+      - name: Cachear navegadores de Playwright
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Instalar navegadores de Playwright
-        run: npx playwright install --with-deps chromium
+        # Timeout propio: si vuelve a colgarse, falla acá con un mensaje claro
+        # en vez de consumir en silencio el presupuesto del job entero.
+        timeout-minutes: 8
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            # Binarios ya cacheados; solo faltan las dependencias de sistema,
+            # que viven fuera de ~/.cache y no se pueden cachear.
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Tests E2E
         run: npm run test:e2e
