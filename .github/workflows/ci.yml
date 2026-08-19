@@ -75,48 +75,44 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # DESACTIVADO — no re-habilitar sin arreglar antes lo de abajo.
+  # Despliegue a producción en dos fases:
+  #   migrar → desplegar SIN alias → verificar → recién entonces promover.
   #
-  # Este job existe para aplicar las migraciones ANTES de desplegar, y esa
-  # parte funciona: en su única corrida real (19-ago-2026) `supabase db push`
-  # se ejecutó correctamente contra producción.
+  # Los dos intentos fallidos del 19-ago-2026, para que no se repitan:
   #
-  # Lo que NO funciona es el build. `vercel build --prod` desde CI produjo un
-  # artefacto roto: el deploy se completó y la app respondió HTTP 500 en todas
-  # las rutas. Hubo que recuperar producción con
-  # `vercel promote <deploy-anterior> --scope henry-garzons-projects`.
+  #  1. Vercel desplegaba solo al mergear y las migraciones se aplicaban a
+  #     mano. Un merge con migración (0039) dejó el código nuevo corriendo
+  #     contra el esquema viejo y tumbó la consulta en vivo.
   #
-  # Causa probable, SIN CONFIRMAR: `vercel pull` no descarga las variables de
-  # entorno marcadas como "Sensitive", así que el build de CI se hace sin
-  # ellas. Falta ver los build logs del deployment que falló para confirmarlo.
+  #  2. Este job construía acá con `vercel build --prod` y subía el resultado
+  #     con `--prebuilt`. TODAS las variables del proyecto están marcadas
+  #     Sensitive en Vercel, así que `vercel pull` trae los nombres pero no los
+  #     valores. NEXT_PUBLIC_SUPABASE_URL se hornea en el bundle en tiempo de
+  #     build, quedó vacía, y la app respondió 500 en todas las rutas
+  #     ("Invalid supabaseUrl"). Producción se recuperó promoviendo el
+  #     despliegue anterior.
   #
-  # Además el job tiene un defecto de diseño propio: el smoke check corre
-  # DESPUÉS de que el deploy ya reemplazó producción, así que detecta la rotura
-  # tarde. Al rehacerlo hay que desplegar sin alias (`--skip-domain`), verificar
-  # y recién entonces promover — el patrón de dos fases que la documentación de
-  # Vercel recomienda justamente para deploys con migraciones.
+  # De ahí las dos reglas de este diseño:
   #
-  # Mientras tanto vuelve a desplegar Vercel por su cuenta al mergear a main
-  # (se revirtió git.deploymentEnabled en vercel.json). Eso reintroduce el
-  # problema original: si un PR trae una migración, hay que aplicarla A MANO
-  # antes de mergear, o el código nuevo correrá contra el esquema viejo:
+  #   · NO se construye acá. `vercel deploy` SIN `--prebuilt` sube el código y
+  #     deja que Vercel lo construya con sus propias variables, incluidas las
+  #     Sensitive — igual que hacía la integración Git. No agregar `vercel
+  #     build` ni `--prebuilt` sin resolver antes lo de las Sensitive.
   #
-  #     supabase db push --dry-run --linked   # ver qué falta
-  #     supabase db push --linked
+  #   · Se despliega con `--skip-domain` (sin tocar el alias), se verifica, y
+  #     solo si responde se promueve. Producción nunca se reemplaza por algo
+  #     que no se haya comprobado. El intento anterior verificaba DESPUÉS de
+  #     reemplazarla, que es como no verificar.
   # ===========================================================================
   deploy:
     # Nunca desplegar algo que no pasó la suite (incluye rls/retention, que
     # cubren obligaciones legales).
     needs: test
-    # Apagado a propósito: ver el bloque de arriba. Para re-habilitarlo,
-    # restaurar la condición original:
-    #   github.event_name == 'push' && github.ref == 'refs/heads/main'
-    if: false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Dos despliegues simultáneos podrían intercalar migraciones y builds de
-    # commits distintos. cancel-in-progress queda en false a propósito: cancelar
-    # a mitad de un `db push` es justo lo que no se quiere.
+    timeout-minutes: 30
+    # Cancelar a mitad de un `db push` o de un promote es justo lo que no se
+    # quiere: los despliegues se encolan, no se interrumpen.
     concurrency:
       group: production-deploy
       cancel-in-progress: false
@@ -125,22 +121,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
       # ── Fase 1: esquema ──────────────────────────────────────────────────
-      # Si esto falla, el job se detiene y el código nuevo NUNCA llega a
-      # producción: queda servida la versión anterior, que sí corresponde al
-      # esquema vigente. Es la mitad segura del fallo.
+      # Va primero. Si falla, el job se detiene y el código nuevo nunca llega:
+      # producción sigue en la versión anterior, coherente con su esquema.
       #
       # El caso inverso (migración aplicada + deploy fallido) deja esquema
       # nuevo con código viejo. Es tolerable porque las migraciones de este
-      # repo son aditivas: el código viejo ignora las tablas y columnas que no
-      # conoce. Una migración destructiva (drop/rename de algo en uso) rompería
-      # esa premisa — esas hay que partirlas en dos despliegues.
+      # repo son aditivas. Una destructiva (drop/rename de algo en uso) rompe
+      # esa premisa: hay que partirla en dos despliegues.
       - name: Configurar Supabase CLI
         uses: supabase/setup-cli@v1
         with:
@@ -152,45 +140,64 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
-          # Sin --include-all: solo migraciones posteriores a la última remota.
-          # Una migración que quede fuera de orden (aplicada a mano antes de
-          # tiempo) hay que resolverla con `supabase migration repair`, no
-          # aflojando este comando.
+          # Sin --include-all: solo lo posterior a la última migración remota.
+          # Una migración aplicada fuera de orden se arregla con
+          # `supabase migration repair`, no aflojando este comando.
           supabase db push --yes
 
-      # ── Fase 2: código ───────────────────────────────────────────────────
+      # ── Fase 2: construir y desplegar, SIN tocar producción ──────────────
       - name: Instalar Vercel CLI
         # Versión fija: `vercel@latest` puede cambiar de comportamiento sin aviso.
         run: npm install -g vercel@59
 
-      - name: Traer configuración de producción
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
-
-      - name: Build de producción
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-
-      - name: Desplegar a producción
+      - name: Desplegar sin alias (construye Vercel)
         id: deploy
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          url=$(vercel deploy --prod --skip-domain --yes \
+                  --token="${{ secrets.VERCEL_TOKEN }}")
           echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Desplegado: $url"
+          echo "Desplegado (sin promover): $url"
 
-      # Comprobación mínima de que lo desplegado responde. No sustituye a la
-      # suite E2E (que ya corrió contra el stack efímero del job `test`);
-      # atrapa el caso de un deploy que arranca roto en el entorno real.
-      - name: Verificar que producción responde
+      # ── Fase 3: verificar ANTES de promover ──────────────────────────────
+      # `|| echo 000` a propósito: sin eso, un curl que falle aborta el paso
+      # por `set -e` y no se llega a imprimir el diagnóstico. Pasó en el
+      # intento anterior: el paso moría con "exit code 23" sin decir nada útil.
+      - name: Verificar el despliegue nuevo
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 5 \
-                   --retry-all-errors "${{ steps.deploy.outputs.url }}")
-          echo "HTTP $code"
-          [ "$code" = "200" ] || { echo "La home no responde 200 tras el despliegue"; exit 1; }
+          fallo=0
+          for ruta in / /login /terminos; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+                     --retry 5 --retry-delay 10 --retry-all-errors \
+                     --max-time 30 "${{ steps.deploy.outputs.url }}$ruta" || echo "000")
+            echo "HTTP $code  $ruta"
+            [ "$code" = "200" ] || fallo=1
+          done
+          if [ "$fallo" = "1" ]; then
+            echo "::error::El despliegue nuevo no responde 200. NO se promueve; producción queda intacta."
+            exit 1
+          fi
+
+      # ── Fase 4: recién ahora, producción ─────────────────────────────────
+      # Cambio de alias instantáneo, sin reconstruir: el artefacto es el mismo
+      # que se acaba de verificar.
+      - name: Promover a producción
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel promote "${{ steps.deploy.outputs.url }}" --yes \
+            --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Verificar producción tras promover
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -L \
+                   --retry 5 --retry-delay 10 --retry-all-errors \
+                   --max-time 30 "https://e-irene.co" || echo "000")
+          echo "HTTP $code  https://e-irene.co"
+          if [ "$code" != "200" ]; then
+            echo "::error::Producción no responde 200 tras promover. Revertir con: vercel promote <despliegue-anterior> --scope henry-garzons-projects"
+            exit 1
+          fi
