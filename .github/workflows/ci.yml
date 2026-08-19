@@ -75,23 +75,43 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # Despliegue a producción: migrar PRIMERO, desplegar DESPUÉS.
+  # DESACTIVADO — no re-habilitar sin arreglar antes lo de abajo.
   #
-  # Antes, Vercel desplegaba solo al mergear a main y las migraciones se
-  # aplicaban a mano. Cualquier PR con migración dejaba una ventana en que el
-  # código nuevo corría contra el esquema viejo. Pasó el 19-ago-2026: la 0039
-  # creaba transcription_usage, el deploy salió sin ella, y /consultations/
-  # [id]/live —la función central del producto— quedó caída hasta aplicarla.
+  # Este job existe para aplicar las migraciones ANTES de desplegar, y esa
+  # parte funciona: en su única corrida real (19-ago-2026) `supabase db push`
+  # se ejecutó correctamente contra producción.
   #
-  # Por eso el auto-deploy de main está desactivado en vercel.json
-  # (git.deploymentEnabled) y producción se despliega solo desde acá, con el
-  # orden garantizado: tests → migraciones → build → deploy.
+  # Lo que NO funciona es el build. `vercel build --prod` desde CI produjo un
+  # artefacto roto: el deploy se completó y la app respondió HTTP 500 en todas
+  # las rutas. Hubo que recuperar producción con
+  # `vercel promote <deploy-anterior> --scope henry-garzons-projects`.
+  #
+  # Causa probable, SIN CONFIRMAR: `vercel pull` no descarga las variables de
+  # entorno marcadas como "Sensitive", así que el build de CI se hace sin
+  # ellas. Falta ver los build logs del deployment que falló para confirmarlo.
+  #
+  # Además el job tiene un defecto de diseño propio: el smoke check corre
+  # DESPUÉS de que el deploy ya reemplazó producción, así que detecta la rotura
+  # tarde. Al rehacerlo hay que desplegar sin alias (`--skip-domain`), verificar
+  # y recién entonces promover — el patrón de dos fases que la documentación de
+  # Vercel recomienda justamente para deploys con migraciones.
+  #
+  # Mientras tanto vuelve a desplegar Vercel por su cuenta al mergear a main
+  # (se revirtió git.deploymentEnabled en vercel.json). Eso reintroduce el
+  # problema original: si un PR trae una migración, hay que aplicarla A MANO
+  # antes de mergear, o el código nuevo correrá contra el esquema viejo:
+  #
+  #     supabase db push --dry-run --linked   # ver qué falta
+  #     supabase db push --linked
   # ===========================================================================
   deploy:
     # Nunca desplegar algo que no pasó la suite (incluye rls/retention, que
     # cubren obligaciones legales).
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Apagado a propósito: ver el bloque de arriba. Para re-habilitarlo,
+    # restaurar la condición original:
+    #   github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Dos despliegues simultáneos podrían intercalar migraciones y builds de

@@ -8,18 +8,20 @@
 --
 -- ── Cómo se aplican las migraciones ahora ───────────────────────────────────
 --
--- Automáticamente, desde CI, al mergear a `main`. El job `deploy` de
--- .github/workflows/ci.yml corre en este orden:
+-- A mano, con el CLI, y SIEMPRE ANTES de mergear el PR que las trae. Vercel
+-- despliega `main` automáticamente, así que mergear sin haber migrado deja el
+-- código nuevo corriendo contra el esquema viejo:
 --
---     tests → supabase db push → build → deploy a Vercel → smoke check
+--     supabase db push --dry-run --linked   # ver primero qué se aplicaría
+--     supabase db push --linked
 --
--- Las migraciones van ANTES del despliegue, y si fallan el código nuevo nunca
--- llega a producción. No hay que aplicar nada a mano ni mantener este archivo
--- sincronizado.
+-- Existe un job `deploy` en .github/workflows/ci.yml que automatiza este orden
+-- (tests → migraciones → build → deploy), pero está DESACTIVADO: el build
+-- desde CI produjo un artefacto roto. Ver el bloque de comentarios de ese job
+-- antes de re-habilitarlo.
 --
--- El auto-deploy de `main` en Vercel está desactivado (git.deploymentEnabled
--- en vercel.json) justamente para que producción se despliegue solo por esa
--- vía, con el orden garantizado.
+-- Si una migración quedó aplicada fuera de orden, se corrige el historial con
+-- `supabase migration repair --status applied <version> --linked`.
 --
 -- ── Por qué existía este archivo ────────────────────────────────────────────
 --
