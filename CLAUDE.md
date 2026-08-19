@@ -29,10 +29,12 @@ Exception: naming OpenAI/Anthropic as a *product dependency* is fine when it is 
 - Real doctor, clinic, or patient records in `docs/`, screenshots, or issue comments. Not even "just one example."
 - Logs or error payloads captured from production.
 
-**Migrations (`supabase/migrations/`, `deploy/production-migration.sql`):**
+**Migrations (`supabase/migrations/`):**
 - Schema, RLS policies, grants, triggers and functions are fine and belong in git.
 - Never hardcode a service-role key, a real clinic UUID, or seed rows with real people.
 - RLS is the primary safeguard for patient isolation — `tests/rls.test.ts` must stay green. Never add a policy that widens access without a test proving the boundary still holds.
+- Migrations are applied to production **automatically by CI** on merge to `main` (`deploy` job in `.github/workflows/ci.yml`: migrate → build → deploy). Never apply them by hand and never bypass that order — production code must never run against a schema that hasn't been migrated yet. `deploy/production-migration.sql` is obsolete and kept only as a no-op note.
+- Keep migrations **additive** whenever possible. The deploy order tolerates "new schema + old code" (old code ignores what it doesn't know) but not the reverse. A destructive change (drop/rename of something in use) must be split across two deploys.
 
 **Tests:** fixtures must use obviously synthetic patients (`Paciente Demo`, `paciente@example.com`, DOB `1990-01-01`). Never seed a test from a production row. `tests/providers-live.test.ts` touches real services — it must never carry real credentials in the file.
 
@@ -79,7 +81,7 @@ app/api/cron/        # retention purges, reconciliation
 app/seguridad/ terminos/ privacidad/   # public policy pages
 lib/video/           # Daily.co session lifecycle
 types/database.ts    # generated Supabase types
-deploy/              # production migration SQL
+deploy/              # obsolete: migrations now run from CI (see ci.yml)
 ```
 
 ### Domains to be careful with

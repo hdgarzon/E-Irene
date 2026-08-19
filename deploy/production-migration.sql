@@ -1,71 +1,48 @@
 -- ============================================================================
--- E-Irene — Migración a producción: Facturación Wompi Fase 2-3
--- Fecha: 2026-08-04
--- Rama: feat/telehealth
--- Aplica: 0028_billing_recurring.sql
--- ============================================================================
--- INSTRUCCIONES:
--- 1. Conectá a tu base de datos de producción de Supabase.
--- 2. Corré este archivo completo (por ejemplo, desde el SQL Editor de Supabase
---    o `psql -f deploy/production-migration.sql`).
--- 3. El cron diario se ejecuta vía Vercel Cron Jobs (ver `vercel.json`),
---    NO desde Postgres. No se requiere pg_net ni pg_cron en la DB.
--- ============================================================================
-
--- ----------------------------------------------------------------------------
--- 1. billing_scheduled_charges — trazabilidad de cobros recurrentes
--- ----------------------------------------------------------------------------
-
-create table if not exists billing_scheduled_charges (
-  id uuid primary key default gen_random_uuid(),
-  clinic_id uuid not null references clinics(id) on delete cascade,
-  plan text not null,
-  amount_in_cents bigint not null,
-  due_at timestamptz not null,
-  charged_at timestamptz,
-  wompi_transaction_id text,
-  status text not null default 'pending'
-    check (status in ('pending', 'processing', 'success', 'failed')),
-  failure_reason text,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists billing_scheduled_charges_due_idx
-  on billing_scheduled_charges(clinic_id, due_at desc);
-create index if not exists billing_scheduled_charges_status_idx
-  on billing_scheduled_charges(status, due_at);
-
-alter table billing_scheduled_charges enable row level security;
-
--- Solo lectura para admins de la clínica. Las escrituras las hace el cron
--- con el cliente service-role (sin RLS).
-create policy billing_scheduled_charges_select on billing_scheduled_charges
-  for select using (clinic_id = auth_clinic_id() and auth_role() = 'admin');
-
-create or replace function block_billing_scheduled_charges_mutation()
-returns trigger language plpgsql as $$
-begin
-  raise exception 'billing_scheduled_charges es inmutable: UPDATE/DELETE no permitido';
-end; $$;
-
--- Evitar error si el trigger ya existe
-do $$
-begin
-  if not exists (
-    select 1 from pg_trigger
-    where tgname = 'trg_billing_scheduled_charges_immutable'
-    and tgrelid = 'billing_scheduled_charges'::regclass
-  ) then
-    create trigger trg_billing_scheduled_charges_immutable
-      before update or delete on billing_scheduled_charges
-      for each row execute function block_billing_scheduled_charges_mutation();
-  end if;
-end $$;
-
--- ----------------------------------------------------------------------------
--- 2. Cron diario
--- ----------------------------------------------------------------------------
--- El cron se configura en Vercel (ver `vercel.json`), no en Postgres.
--- Vercel llamará a POST /api/cron/billing todos los días a las 6 AM UTC.
--- El endpoint está protegido por CRON_SECRET.
+-- OBSOLETO — no ejecutar. Este archivo ya no aplica nada.
+--
+-- Es un archivo de solo comentarios a propósito: si alguien lo corre por
+-- costumbre (`psql -f deploy/production-migration.sql`), no pasa nada. Antes
+-- contenía la migración 0028 suelta, y volver a ejecutarla hoy sería, en el
+-- mejor caso, ruido.
+--
+-- ── Cómo se aplican las migraciones ahora ───────────────────────────────────
+--
+-- Automáticamente, desde CI, al mergear a `main`. El job `deploy` de
+-- .github/workflows/ci.yml corre en este orden:
+--
+--     tests → supabase db push → build → deploy a Vercel → smoke check
+--
+-- Las migraciones van ANTES del despliegue, y si fallan el código nuevo nunca
+-- llega a producción. No hay que aplicar nada a mano ni mantener este archivo
+-- sincronizado.
+--
+-- El auto-deploy de `main` en Vercel está desactivado (git.deploymentEnabled
+-- en vercel.json) justamente para que producción se despliegue solo por esa
+-- vía, con el orden garantizado.
+--
+-- ── Por qué existía este archivo ────────────────────────────────────────────
+--
+-- Se aplicaban las migraciones a mano y este archivo era el guion a pegar en
+-- el SQL Editor de Supabase. El problema es que nada obligaba a mantenerlo al
+-- día: quedó congelado en la 0028 mientras el repo llegaba a la 0039, once
+-- migraciones después.
+--
+-- El 19-ago-2026 eso costó una caída: se mergeó la 0039 (creaba
+-- transcription_usage), Vercel desplegó el código nuevo enseguida y la
+-- migración nunca se aplicó. `/consultations/[id]/live` —la consulta en vivo,
+-- la función central del producto— quedó lanzando contra una tabla que no
+-- existía, junto con /settings, /settings/plan y la consola de plataforma.
+--
+-- ── Si hace falta aplicar algo fuera del flujo normal ───────────────────────
+--
+-- Para un hotfix o una migración fuera de orden, usar el CLI contra el
+-- proyecto vinculado, nunca un archivo suelto:
+--
+--     supabase db push --dry-run --linked   # ver primero qué se aplicaría
+--     supabase db push --linked
+--
+-- Si una migración quedó aplicada fuera de orden, se corrige el historial con
+-- `supabase migration repair --status applied <version> --linked`, no
+-- reescribiendo migraciones ya aplicadas.
 -- ============================================================================
