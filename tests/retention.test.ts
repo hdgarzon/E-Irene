@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 
+// Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
+// no apunta a un stack local. Estas pruebas escriben con service-role y algunas
+// purgan datos clínicos: contra producción serían destructivas.
+import "./helpers/supabase-env";
+
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && SERVICE ? describe : describe.skip;
