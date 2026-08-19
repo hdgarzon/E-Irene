@@ -23,9 +23,6 @@
 -- Si una migración quedó aplicada fuera de orden, se corrige el historial con
 -- `supabase migration repair --status applied <version> --linked`.
 --
--- Si una migración quedó aplicada fuera de orden, se corrige el historial con
--- `supabase migration repair --status applied <version> --linked`.
---
 -- ── Por qué existía este archivo ────────────────────────────────────────────
 --
 -- Se aplicaban las migraciones a mano y este archivo era el guion a pegar en
