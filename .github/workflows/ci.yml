@@ -168,8 +168,11 @@ jobs:
       - name: Verificar el despliegue nuevo
         run: |
           fallo=0
-          for ruta in / /login /terminos; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" \
+          # -L es obligatorio: /terminos responde 307 hacia /login cuando no hay
+          # sesión, que es lo correcto. Sin seguir la redirección, una ruta sana
+          # se lee como fallo y se bloquea un despliegue bueno.
+          for ruta in / /login /terminos /privacidad /seguridad; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -L \
                      --retry 5 --retry-delay 10 --retry-all-errors \
                      --max-time 30 "${{ steps.deploy.outputs.url }}$ruta" || echo "000")
             echo "HTTP $code  $ruta"
