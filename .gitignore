@@ -48,3 +48,11 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Documentos internos de negocio y legales. No son del código y algunos
+# llevan datos que no deben salir de la máquina (ver CLAUDE.md, "Sensitive
+# data"). Se listan explícitos, no por patrón, para que agregar un doc nuevo
+# a docs/ sea una decisión consciente y no algo que se ignore en silencio.
+docs/analisis-mercado-proveedores-2026-07.pdf
+docs/costos-plataforma-2026-07.pdf
+docs/legal.zip
