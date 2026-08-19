@@ -8,17 +8,20 @@
 --
 -- ── Cómo se aplican las migraciones ahora ───────────────────────────────────
 --
--- A mano, con el CLI, y SIEMPRE ANTES de mergear el PR que las trae. Vercel
--- despliega `main` automáticamente, así que mergear sin haber migrado deja el
--- código nuevo corriendo contra el esquema viejo:
+-- Automáticamente, desde CI, al mergear a `main`. El job `deploy` de
+-- .github/workflows/ci.yml corre en cuatro fases:
 --
---     supabase db push --dry-run --linked   # ver primero qué se aplicaría
---     supabase db push --linked
+--     tests → migraciones → desplegar sin alias → verificar → promover
 --
--- Existe un job `deploy` en .github/workflows/ci.yml que automatiza este orden
--- (tests → migraciones → build → deploy), pero está DESACTIVADO: el build
--- desde CI produjo un artefacto roto. Ver el bloque de comentarios de ese job
--- antes de re-habilitarlo.
+-- Las migraciones van antes que nada, y producción solo se reemplaza por un
+-- despliegue que ya respondió 200. No hay que aplicar nada a mano.
+--
+-- Para inspeccionar el estado del esquema remoto sin cambiarlo:
+--
+--     supabase db push --dry-run --linked
+--
+-- Si una migración quedó aplicada fuera de orden, se corrige el historial con
+-- `supabase migration repair --status applied <version> --linked`.
 --
 -- Si una migración quedó aplicada fuera de orden, se corrige el historial con
 -- `supabase migration repair --status applied <version> --linked`.
