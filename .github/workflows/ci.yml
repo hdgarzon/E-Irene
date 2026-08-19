@@ -73,3 +73,104 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # ===========================================================================
+  # Despliegue a producción: migrar PRIMERO, desplegar DESPUÉS.
+  #
+  # Antes, Vercel desplegaba solo al mergear a main y las migraciones se
+  # aplicaban a mano. Cualquier PR con migración dejaba una ventana en que el
+  # código nuevo corría contra el esquema viejo. Pasó el 19-ago-2026: la 0039
+  # creaba transcription_usage, el deploy salió sin ella, y /consultations/
+  # [id]/live —la función central del producto— quedó caída hasta aplicarla.
+  #
+  # Por eso el auto-deploy de main está desactivado en vercel.json
+  # (git.deploymentEnabled) y producción se despliega solo desde acá, con el
+  # orden garantizado: tests → migraciones → build → deploy.
+  # ===========================================================================
+  deploy:
+    # Nunca desplegar algo que no pasó la suite (incluye rls/retention, que
+    # cubren obligaciones legales).
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Dos despliegues simultáneos podrían intercalar migraciones y builds de
+    # commits distintos. cancel-in-progress queda en false a propósito: cancelar
+    # a mitad de un `db push` es justo lo que no se quiere.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── Fase 1: esquema ──────────────────────────────────────────────────
+      # Si esto falla, el job se detiene y el código nuevo NUNCA llega a
+      # producción: queda servida la versión anterior, que sí corresponde al
+      # esquema vigente. Es la mitad segura del fallo.
+      #
+      # El caso inverso (migración aplicada + deploy fallido) deja esquema
+      # nuevo con código viejo. Es tolerable porque las migraciones de este
+      # repo son aditivas: el código viejo ignora las tablas y columnas que no
+      # conoce. Una migración destructiva (drop/rename de algo en uso) rompería
+      # esa premisa — esas hay que partirlas en dos despliegues.
+      - name: Configurar Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Aplicar migraciones a producción
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          # Sin --include-all: solo migraciones posteriores a la última remota.
+          # Una migración que quede fuera de orden (aplicada a mano antes de
+          # tiempo) hay que resolverla con `supabase migration repair`, no
+          # aflojando este comando.
+          supabase db push --yes
+
+      # ── Fase 2: código ───────────────────────────────────────────────────
+      - name: Instalar Vercel CLI
+        # Versión fija: `vercel@latest` puede cambiar de comportamiento sin aviso.
+        run: npm install -g vercel@59
+
+      - name: Traer configuración de producción
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build de producción
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Desplegar a producción
+        id: deploy
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Desplegado: $url"
+
+      # Comprobación mínima de que lo desplegado responde. No sustituye a la
+      # suite E2E (que ya corrió contra el stack efímero del job `test`);
+      # atrapa el caso de un deploy que arranca roto en el entorno real.
+      - name: Verificar que producción responde
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 5 \
+                   --retry-all-errors "${{ steps.deploy.outputs.url }}")
+          echo "HTTP $code"
+          [ "$code" = "200" ] || { echo "La home no responde 200 tras el despliegue"; exit 1; }
