@@ -80,6 +80,22 @@ async function estadoDe(s: SupabaseClient, userId: string) {
 }
 
 d("vencimiento de las verificaciones heredadas", () => {
+  /**
+   * Guarda contra el fallo que ya ocurrió dos veces en este repo (0005, 0038):
+   * asumir que service_role conserva EXECUTE por los privilegios por defecto de
+   * Supabase. En un stack recién provisionado —CI— ese default no existe, y la
+   * función falla con 42501 o, peor, el cron corre "sin error" sin hacer nada.
+   * Esta prueba comprueba el permiso, no el comportamiento: es lo único que
+   * distingue un entorno con el default de uno sin él.
+   */
+  it("service_role puede ejecutar el barrido (GRANT explícito, no heredado)", async () => {
+    const { data, error } = await svc().rpc("expire_grandfathered_verifications", {
+      p_deadline: PLAZO_FUTURO,
+    });
+    expect(error).toBeNull();
+    expect(data).toBeNull(); // returns void
+  }, 30000);
+
   it("antes del plazo no toca nada", async () => {
     const f = await cuentaHeredada();
     const { error } = await f.s.rpc("expire_grandfathered_verifications", {

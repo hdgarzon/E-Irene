@@ -92,9 +92,16 @@ begin
 end;
 $$;
 
--- service_role/postgres conservan acceso vía privilegios por defecto de Supabase;
--- no agregarlos aquí o se rompe el cron (mismo criterio que 0021).
+-- Se revoca a los roles de la app y se concede EXPLÍCITAMENTE a service_role.
+--
+-- El GRANT explícito no es redundante: la 0021 y la 0033 dieron por hecho que
+-- service_role conserva EXECUTE por los privilegios por defecto de Supabase, y
+-- la 0038 tuvo que corregirlo porque un stack recién provisionado (CI, o un
+-- `supabase start` fresco) no siempre los replica. Sin esto, el barrido falla
+-- con 42501 donde el default no existe, y el cron correría "sin error" sin
+-- hacer nada — el mismo fallo silencioso que la 0005 y la 0038 ya arreglaron.
 revoke execute on function expire_grandfathered_verifications(timestamptz) from public, anon, authenticated;
+grant execute on function expire_grandfathered_verifications(timestamptz) to service_role;
 
 -- 3:30 AM: después de la purga de transcripciones (3:00) para no solaparse.
 select cron.schedule(
