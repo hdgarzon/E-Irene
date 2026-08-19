@@ -72,17 +72,23 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Instalar navegadores de Playwright
-        # Timeout propio: si vuelve a colgarse, falla acá con un mensaje claro
-        # en vez de consumir en silencio el presupuesto del job entero.
         timeout-minutes: 8
         run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            # Binarios ya cacheados; solo faltan las dependencias de sistema,
-            # que viven fuera de ~/.cache y no se pueden cachear.
-            npx playwright install-deps chromium
-          else
-            npx playwright install --with-deps chromium
-          fi
+          # `--with-deps` dispara apt-get, y ahí es donde esto se cuelga: el
+          # 19-ago-2026 el mirror azure.archive.ubuntu.com dejó de responder
+          # (todo Ign:), apt cayó al mirror público y se quedó 7½ min sin
+          # avanzar, agotando el timeout y bloqueando el despliegue.
+          #
+          # Las librerías de sistema que Chromium necesita ya vienen en la
+          # imagen de los runners de GitHub, así que apt es un lujo, no un
+          # requisito: se intenta con un tope corto y, si el mirror está
+          # caído, se sigue igual. Si de verdad faltara una librería, los
+          # tests E2E fallarían con un error claro en vez de colgarse acá.
+          timeout 180 npx playwright install-deps chromium \
+            || echo "::warning::install-deps falló o expiró (mirror de apt); se continúa sin él"
+          # Los binarios sí se cachean (ver paso anterior): esto es instantáneo
+          # cuando hay acierto.
+          npx playwright install chromium
 
       - name: Tests E2E
         run: npm run test:e2e
