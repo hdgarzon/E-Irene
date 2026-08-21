@@ -36,7 +36,7 @@ export default async function NewAssessmentPage({
 
       <div>
         <h1 className="flex items-center gap-2 font-heading text-2xl font-bold text-navy">
-          <ClipboardCheck className="size-6 text-purple" />
+          <ClipboardCheck className="size-6 text-brand" />
           {ASSESSMENT_LABEL[assessmentType]}
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -55,9 +55,9 @@ export default async function NewAssessmentPage({
               {RESPONSE_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex items-center gap-2 rounded-lg border border-gray-line px-3 py-2 text-sm has-[:checked]:border-purple has-[:checked]:bg-purple/5"
+                  className="flex items-center gap-2 rounded-lg border border-gray-line px-3 py-2 text-sm has-[:checked]:border-brand has-[:checked]:bg-brand/5"
                 >
-                  <input type="radio" name={`q${i}`} value={opt.value} required className="accent-purple" />
+                  <input type="radio" name={`q${i}`} value={opt.value} required className="accent-brand" />
                   {opt.label}
                 </label>
               ))}

@@ -162,11 +162,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
             <div
               key={plan}
               className={`flex flex-col rounded-2xl border bg-card p-5 ${
-                current ? "border-purple ring-1 ring-purple" : "border-gray-line"
+                current ? "border-brand ring-1 ring-brand" : "border-gray-line"
               }`}
             >
               <h3 className="font-heading text-lg font-bold text-navy">{l.label}</h3>
-              <p className="mb-3 text-2xl font-bold text-purple">{l.price}</p>
+              <p className="mb-3 text-2xl font-bold text-brand">{l.price}</p>
               <ul className="flex-1 space-y-1.5 text-xs text-muted-foreground">
                 {features(plan).map((f) => (
                   <li key={f} className="flex items-start gap-1.5">

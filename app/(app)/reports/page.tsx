@@ -19,7 +19,7 @@ export default async function ReportsPage() {
       {reports.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
-            <FileText className="size-6 text-purple" />
+            <FileText className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">Aún no hay reportes</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">

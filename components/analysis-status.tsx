@@ -32,7 +32,7 @@ export function AnalysisStatusBanner({
   if (inProgress) {
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-gray-line bg-card p-5">
-        <Loader2 className="size-5 shrink-0 animate-spin text-purple" />
+        <Loader2 className="size-5 shrink-0 animate-spin text-brand" />
         <div className="text-sm">
           <p className="font-medium text-navy">Analizando la sesión con IA…</p>
           <p className="text-muted-foreground">

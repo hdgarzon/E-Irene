@@ -87,7 +87,7 @@ export default async function ConsultationPage({
 
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <h2 className="mb-3 flex items-center gap-2 font-heading font-semibold text-navy">
-          <FileText className="size-4 text-purple" />
+          <FileText className="size-4 text-brand" />
           Transcripción
         </h2>
         {transcript ? (
@@ -96,7 +96,7 @@ export default async function ConsultationPage({
               const [speaker, ...rest] = line.split(": ");
               return (
                 <p key={i}>
-                  <span className="font-medium text-purple">{speaker}:</span>{" "}
+                  <span className="font-medium text-brand">{speaker}:</span>{" "}
                   <span className="text-foreground/90">{rest.join(": ")}</span>
                 </p>
               );

@@ -11,9 +11,17 @@
   --font-mono: var(--font-mono);
   --font-heading: var(--font-sans);
 
-  /* ── Tokens de marca E-Irene ── */
-  --color-navy: #0a2540;
-  --color-purple: #635bff;
+  /* ── Tokens de marca E-Irene ──
+     Los azules salen de la landing pública (app/(marketing)/page.tsx), que es
+     monocromática: #12283f para texto fuerte, #46617d para texto apagado y
+     #0d5ab0 como acento. El púrpura anterior (#635bff) no existía allí y
+     además reprobaba AA como texto (4.45:1 sobre el fondo); el azul da 6.40:1.
+
+     --color-mint se conserva a propósito: señala verificado/firmado/éxito, y la
+     landing no tiene un color equivalente porque no necesita estados. Es una
+     adición semántica de la app, no una inconsistencia. */
+  --color-navy: #12283f;
+  --color-brand: #0d5ab0;
   --color-mint: #00d4aa;
   --color-coral: #ff6b6b;
   --color-cloud: #f6f9fc;
@@ -64,26 +72,26 @@
   --radius: 0.625rem;
 
   --background: #f6f9fc;          /* Cloud White */
-  --foreground: #0a2540;          /* Navy Deep */
+  --foreground: #12283f;          /* Navy de la landing */
   --card: #ffffff;
-  --card-foreground: #0a2540;
+  --card-foreground: #12283f;
   --popover: #ffffff;
-  --popover-foreground: #0a2540;
-  --primary: #635bff;            /* Purple Accent */
+  --popover-foreground: #12283f;
+  --primary: #0d5ab0;            /* Azul de la landing */
   --primary-foreground: #ffffff;
   --secondary: #eef2f9;
-  --secondary-foreground: #0a2540;
+  --secondary-foreground: #12283f;
   --muted: #eef2f9;
-  --muted-foreground: #5b6b7c;
+  --muted-foreground: #46617d;
   --accent: #96f7d6;            /* Soft Mint */
   --accent-foreground: #04342a;
   --destructive: #ff6b6b;       /* Coral Alert */
   --border: #e3e8ee;            /* Gray Line */
   --input: #e3e8ee;
-  --ring: #635bff;
-  --chart-1: #635bff;
+  --ring: #0d5ab0;
+  --chart-1: #0d5ab0;
   --chart-2: #00d4aa;
-  --chart-3: #0a2540;
+  --chart-3: #12283f;
   --chart-4: #96f7d6;
   --chart-5: #ff6b6b;
 
@@ -94,22 +102,24 @@
      da orientación. */
   --sidebar: #12283f;
   --sidebar-foreground: #cfdae6;
-  --sidebar-primary: #635bff;
+  --sidebar-primary: #0d5ab0;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #33506e;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #33506e;
-  --sidebar-ring: #635bff;
+  --sidebar-ring: #0d5ab0;
 }
 
 .dark {
   --background: #06121f;
   --foreground: #f6f9fc;
-  --card: #0a2540;
+  --card: #12283f;
   --card-foreground: #f6f9fc;
-  --popover: #0a2540;
+  --popover: #12283f;
   --popover-foreground: #f6f9fc;
-  --primary: #7b74ff;
+  /* Azul de la landing ACLARADO: #0d5ab0 sobre el fondo oscuro (#06121f) da
+     2.79:1 y reprueba AA. Este da 5.49:1, mejor que el violeta que reemplaza. */
+  --primary: #3d8fd8;
   --primary-foreground: #ffffff;
   --secondary: #143456;
   --secondary-foreground: #f6f9fc;
@@ -120,20 +130,20 @@
   --destructive: #ff6b6b;
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: #7b74ff;
-  --chart-1: #7b74ff;
+  --ring: #3d8fd8;
+  --chart-1: #3d8fd8;
   --chart-2: #00d4aa;
   --chart-3: #96f7d6;
-  --chart-4: #635bff;
+  --chart-4: #0d5ab0;
   --chart-5: #ff6b6b;
   --sidebar: #06121f;
   --sidebar-foreground: #d7e0ea;
-  --sidebar-primary: #7b74ff;
+  --sidebar-primary: #3d8fd8;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #143456;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #143456;
-  --sidebar-ring: #7b74ff;
+  --sidebar-ring: #3d8fd8;
 }
 
 @layer base {

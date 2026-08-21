@@ -93,9 +93,9 @@ export default async function PatientLinkPage({
               {RESPONSE_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex items-center gap-2 rounded-lg border border-gray-line px-3 py-2 text-sm has-[:checked]:border-purple has-[:checked]:bg-purple/5"
+                  className="flex items-center gap-2 rounded-lg border border-gray-line px-3 py-2 text-sm has-[:checked]:border-brand has-[:checked]:bg-brand/5"
                 >
-                  <input type="radio" name={`q${i}`} value={opt.value} required className="accent-purple" />
+                  <input type="radio" name={`q${i}`} value={opt.value} required className="accent-brand" />
                   {opt.label}
                 </label>
               ))}

@@ -49,7 +49,7 @@ export function ConsentForm({
             name="isMinor"
             checked={manualMinor}
             onChange={(e) => setManualMinor(e.target.checked)}
-            className="mt-0.5 size-4 accent-purple"
+            className="mt-0.5 size-4 accent-brand"
           />
           <span>Este paciente es menor de edad (no hay fecha de nacimiento registrada).</span>
         </label>
@@ -112,7 +112,7 @@ export function ConsentForm({
       </div>
 
       <label className="flex items-start gap-2.5 text-sm">
-        <input type="checkbox" name="accepted" className="mt-0.5 size-4 accent-purple" />
+        <input type="checkbox" name="accepted" className="mt-0.5 size-4 accent-brand" />
         <span>
           {minorMode
             ? "Declaro ser el representante legal del paciente menor de edad identificado y, en su nombre, he leído y acepto el consentimiento informado, autorizando el tratamiento de sus datos conforme a la Ley 1581 de 2012."

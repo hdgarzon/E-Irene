@@ -42,7 +42,7 @@ export default async function NewConsultationPage({
         </Link>
         <Link
           href={`/patients/${patientId}/brief`}
-          className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+          className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
         >
           <Sparkles className="size-3.5" />
           Ver brief pre-sesión
@@ -51,7 +51,7 @@ export default async function NewConsultationPage({
 
       <div className="rounded-2xl border border-gray-line bg-card p-8 text-center">
         <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-cloud">
-          <Mic className="size-7 text-purple" />
+          <Mic className="size-7 text-brand" />
         </div>
         <h1 className="font-heading text-xl font-bold text-navy">
           Iniciar consulta con {patient.fullName}

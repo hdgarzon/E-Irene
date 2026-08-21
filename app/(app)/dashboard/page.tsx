@@ -186,14 +186,14 @@ export default async function DashboardPage() {
           icon={Users}
           label="Pacientes"
           value={patients}
-          accent="text-purple"
+          accent="text-brand"
         />
         <StatLink
           href="/appointments"
           icon={CalendarDays}
           label="Citas hoy"
           value={todayAppts.length}
-          accent="text-purple"
+          accent="text-brand"
         />
         <StatLink
           href="/patients"
@@ -219,7 +219,7 @@ export default async function DashboardPage() {
       <section className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-heading font-semibold text-navy">Agenda de hoy</h2>
-          <Link href="/appointments" className="text-sm text-purple hover:underline">
+          <Link href="/appointments" className="text-sm text-brand hover:underline">
             Ver toda la agenda
           </Link>
         </div>

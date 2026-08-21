@@ -13,7 +13,7 @@ import {
 
 const META: Record<AppointmentStatus, { label: string; className: string }> = {
   scheduled: { label: "Agendada", className: "bg-secondary text-secondary-foreground" },
-  confirmed: { label: "Confirmada", className: "bg-purple/15 text-purple" },
+  confirmed: { label: "Confirmada", className: "bg-brand/15 text-brand" },
   completed: { label: "Completada", className: "bg-mint/15 text-[#04342a]" },
   cancelled: { label: "Cancelada", className: "bg-destructive/15 text-destructive" },
   no_show: { label: "No asistió", className: "bg-muted text-muted-foreground" },

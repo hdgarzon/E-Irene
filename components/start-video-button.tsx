@@ -20,7 +20,7 @@ export function StartVideoButton({ appointmentId }: { appointmentId: string }) {
       type="button"
       onClick={start}
       disabled={pending}
-      className="text-muted-foreground hover:text-purple disabled:opacity-50"
+      className="text-muted-foreground hover:text-brand disabled:opacity-50"
       aria-label="Iniciar videollamada"
       title="Iniciar videollamada"
     >

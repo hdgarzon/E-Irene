@@ -24,7 +24,7 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
     <div data-testid="clinic-card" className="rounded-2xl border border-gray-line bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-xl bg-purple/15 text-purple">
+          <span className="grid size-9 place-items-center rounded-xl bg-brand/15 text-brand">
             <Building2 className="size-4" />
           </span>
           <div>
