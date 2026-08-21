@@ -2,6 +2,11 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 
+// Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
+// no apunta a un stack local. Estas pruebas escriben con service-role y algunas
+// purgan datos clínicos: contra producción serían destructivas.
+import "./helpers/supabase-env";
+
 /**
  * Integración de la cuota de transcripción (migración 0039): begin/finalize,
  * aislamiento multi-tenant y bloqueo de acceso directo a la tabla. Igual que

@@ -49,7 +49,11 @@ function RiskAlerts({ riskFlags }: { riskFlags: RiskFlags | undefined }) {
       <div className="space-y-2">
         {active.map(([key, v]) => (
           <div key={key} className={`rounded-lg border px-3 py-2 text-sm ${RISK_LEVEL_STYLE[v.level]}`}>
-            <p className="font-medium capitalize">
+            {/* Sin `capitalize`: RISK_LABEL ya trae la capitalización correcta
+                ("Ideación suicida", "Consumo de sustancias") y capitalizar cada
+                palabra las rompía —"Consumo De Sustancias"—. "nivel moderado"
+                va en minúscula, que es lo correcto a media frase. */}
+            <p className="font-medium">
               {RISK_LABEL[key]} — nivel {v.level}
             </p>
             {v.evidence && <p className="mt-0.5 text-foreground/80">&ldquo;{v.evidence}&rdquo;</p>}

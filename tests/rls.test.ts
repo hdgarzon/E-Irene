@@ -3,6 +3,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 import type { VerificationStatus } from "@/lib/verification";
 
+// Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
+// no apunta a un stack local. Estas pruebas escriben con service-role y algunas
+// purgan datos clínicos: contra producción serían destructivas.
+import "./helpers/supabase-env";
+
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;

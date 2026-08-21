@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { statusForDeliveryMode, isSimulatedMode, sentAtFor } from "@/lib/db/notifications";
 
+// Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
+// no apunta a un stack local. Estas pruebas escriben con service-role y algunas
+// purgan datos clínicos: contra producción serían destructivas.
+import "./helpers/supabase-env";
+
 /**
  * `notifications` es el registro con el que una clínica acreditaría haber
  * contactado al paciente — por ejemplo, haberle enviado el enlace para firmar

@@ -1,20 +1,6 @@
 import Link from "next/link";
-import { EB_Garamond, Inter } from "next/font/google";
 import { LandingAmberCascades } from "@/components/landing-amber-cascades";
-
-// Mismas tipografías que la landing pública (app/(marketing)/layout.tsx),
-// cargadas aparte porque las páginas de auth no comparten ese route group.
-const ebGaramond = EB_Garamond({
-  variable: "--font-landing-serif",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const inter = Inter({
-  variable: "--font-landing-sans",
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500"],
-});
+import { landingFontVariables } from "@/lib/fonts";
 
 /** Shell visual compartido por login, signup y set-password: mismo look que
  * la landing pública. No es un layout.tsx de Next porque set-password vive
@@ -23,7 +9,7 @@ const inter = Inter({
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`${ebGaramond.variable} ${inter.variable} relative flex min-h-dvh flex-col items-center justify-center px-4 py-10`}
+      className={`${landingFontVariables} relative flex min-h-dvh flex-col items-center justify-center px-4 py-10`}
       style={{ background: "#f7fafc" }}
     >
       <div className="pointer-events-none fixed inset-0" style={{ opacity: 0.3 }}>

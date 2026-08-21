@@ -110,7 +110,11 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold text-navy">Hola, {firstName} 👋</h1>
-        <p className="text-sm text-muted-foreground capitalize">
+        {/* first-letter y no capitalize: formatFullDate devuelve "jueves, 20 de
+            agosto de 2026" —en español los días y meses van en minúscula— y
+            `capitalize` capitaliza CADA palabra, produciendo "Jueves, 20 De
+            Agosto De 2026". Solo hace falta la inicial de la frase. */}
+        <p className="text-sm text-muted-foreground first-letter:uppercase">
           {formatFullDate(new Date().toISOString())}
         </p>
       </div>

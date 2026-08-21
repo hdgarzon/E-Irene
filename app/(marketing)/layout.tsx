@@ -1,20 +1,9 @@
-import { EB_Garamond, Inter, Fira_Code } from "next/font/google";
+import { Fira_Code } from "next/font/google";
+import { landingFontVariables } from "@/lib/fonts";
 
 // Tipografías propias de la landing pública (no se cargan en el resto de la
 // app). GeistMono ya está cargada globalmente como --font-mono y se reutiliza
 // aquí en vez de duplicarla.
-const ebGaramond = EB_Garamond({
-  variable: "--font-landing-serif",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const inter = Inter({
-  variable: "--font-landing-sans",
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500"],
-});
-
 const firaCode = Fira_Code({
   variable: "--font-landing-code",
   subsets: ["latin"],
@@ -23,7 +12,7 @@ const firaCode = Fira_Code({
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${ebGaramond.variable} ${inter.variable} ${firaCode.variable}`}>
+    <div className={`${landingFontVariables} ${firaCode.variable}`}>
       {children}
     </div>
   );
