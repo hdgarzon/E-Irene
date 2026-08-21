@@ -87,14 +87,18 @@
   --chart-4: #96f7d6;
   --chart-5: #ff6b6b;
 
-  /* Sidebar navy — look clínico */
-  --sidebar: #0a2540;
-  --sidebar-foreground: #d7e0ea;
+  /* Sidebar navy — look clínico, con los azules de la landing pública.
+     Los valores salen de app/(marketing)/page.tsx: #12283f es el navy de sus
+     títulos y #33506e el azul intermedio. El ancla oscura se conserva a
+     propósito: separa el chrome del contenido, que en una app densa es lo que
+     da orientación. */
+  --sidebar: #12283f;
+  --sidebar-foreground: #cfdae6;
   --sidebar-primary: #635bff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #143456;
+  --sidebar-accent: #33506e;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #143456;
+  --sidebar-border: #33506e;
   --sidebar-ring: #635bff;
 }
 
@@ -142,6 +146,7 @@
   html {
     @apply font-sans antialiased;
   }
+
 }
 
 /* ── Landing pública (app/page.tsx, app/capability/*) ──
@@ -241,4 +246,20 @@
     border-radius: 8px;
     padding: 10px 14px;
   }
+}
+
+/* Tipografías de la landing dentro de la app interna (ver app/(app)/layout.tsx).
+   
+   Va SIN @layer a propósito, y no es un descuido: las declaraciones sin capa
+   ganan sobre cualquier capa, y la utilidad `font-heading` de Tailwind vive en
+   `utilities`, que se aplica después de `base`. Dentro de `base` esta regla
+   perdía por orden de capas, no por especificidad.
+   
+   Tampoco se hace redefiniendo --font-heading: `@theme inline` resuelve ese
+   token en compilación, así que un override en runtime no lo alcanza.
+   
+   El texto de cuerpo lo fija el propio shell con font-family; acá solo hacen
+   falta los títulos. */
+.app-shell :is(h1, h2, h3, h4, h5, .font-heading) {
+  font-family: var(--font-landing-serif);
 }
