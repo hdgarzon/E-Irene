@@ -30,7 +30,7 @@ export default async function AppointmentsPage() {
       {groups.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
-            <CalendarDays className="size-6 text-purple" />
+            <CalendarDays className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">No hay citas agendadas</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -81,7 +81,7 @@ export default async function AppointmentsPage() {
 
                     <Link
                       href={`/appointments/${appt.id}/edit`}
-                      className="text-muted-foreground hover:text-purple"
+                      className="text-muted-foreground hover:text-brand"
                       aria-label="Editar cita"
                     >
                       <Pencil className="size-4" />

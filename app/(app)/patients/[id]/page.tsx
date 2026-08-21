@@ -97,7 +97,7 @@ export default async function PatientDetailPage({
           </a>
           <Link
             href={`/patients/${patient.id}/edit`}
-            className="text-sm font-medium text-purple hover:underline"
+            className="text-sm font-medium text-brand hover:underline"
           >
             Editar
           </Link>
@@ -125,7 +125,7 @@ export default async function PatientDetailPage({
       {patient.history && (
         <div className="rounded-2xl border border-gray-line bg-card p-6">
           <h2 className="mb-2 flex items-center gap-2 font-heading font-semibold text-navy">
-            <ClipboardList className="size-4 text-purple" />
+            <ClipboardList className="size-4 text-brand" />
             Antecedentes básicos
           </h2>
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">{patient.history}</p>
@@ -154,13 +154,13 @@ export default async function PatientDetailPage({
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
-            <ClipboardCheck className="size-4 text-purple" />
+            <ClipboardCheck className="size-4 text-brand" />
             Escalas psicométricas
           </h2>
           {assessments.length > 0 && (
             <Link
               href={`/patients/${id}/progress`}
-              className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+              className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
             >
               <TrendingUp className="size-3.5" />
               Ver evolución
@@ -202,7 +202,7 @@ export default async function PatientDetailPage({
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
-            <FileSignature className="size-4 text-purple" />
+            <FileSignature className="size-4 text-brand" />
             Consentimiento informado
           </h2>
           {consent ? (
@@ -253,14 +253,14 @@ export default async function PatientDetailPage({
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
-            <Mic className="size-4 text-purple" />
+            <Mic className="size-4 text-brand" />
             Consultas
           </h2>
           <div className="flex items-center gap-3">
             {consultations.length > 0 && (
               <Link
                 href={`/patients/${id}/progress`}
-                className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+                className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
               >
                 <TrendingUp className="size-3.5" />
                 Ver evolución
@@ -269,7 +269,7 @@ export default async function PatientDetailPage({
             {consultations.length > 0 && (
               <Link
                 href={`/patients/${id}/brief`}
-                className="flex items-center gap-1 text-sm font-medium text-purple hover:underline"
+                className="flex items-center gap-1 text-sm font-medium text-brand hover:underline"
               >
                 <Sparkles className="size-3.5" />
                 Brief pre-sesión
@@ -297,7 +297,7 @@ export default async function PatientDetailPage({
               <li key={c.id}>
                 <Link
                   href={`/consultations/${c.id}`}
-                  className="flex items-center justify-between py-3 text-sm hover:text-purple"
+                  className="flex items-center justify-between py-3 text-sm hover:text-brand"
                 >
                   <span className="text-navy">
                     {new Date(c.startedAt).toLocaleString("es-CO", {
@@ -308,7 +308,7 @@ export default async function PatientDetailPage({
                   <Badge
                     className={
                       c.status === "in_progress"
-                        ? "bg-purple/15 text-purple"
+                        ? "bg-brand/15 text-brand"
                         : "bg-mint/15 text-[#04342a]"
                     }
                   >

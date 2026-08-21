@@ -35,7 +35,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <Avatar className="size-9">
-          <AvatarFallback className="bg-purple text-white">{initials(user.fullName)}</AvatarFallback>
+          <AvatarFallback className="bg-brand text-white">{initials(user.fullName)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -43,7 +43,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
           <DropdownMenuLabel>
             <p className="font-medium">{user.fullName}</p>
             <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
-            <p className="mt-1 text-xs font-normal text-purple">{ROLE_LABEL[user.role]}</p>
+            <p className="mt-1 text-xs font-normal text-brand">{ROLE_LABEL[user.role]}</p>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

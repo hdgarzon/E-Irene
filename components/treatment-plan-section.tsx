@@ -41,7 +41,7 @@ export function TreatmentPlanSection({
     return (
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <h2 className="mb-3 flex items-center gap-2 font-heading font-semibold text-navy">
-          <ClipboardCheck className="size-4 text-purple" />
+          <ClipboardCheck className="size-4 text-brand" />
           Plan de tratamiento
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
@@ -65,10 +65,10 @@ export function TreatmentPlanSection({
     <div className="rounded-2xl border border-gray-line bg-card p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
-          <ClipboardCheck className="size-4 text-purple" />
+          <ClipboardCheck className="size-4 text-brand" />
           Plan de tratamiento
         </h2>
-        <Badge className="bg-purple/15 text-purple capitalize">{plan.status}</Badge>
+        <Badge className="bg-brand/15 text-brand capitalize">{plan.status}</Badge>
       </div>
       <p className="mt-1 text-sm text-navy">{plan.title}</p>
       {plan.approach && (

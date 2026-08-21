@@ -76,7 +76,7 @@ export default function SecurityPage() {
           {sections.map((s) => (
             <div key={s.title} className="flex gap-4">
               <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-cloud">
-                <s.icon className="size-5 text-purple" />
+                <s.icon className="size-5 text-brand" />
               </div>
               <div>
                 <h2 className="font-heading font-semibold text-navy">{s.title}</h2>

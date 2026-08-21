@@ -67,17 +67,17 @@ export default async function AdminResumenPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard icon={Building2} label="Clínicas" value={totals.clinics} accent="bg-purple/15 text-purple" delay={0} />
+        <StatCard icon={Building2} label="Clínicas" value={totals.clinics} accent="bg-brand/15 text-brand" delay={0} />
         <StatCard icon={Users} label="Pacientes" value={totals.patients} accent="bg-mint/20 text-[#04342a]" delay={60} />
         <StatCard icon={FileText} label="Reportes" value={totals.reports} accent="bg-navy/10 text-navy" delay={120} />
         <StatCard icon={Mic} label="Consultas" value={totals.consultations} accent="bg-coral/15 text-destructive" delay={180} />
-        <StatCard icon={CalendarDays} label="Citas" value={totals.appointments} accent="bg-purple/15 text-purple" delay={240} />
+        <StatCard icon={CalendarDays} label="Citas" value={totals.appointments} accent="bg-brand/15 text-brand" delay={240} />
       </div>
 
       <section className="space-y-3">
         <h2 className="font-heading font-semibold text-navy">Uso de plataforma</h2>
         <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard icon={BrainCircuit} label="Análisis de IA (OpenAI)" value={totals.reports} accent="bg-purple/15 text-purple" delay={0} />
+          <StatCard icon={BrainCircuit} label="Análisis de IA (OpenAI)" value={totals.reports} accent="bg-brand/15 text-brand" delay={0} />
           <StatCard icon={Radio} label="Transcripciones (Deepgram)" value={totals.consultations} accent="bg-coral/15 text-destructive" delay={60} />
           <StatCard icon={Send} label="Notificaciones enviadas" value={totals.notifications} accent="bg-mint/20 text-[#04342a]" delay={120} />
         </div>

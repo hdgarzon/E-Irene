@@ -26,7 +26,7 @@ export function UsageBar({
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-purple"}`}
+          className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-brand"}`}
           style={{ width: `${Number.isFinite(max) ? pct : 25}%` }}
         />
       </div>

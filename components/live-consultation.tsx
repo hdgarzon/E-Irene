@@ -459,7 +459,7 @@ export function LiveConsultation({
                 className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
                   c.speaker === "Doctor"
                     ? "bg-cloud text-navy"
-                    : "bg-purple/10 text-navy"
+                    : "bg-brand/10 text-navy"
                 }`}
               >
                 {c.text}

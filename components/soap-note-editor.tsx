@@ -30,7 +30,7 @@ export function SoapNoteEditor({
   return (
     <div className="rounded-2xl border border-gray-line bg-card p-6">
       <div className="mb-1 flex items-center gap-2 font-heading font-semibold text-navy">
-        <NotebookText className="size-4 text-purple" />
+        <NotebookText className="size-4 text-brand" />
         Nota SOAP
       </div>
       <p className="mb-4 text-xs text-muted-foreground">

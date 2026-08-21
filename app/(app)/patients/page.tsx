@@ -42,7 +42,7 @@ export default async function PatientsPage({
       {total === 0 && !isFiltering ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
-            <Users className="size-6 text-purple" />
+            <Users className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">Aún no hay pacientes</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">

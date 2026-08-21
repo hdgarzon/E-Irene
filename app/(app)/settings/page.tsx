@@ -22,7 +22,7 @@ export default async function SettingsPage() {
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="flex items-center justify-between">
           <h2 className="font-heading font-semibold text-navy">Plan actual</h2>
-          <span className="rounded-full bg-purple/15 px-3 py-1 text-sm font-medium text-purple">
+          <span className="rounded-full bg-brand/15 px-3 py-1 text-sm font-medium text-brand">
             {limits.label} · {limits.price}
           </span>
         </div>
@@ -46,7 +46,7 @@ export default async function SettingsPage() {
           >
             <span className="flex items-center gap-3">
               <span className="grid size-10 place-items-center rounded-xl bg-cloud">
-                <Users className="size-5 text-purple" />
+                <Users className="size-5 text-brand" />
               </span>
               <span>
                 <span className="block font-medium text-navy">Equipo</span>
@@ -65,7 +65,7 @@ export default async function SettingsPage() {
         >
           <span className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-cloud">
-              <CreditCard className="size-5 text-purple" />
+              <CreditCard className="size-5 text-brand" />
             </span>
             <span>
               <span className="block font-medium text-navy">Plan y facturación</span>

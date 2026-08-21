@@ -100,7 +100,7 @@ export function ReportView({
 
       <RiskAlerts riskFlags={payload.riskFlags} />
 
-      <div className="flex items-center gap-2 text-sm text-purple">
+      <div className="flex items-center gap-2 text-sm text-brand">
         <BrainCircuit className="size-4" />
         Análisis con IA {report.doctorEdited && "· editado por el profesional"}
       </div>
@@ -119,7 +119,7 @@ export function ReportView({
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-purple"
+                  className="h-full rounded-full bg-brand"
                   style={{ width: `${Math.min(value * 100 * 4, 100)}%` }}
                 />
               </div>

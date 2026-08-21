@@ -28,7 +28,7 @@ const OBJETIVO_ESTADO_LABEL: Record<ClinicalState["objetivos"][number]["estado"]
 };
 
 const OBJETIVO_ESTADO_STYLE: Record<ClinicalState["objetivos"][number]["estado"], string> = {
-  activo: "bg-purple/15 text-purple",
+  activo: "bg-brand/15 text-brand",
   logrado: "bg-mint/15 text-[#04342a]",
   abandonado: "bg-muted text-muted-foreground",
 };
@@ -105,7 +105,7 @@ export default async function ProgressPage({
       {!hasAnything ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
-            <TrendingUp className="size-6 text-purple" />
+            <TrendingUp className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">Aún no hay sesiones analizadas</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -117,7 +117,7 @@ export default async function ProgressPage({
           {state && (
             <div className="rounded-2xl border border-gray-line bg-card p-6">
               <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
-                <Target className="size-4 text-purple" />
+                <Target className="size-4 text-brand" />
                 Objetivos terapéuticos
               </h2>
               {state.objetivos.length === 0 ? (
@@ -149,7 +149,7 @@ export default async function ProgressPage({
           {state && (
             <div className="rounded-2xl border border-gray-line bg-card p-6">
               <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
-                <ShieldAlert className="size-4 text-purple" />
+                <ShieldAlert className="size-4 text-brand" />
                 Riesgos identificados a lo largo del tratamiento
               </h2>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -177,7 +177,7 @@ export default async function ProgressPage({
           {temasByFrequency.length > 0 && (
             <div className="rounded-2xl border border-gray-line bg-card p-6">
               <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
-                <Tags className="size-4 text-purple" />
+                <Tags className="size-4 text-brand" />
                 Temas recurrentes
               </h2>
               <ul className="space-y-2">
@@ -229,7 +229,7 @@ export default async function ProgressPage({
                   <li key={r.consultationId}>
                     <Link
                       href={`/consultations/${r.consultationId}`}
-                      className="flex items-center justify-between py-2.5 text-sm hover:text-purple"
+                      className="flex items-center justify-between py-2.5 text-sm hover:text-brand"
                     >
                       <span className="text-navy">{formatFullDate(r.date)}</span>
                       <span className="text-xs text-muted-foreground">

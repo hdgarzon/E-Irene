@@ -17,7 +17,7 @@ export function AdminClinicRow({ clinic }: { clinic: PlatformClinicOverview }) {
   return (
     <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
-        <Building2 className="size-4 shrink-0 text-purple" />
+        <Building2 className="size-4 shrink-0 text-brand" />
         <div>
           <div className="flex items-center gap-2">
             <p className="font-medium text-navy">{clinic.clinicName}</p>

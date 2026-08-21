@@ -124,7 +124,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
       {!snapshot && assessments.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-line bg-card p-12 text-center">
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
-            <Sparkles className="size-6 text-purple" />
+            <Sparkles className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">Aún no hay estado clínico</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -218,7 +218,7 @@ function BriefContent({
   return (
     <>
       {changes && (
-        <Section icon={Sparkles} title="Qué cambió en la última sesión" accent="text-purple">
+        <Section icon={Sparkles} title="Qué cambió en la última sesión" accent="text-brand">
           {changes.objetivos.length === 0 &&
           changes.riesgos.length === 0 &&
           changes.temas.length === 0 &&
