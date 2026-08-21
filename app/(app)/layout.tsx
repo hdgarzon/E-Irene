@@ -1,25 +1,10 @@
 import { redirect } from "next/navigation";
-import { EB_Garamond, Inter } from "next/font/google";
+import { landingFontVariables } from "@/lib/fonts";
 import { requireUser } from "@/lib/auth";
 import { hasAcceptedCurrentPolicy } from "@/lib/db/policy-acceptances";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
-
-// Mismas tipografías y pesos que la landing pública (app/(marketing)/layout.tsx)
-// y que las pantallas de auth (components/auth/auth-shell.tsx). Se cargan aquí
-// porque cada route group necesita las suyas: no se heredan del grupo vecino.
-const ebGaramond = EB_Garamond({
-  variable: "--font-landing-serif",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const inter = Inter({
-  variable: "--font-landing-sans",
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500"],
-});
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -35,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // páginas internas resuelve a las tipografías de la landing sin tocar un
     // solo componente. Fuera de este contenedor (admin, marketing) nada cambia.
     <div
-      className={`${ebGaramond.variable} ${inter.variable} app-shell flex min-h-dvh bg-cloud`}
+      className={`${landingFontVariables} app-shell flex min-h-dvh bg-cloud`}
       style={
         {
           // Explícito, no vía variable: `html` ya aplica font-sans y los

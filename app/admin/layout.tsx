@@ -2,12 +2,19 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { AdminNav } from "@/components/admin-nav";
+import { landingFontVariables } from "@/lib/fonts";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requirePlatformAdmin();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-cloud md:flex-row">
+    // Mismo lenguaje visual que la app interna: la clase app-shell aplica las
+    // tipografías de la landing a los títulos (ver globals.css) y font-family
+    // fija el cuerpo. La consola comparte además los tokens de sidebar.
+    <div
+      className={`${landingFontVariables} app-shell flex min-h-dvh flex-col bg-cloud md:flex-row`}
+      style={{ fontFamily: "var(--font-landing-sans)" }}
+    >
       <aside className="flex shrink-0 flex-col bg-sidebar text-sidebar-foreground md:w-60">
         <Link
           href="/admin"
