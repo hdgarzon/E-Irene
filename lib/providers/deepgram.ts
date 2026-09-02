@@ -96,3 +96,27 @@ export const DEEPGRAM_LISTEN_URL = `${DEEPGRAM_LISTEN_BASE}&diarize=true`;
  * components/live-consultation.tsx antes de handleRemoteAudioTrack).
  */
 export const DEEPGRAM_LISTEN_URL_VIDEO = DEEPGRAM_LISTEN_BASE;
+
+/**
+ * Invariante en tiempo de ejecución, no solo en tests.
+ *
+ * Los tests protegen el repositorio; esto protege la ejecución. Si alguien
+ * arma una URL de escucha sin el opt-out —editando la constante, o
+ * construyéndola aparte— la aplicación falla al arrancar en vez de empezar a
+ * mandar audio de consultas clínicas al programa de mejora de modelos en
+ * silencio, que fue exactamente lo que pasó entre junio y agosto de 2026.
+ *
+ * Fallar ruidosamente es lo correcto aquí: sin transcripción la consulta se
+ * puede hacer igual; con audio filtrado no hay vuelta atrás.
+ */
+for (const [nombre, url] of Object.entries({
+  DEEPGRAM_LISTEN_URL,
+  DEEPGRAM_LISTEN_URL_VIDEO,
+})) {
+  if (!url.includes("mip_opt_out=true")) {
+    throw new Error(
+      `${nombre} no lleva mip_opt_out=true: Deepgram retendría el audio de las ` +
+        "consultas para entrenar sus modelos, en contra de lo que firma el paciente.",
+    );
+  }
+}
