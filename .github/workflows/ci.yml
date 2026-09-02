@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configurar Node
         uses: actions/setup-node@v4
@@ -146,7 +146,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ── Fase 1: esquema ──────────────────────────────────────────────────
       # Va primero. Si falla, el job se detiene y el código nuevo nunca llega:
