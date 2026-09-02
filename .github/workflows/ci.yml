@@ -28,7 +28,7 @@ jobs:
         run: npm run typecheck
 
       - name: Configurar Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
@@ -157,7 +157,7 @@ jobs:
       # repo son aditivas. Una destructiva (drop/rename de algo en uso) rompe
       # esa premisa: hay que partirla en dos despliegues.
       - name: Configurar Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
