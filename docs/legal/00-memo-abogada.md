@@ -69,17 +69,44 @@ tratamiento no puede afirmarse tal como está redactada.
 ### 4.1 Retención de audio en el proveedor de transcripción — CORREGIDO
 
 El proveedor de transcripción (Deepgram, EE. UU.) incluye por defecto las peticiones en su
-programa de mejora de modelos, que **persiste audio para entrenamiento**. La plataforma no
-estaba enviando el parámetro de exclusión, de modo que el audio de las consultas sí se estaba
-reteniendo — en contradicción directa con lo que el consentimiento le declara al paciente.
+programa de mejora de modelos, que **persiste audio para entrenar sus modelos**. La plataforma no
+estaba enviando el parámetro de exclusión.
 
-Ya se activó la exclusión (`mip_opt_out=true`). Con ella, el proveedor retiene los datos
-únicamente durante el tiempo necesario para procesar la petición.
+**Alcance real, medido contra los registros de uso de la cuenta** (no estimado):
 
-**Acción pendiente que sí es jurídica:** suscribir el **DPA / BAA con Deepgram** (se solicita a
-su equipo comercial; no se activa solo). Lo mismo con OpenAI y los demás encargados listados en
-la sección 4 de la política. Hasta que existan esos acuerdos, la política no debería afirmar que
-las transferencias internacionales cuentan con garantías contractuales.
+| | Peticiones | Audio | Fechas |
+|---|---|---|---|
+| Sin exclusión (entraron al programa) | 22 | 17,7 min | 30-jun-2026 a 4-ago-2026 |
+| Con exclusión | 1 | 0,1 min | desde el 10-ago-2026 |
+
+Esas 22 peticiones corresponden a 8 sesiones registradas en el sistema en esas mismas fechas.
+**El equipo técnico confirma que todas fueron pruebas internas, sin pacientes reales.** Esa
+afirmación es del equipo, no una verificación independiente: se deja constancia porque de ella
+depende la calificación jurídica del hecho.
+
+Si esa constancia es correcta, **no hubo tratamiento de datos personales de ningún titular real**
+y, por tanto, no habría incidente reportable ante la Superintendencia de Industria y Comercio ni
+contradicción efectiva con el consentimiento del paciente —que en ese periodo nadie había
+firmado—. Te pedimos confirmar esa lectura.
+
+**Dos precisiones técnicas que importan jurídicamente:**
+
+1. La exclusión es **por petición**, no de cuenta. Basta con que una conexión se abra sin el
+   parámetro para que su audio vuelva a entrar al programa. Por eso se añadió una comprobación
+   que impide arrancar la aplicación si la exclusión no está presente, y una auditoría repetible
+   sobre los registros del proveedor.
+2. Deepgram ofrece suscribir un **acuerdo de tratamiento (DPA) que limita el procesamiento a la
+   prestación del servicio**, es decir, la exclusión a nivel contractual y no por parámetro. Es
+   la vía sólida y la recomendamos.
+
+**Acciones pendientes que sí son jurídicas:**
+
+- Suscribir el **DPA / BAA con Deepgram** (`security@deepgram.com` para el DPA;
+  `support@deepgram.com` para solicitar el borrado de las 22 peticiones anteriores, cuyos
+  identificadores están disponibles). Lo mismo con OpenAI y los demás encargados de la sección 4
+  de la política.
+- Hasta que existan esos acuerdos, la política **no debería afirmar** que las transferencias
+  internacionales cuentan con garantías contractuales.
 
 ### 4.2 Fugas en el borrado automático — CORREGIDO
 
