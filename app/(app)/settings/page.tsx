@@ -5,15 +5,18 @@ import { getClinicOverview, type ClinicOverview } from "@/lib/db/clinic";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import { PLANS, transcriptionUsageLabel } from "@/lib/plans";
 import { formatLongDate } from "@/lib/dates";
+import { subscriptionState } from "@/lib/billing/subscription-state";
 import { UsageBar } from "@/components/usage-bar";
 
 /** Qué pasa con el plan y cuándo, en una línea. */
 function planStatusLine(overview: ClinicOverview): string {
-  const { currentPeriodEnd, cancelAtPeriodEnd } = overview.subscription;
-  if (PLANS[overview.plan].priceInCents > 0 && currentPeriodEnd) {
-    const date = formatLongDate(currentPeriodEnd);
-    if (cancelAtPeriodEnd) return `Suscripción cancelada: pasas a Free el ${date}.`;
-    if (new Date(currentPeriodEnd).getTime() > Date.now()) return `Se renueva el ${date}.`;
+  const state = subscriptionState(overview.plan, overview.subscription);
+  if (state.kind === "renewing") return `Se renueva el ${formatLongDate(state.periodEnd)}.`;
+  if (state.kind === "canceling") {
+    return `Suscripción cancelada: pasas a Free el ${formatLongDate(state.periodEnd)}.`;
+  }
+  if (state.kind === "overdue") {
+    return `No se pudo cobrar la renovación: si no se paga, pasas a Free el ${formatLongDate(state.graceEndsAt)}.`;
   }
   return `Las cuotas del plan se reinician el ${formatLongDate(overview.cycleEnd)}.`;
 }

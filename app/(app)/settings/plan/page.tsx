@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
-import { getClinicOverview, type ClinicOverview } from "@/lib/db/clinic";
+import { getClinicOverview } from "@/lib/db/clinic";
+import { subscriptionState, type SubscriptionState } from "@/lib/billing/subscription-state";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import {
   PLANS,
@@ -22,28 +23,35 @@ interface PlanPageProps {
   searchParams: Promise<{ wompi?: string; id?: string }>;
 }
 
-/** Qué incluye Free, en una frase: lo que ve quien está por cancelar. */
+/**
+ * Qué incluye Free, en una frase: lo que ve quien está por cancelar.
+ *
+ * No menciona el análisis con IA a propósito: PLANS.free.ai es false, pero nada
+ * lo aplica —las clínicas Free también reciben análisis y alertas de riesgo— y
+ * decirle a quien cancela que lo pierde sería falso.
+ */
 function freeLimitsSummary(): string {
   const f = PLANS.free;
   return (
     `${limitLabel(f.maxDoctors)} profesional${f.maxDoctors === 1 ? "" : "es"}, ` +
     `${limitLabel(f.maxPatients)} pacientes, ${limitLabel(f.consultationsPerMonth)} consultas y ` +
-    `${limitLabel(f.transcriptionHours)} h de transcripción por ciclo, ` +
-    (f.ai ? "con análisis con IA" : "sin análisis con IA")
+    `${limitLabel(f.transcriptionHours)} h de transcripción por ciclo`
   );
 }
 
-function subscriptionPanelState(overview: ClinicOverview): SubscriptionPanelState {
-  const { currentPeriodEnd, cancelAtPeriodEnd } = overview.subscription;
-  // Cancelada pero con el período recién vencido: el barrido horario todavía no
-  // la pasó a Free. Se sigue mostrando como cancelación, no como deuda.
-  if (cancelAtPeriodEnd && currentPeriodEnd) {
-    return { kind: "canceling", periodEnd: formatLongDate(currentPeriodEnd) };
+/** Estado de la suscripción con las fechas ya en texto, para el panel (cliente). */
+function toPanelState(state: SubscriptionState): SubscriptionPanelState | null {
+  if (state.kind === "free") return null;
+  if (state.kind === "unbilled") return { kind: "unbilled" };
+  if (state.kind === "overdue") {
+    return {
+      kind: "overdue",
+      periodEnd: formatLongDate(state.periodEnd),
+      graceEndsOn: formatLongDate(state.graceEndsAt),
+      periodEnded: state.periodEnded,
+    };
   }
-  if (currentPeriodEnd && new Date(currentPeriodEnd).getTime() > Date.now()) {
-    return { kind: "renewing", periodEnd: formatLongDate(currentPeriodEnd) };
-  }
-  return { kind: "unpaid", lapsedOn: currentPeriodEnd ? formatLongDate(currentPeriodEnd) : null };
+  return { kind: state.kind, periodEnd: formatLongDate(state.periodEnd) };
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
@@ -77,7 +85,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const quotaExhausted = limitSeconds !== null && usage.usedSeconds >= limitSeconds;
   const isAdmin = user.role === "admin";
   const cycleEndLabel = formatLongDate(overview.cycleEnd);
-  const panelState = limits.priceInCents > 0 ? subscriptionPanelState(overview) : null;
+  const state = subscriptionState(overview.plan, overview.subscription);
+  const panelState = toPanelState(state);
 
   function features(plan: (typeof PLAN_ORDER)[number]) {
     const l = PLANS[plan];
@@ -166,6 +175,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           state={panelState}
           freeLimits={freeLimitsSummary()}
           canManage={isAdmin}
+          payAction={initiatePlanUpgradeAction.bind(null, overview.plan)}
         />
       )}
 
@@ -230,10 +240,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                   // Free no se "compra": se llega cancelando la suscripción, que
                   // conserva lo pagado hasta el fin del período.
                   <p className="text-center text-xs text-muted-foreground">
-                    {overview.subscription.cancelAtPeriodEnd ? (
+                    {state.kind === "canceling" ? (
+                      <>Pasas a Free el {formatLongDate(state.periodEnd)}</>
+                    ) : state.kind === "overdue" ? (
                       <>
-                        Pasas a Free el{" "}
-                        {formatLongDate(overview.subscription.currentPeriodEnd ?? overview.cycleEnd)}
+                        Pasas a Free el {formatLongDate(state.graceEndsAt)} si no se paga la
+                        renovación
                       </>
                     ) : isAdmin ? (
                       <a href="#suscripcion" className="font-medium text-brand hover:underline">

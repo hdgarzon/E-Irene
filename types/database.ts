@@ -1568,6 +1568,7 @@ export type Database = {
         Returns: string
       }
       end_canceled_subscriptions: { Args: never; Returns: number }
+      end_overdue_subscriptions: { Args: never; Returns: number }
       end_subscription: {
         Args: { p_actor?: string; p_clinic: string; p_reason: string }
         Returns: undefined
@@ -1614,6 +1615,10 @@ export type Database = {
       }
       get_transcription_usage: { Args: never; Returns: Json }
       is_platform_admin: { Args: never; Returns: boolean }
+      mark_subscription_payment_failed: {
+        Args: { p_clinic: string; p_reason: string }
+        Returns: boolean
+      }
       platform_set_clinic_plan: {
         Args: { new_plan: string; target_clinic: string }
         Returns: undefined

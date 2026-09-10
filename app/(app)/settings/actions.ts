@@ -11,6 +11,7 @@ import {
   revertSubscriptionCancellation,
 } from "@/lib/db/subscription";
 import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
+import { subscriptionState } from "@/lib/billing/subscription-state";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
@@ -85,7 +86,10 @@ export async function addMemberAction(
 export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   const user = await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
-  if (overview.plan === plan) {
+  // Volver a pagar el plan actual solo tiene sentido si su renovación no se pudo
+  // cobrar: es la salida de la gracia (lib/billing/subscription-state.ts).
+  const overdue = subscriptionState(overview.plan, overview.subscription).kind === "overdue";
+  if (overview.plan === plan && !overdue) {
     redirect("/settings/plan");
   }
 

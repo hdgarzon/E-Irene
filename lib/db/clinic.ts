@@ -80,6 +80,33 @@ export async function getClinicOverview(): Promise<ClinicOverview> {
   };
 }
 
+/**
+ * Plan y suscripción de la clínica del usuario, sin los conteos de
+ * getClinicOverview: para los avisos que se muestran en cada entrada.
+ */
+export async function getClinicSubscription(): Promise<{
+  plan: Plan;
+  subscription: ClinicSubscription;
+}> {
+  const user = await getSessionUser();
+  if (!user) throw new Error("getClinicSubscription requiere una sesión");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clinics")
+    .select("plan, billing_status, current_period_end, cancel_at_period_end")
+    .eq("id", user.clinicId)
+    .single();
+  if (error) throw error;
+  return {
+    plan: data.plan as Plan,
+    subscription: {
+      status: data.billing_status as BillingStatus,
+      currentPeriodEnd: data.current_period_end,
+      cancelAtPeriodEnd: data.cancel_at_period_end,
+    },
+  };
+}
+
 /** Profesionales de la clínica (admin/doctor) para selectores. RLS scoped. */
 export async function listDoctors(): Promise<DoctorOption[]> {
   const supabase = await createClient();

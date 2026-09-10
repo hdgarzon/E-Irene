@@ -18,6 +18,7 @@ const db = vi.hoisted(() => ({
   recordBillingEvent: vi.fn(),
   clinicExists: vi.fn(),
   findScheduledChargeForPeriod: vi.fn(),
+  getSubscriptionPeriod: vi.fn(),
 }));
 
 vi.mock("@/lib/db/billing", async (importOriginal) => {
@@ -73,6 +74,7 @@ beforeEach(() => {
   db.findScheduledChargeForPeriod.mockResolvedValue(charge());
   db.markScheduledChargeSuccess.mockResolvedValue(undefined);
   db.renewBilling.mockResolvedValue(NEXT_PERIOD_END);
+  db.getSubscriptionPeriod.mockResolvedValue({ plan: "pro", currentPeriodEnd: NEXT_PERIOD_END });
 });
 
 describe("settleRenewalPayment (webhook de cobros recurrentes)", () => {
@@ -88,6 +90,14 @@ describe("settleRenewalPayment (webhook de cobros recurrentes)", () => {
     db.renewBilling.mockResolvedValue(null);
     await expect(settle()).resolves.toEqual({ result: "already_applied" });
     expect(db.markScheduledChargeSuccess).not.toHaveBeenCalled();
+  });
+
+  it("un cobro aprobado después de que la suscripción terminó no la revive y queda para conciliar", async () => {
+    // Venció la gracia (o se canceló) entre el cobro y su aprobación: la clínica
+    // pagó por un plan que ya no tiene. No se reactiva en silencio.
+    db.renewBilling.mockResolvedValue(null);
+    db.getSubscriptionPeriod.mockResolvedValue({ plan: "free", currentPeriodEnd: null });
+    await expect(settle()).resolves.toEqual({ result: "ignored", reason: "suscripcion_terminada" });
   });
 
   it("una entrega repetida del evento vuelve a intentar renovar: renovar es idempotente", async () => {
