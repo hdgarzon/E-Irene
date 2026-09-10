@@ -16,11 +16,14 @@ import { countPendingReports } from "@/lib/db/reports";
 import { listOpenRiskAlerts, type RiskAlert } from "@/lib/db/risk-alerts";
 import { listPhq9RiskAlerts, type Phq9RiskAlert } from "@/lib/db/assessments";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
+import { getClinicSubscription } from "@/lib/db/clinic";
+import { logger } from "@/lib/logger";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { VerificationBanner } from "@/components/verification-banner";
+import { BillingOverdueBanner } from "@/components/billing-overdue-banner";
 import { cn } from "@/lib/utils";
 import { acknowledgeRiskAlertAction } from "./actions";
 
@@ -87,7 +90,7 @@ export default async function DashboardPage() {
   const isClinician = user?.role === "admin" || user?.role === "doctor";
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
-  const [patients, todayAppts, pendingReports, patientsNoConsent, persistedAlerts, phq9Alerts] =
+  const [patients, todayAppts, pendingReports, patientsNoConsent, persistedAlerts, phq9Alerts, billing] =
     await Promise.all([
       patientCount(),
       listTodayAppointments(),
@@ -95,6 +98,14 @@ export default async function DashboardPage() {
       countPatientsWithoutConsent(),
       isClinician ? listOpenRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
       isClinician ? listPhq9RiskAlerts() : Promise.resolve<Phq9RiskAlert[]>([]),
+      // El aviso de cobro nunca debe tumbar el dashboard, que es donde están las
+      // alertas de riesgo: si la consulta falla, se registra y la página sigue.
+      isClinician
+        ? getClinicSubscription().catch((error) => {
+            logger.error("dashboard.billing_status_failed", { clinicId: user?.clinicId, error });
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
 
   // listOpenRiskAlerts() ya trae AMBAS fuentes (unificadas en risk_alerts,
@@ -122,6 +133,10 @@ export default async function DashboardPage() {
       {/* Verificación pendiente: sin ella las rutas clínicas redirigen sin más
           contexto, así que el aviso va antes que nada. */}
       {user && <VerificationBanner status={user.verificationStatus} />}
+
+      {/* Renovación sin cobrar: la primera noticia de la gracia no puede ser el
+          paso a Free. */}
+      {billing && <BillingOverdueBanner plan={billing.plan} subscription={billing.subscription} />}
 
       {/* Alertas de riesgo — lo más importante arriba */}
       {isClinician && allRiskAlerts.length > 0 && (

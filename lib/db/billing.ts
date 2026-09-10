@@ -330,19 +330,41 @@ export async function renewBilling(
 }
 
 /**
- * Marca la facturación como vencida tras un cobro fallido. NO corta el acceso
- * — `billing_status` es informativo; el bloqueo real de la app depende de
- * `clinics.suspended_at` (ver lib/auth.ts), que solo cambia un platform admin
- * de forma manual y deliberada.
+ * Plan y fin de período vigentes. Sirve para distinguir una renovación que ya se
+ * había aplicado de una suscripción que terminó antes de que el cobro se aprobara.
+ */
+export async function getSubscriptionPeriod(
+  clinicId: string,
+): Promise<{ plan: Plan; currentPeriodEnd: string | null } | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("clinics")
+    .select("plan, current_period_end")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { plan: data.plan as Plan, currentPeriodEnd: data.current_period_end } : null;
+}
+
+/**
+ * Cobro recurrente fallido: marca la suscripción como vencida y, la primera vez
+ * en el período, deja constancia en audit_logs con la fecha límite de la gracia
+ * (mark_subscription_payment_failed, migración 0042).
+ *
+ * NO corta el acceso ni suspende. La clínica conserva el plan durante la gracia
+ * (BILLING_GRACE_DAYS desde el fin del período pagado) mientras el cron
+ * reintenta; si no se paga, end_overdue_subscriptions() la pasa a Free. La
+ * suspensión (`clinics.suspended_at`, ver lib/auth.ts) sigue siendo una decisión
+ * manual y deliberada de un platform admin.
  */
 export async function markBillingFailed(clinicId: string, reason: string): Promise<void> {
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("clinics")
-    .update({ billing_status: "vencido" })
-    .eq("id", clinicId);
+  const { data: firstFailureOfPeriod, error } = await admin.rpc(
+    "mark_subscription_payment_failed",
+    { p_clinic: clinicId, p_reason: reason },
+  );
   if (error) throw error;
-  logger.warn("billing.failed", { clinicId, reason });
+  logger.warn("billing.failed", { clinicId, reason, firstFailureOfPeriod });
 }
 
 /**
@@ -355,6 +377,10 @@ export async function markBillingFailed(clinicId: string, reason: string): Promi
  * token vencido, un problema del banco, o un bug nuestro— nunca es
  * justificación suficiente para eso. La decisión de cortar el servicio a una
  * clínica es de una persona, con contexto, no de un cron a las 6 AM.
+ *
+ * Pasar a Free al vencer la gracia (end_overdue_subscriptions, migración 0042)
+ * no es cortar el servicio: Free conserva el acceso a todas las historias
+ * clínicas y alertas de riesgo, y solo limita lo nuevo que se puede crear.
  */
 export async function flagClinicForBillingReview(
   clinicId: string,

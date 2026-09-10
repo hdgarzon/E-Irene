@@ -15,6 +15,7 @@ import {
   recordBillingEvent,
   clinicExists,
   findScheduledChargeForPeriod,
+  getSubscriptionPeriod,
   type ClinicDueForCharge,
 } from "@/lib/db/billing";
 import { buildRenewalReference, type RenewalReference } from "./wompi";
@@ -182,14 +183,16 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     // Sin medio de pago tokenizado no hay nada que cobrar. Esto NO es un
     // fallo de pago del cliente (no se le puede reprochar ni contarle un
     // intento fallido): significa que nunca guardamos su token, que es un
-    // problema nuestro. Se registra para intervención manual y se sigue.
+    // problema nuestro. Se registra para intervención manual y se sigue. La
+    // gracia corre igual (end_overdue_subscriptions): la app le muestra el
+    // aviso para que pague desde Plan y facturación.
     if (!clinic.wompiPaymentSourceId) {
       result.missingPaymentSource++;
       logger.error("billing.clinic_has_no_payment_source", {
         clinicId: clinic.id,
         plan: clinic.plan,
         action:
-          "la clínica está en plan pago sin token de cobro; contactar para re-registrar el medio de pago. NO se marca como morosa.",
+          "la clínica está en plan pago sin token de cobro: no se le puede cobrar sola. Contactarla para que pague desde la app antes de que termine la gracia. NO se marca como morosa.",
       });
       continue;
     }
@@ -420,5 +423,21 @@ export async function settleRenewalPayment(input: {
   }
 
   const periodEnd = await renewBilling(reference.clinicId, charge.dueAt);
-  return periodEnd ? { result: "renewed", periodEnd } : { result: "already_applied" };
+  if (periodEnd) return { result: "renewed", periodEnd };
+
+  // No se renovó: o ese período ya se había renovado —lo normal, el cron y el
+  // webhook del mismo cobro llegan los dos— o la suscripción terminó entre el
+  // cobro y su aprobación (gracia vencida o cancelación), y entonces la clínica
+  // pagó por un plan que ya no tiene.
+  const current = await getSubscriptionPeriod(reference.clinicId);
+  if (!current?.currentPeriodEnd || current.plan === "free") {
+    logger.error("billing.renewal_approved_after_subscription_ended", {
+      clinicId: reference.clinicId,
+      transactionId: transaction.id,
+      periodKey: reference.periodKey,
+      action: "COBRO APROBADO de una suscripción que ya terminó — reactivar el plan o reembolsar",
+    });
+    return { result: "ignored", reason: "suscripcion_terminada" };
+  }
+  return { result: "already_applied" };
 }

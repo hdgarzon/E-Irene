@@ -5,26 +5,31 @@ import { signUpAndActivate } from "./helpers/signup";
 const SUPABASE_URL = "http://127.0.0.1:54321";
 // Capturas opcionales para revisar la interfaz a mano; en CI no se generan.
 const SHOTS_DIR = process.env.E2E_SCREENSHOTS_DIR;
+const DAY = 24 * 60 * 60 * 1000;
+
+function admin() {
+  return createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+}
 
 /**
  * Activa un plan pago como lo hace un pago aprobado: la misma función que llaman
  * el webhook y la reconciliación (activate_subscription, migración 0041). El
  * checkout de Wompi no se puede recorrer en e2e; está cubierto con Wompi
- * simulado en tests/billing-checkout.test.ts.
+ * simulado en tests/billing-checkout.test.ts. Devuelve el id de la clínica.
  */
-async function activatePaidPlan(email: string) {
-  const admin = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-  const { data: user, error } = await admin
+async function activatePaidPlan(email: string): Promise<string> {
+  const { data: user, error } = await admin()
     .from("users")
     .select("clinic_id")
     .eq("email", email)
     .single();
   if (error) throw error;
-  const { error: rpcError } = await admin.rpc("activate_subscription", {
+  const { error: rpcError } = await admin().rpc("activate_subscription", {
     p_clinic: user.clinic_id,
     p_plan: "pro",
   });
   if (rpcError) throw rpcError;
+  return user.clinic_id as string;
 }
 
 test("suscripción: cancelar conserva el plan hasta el fin del período y se puede reactivar", async ({
@@ -65,4 +70,35 @@ test("suscripción: cancelar conserva el plan hasta el fin del período y se pue
   await panel.getByRole("button", { name: "Reactivar suscripción" }).click();
   await expect(panel).toContainText("se renueva el");
   if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/4-reactivada.png`, fullPage: true });
+});
+
+test("suscripción: una renovación sin cobrar avisa hasta cuándo dura la gracia y ofrece pagar", async ({
+  page,
+}) => {
+  const email = `gracia_${Date.now()}@e-irene.test`;
+  await signUpAndActivate(page, { clinicName: "Clínica Gracia", fullName: "Dra. Admin", email });
+  const clinicId = await activatePaidPlan(email);
+
+  // El período venció hace 2 días y el cobro no pasó: le quedan 3 de gracia.
+  const { error } = await admin()
+    .from("clinics")
+    .update({
+      billing_status: "vencido",
+      current_period_end: new Date(Date.now() - 2 * DAY).toISOString(),
+    })
+    .eq("id", clinicId);
+  if (error) throw error;
+
+  await page.goto("/dashboard");
+  await expect(
+    page.getByText("No se pudo cobrar la renovación del plan Professional"),
+  ).toBeVisible();
+  if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/5-aviso-dashboard.png` });
+
+  await page.goto("/settings/plan");
+  const panel = page.locator("#suscripcion");
+  await expect(panel).toContainText("no se ha podido cobrar. Conservas el plan hasta el");
+  await expect(panel.getByRole("button", { name: "Pagar ahora" })).toBeVisible();
+  await expect(page.getByText(/si no se paga la renovación/)).toBeVisible();
+  if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/6-gracia-plan.png`, fullPage: true });
 });

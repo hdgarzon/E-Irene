@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { CalendarClock, CircleAlert, RotateCcw } from "lucide-react";
+import { CalendarClock, CircleAlert, CreditCard, RotateCcw } from "lucide-react";
 import {
   cancelSubscriptionAction,
   revertCancellationAction,
@@ -29,8 +29,10 @@ export type SubscriptionPanelState =
   | { kind: "renewing"; periodEnd: string }
   /** Cancelación pedida: conserva el plan hasta periodEnd. */
   | { kind: "canceling"; periodEnd: string }
-  /** Sin período pagado vigente: cancelar la termina de inmediato. */
-  | { kind: "unpaid"; lapsedOn: string | null };
+  /** Renovación sin cobrar: conserva el plan hasta graceEndsOn (lib/billing/subscription-state.ts). */
+  | { kind: "overdue"; periodEnd: string; graceEndsOn: string; periodEnded: boolean }
+  /** Plan asignado sin cobro: cancelar lo termina de inmediato. */
+  | { kind: "unbilled" };
 
 const initialState: SubscriptionState = {};
 
@@ -39,6 +41,7 @@ export function SubscriptionPanel({
   state,
   freeLimits,
   canManage,
+  payAction,
 }: {
   planLabel: string;
   state: SubscriptionPanelState;
@@ -46,6 +49,8 @@ export function SubscriptionPanel({
   freeLimits: string;
   /** Solo el admin de la clínica cancela o reactiva. */
   canManage: boolean;
+  /** Checkout del plan actual: la salida de la gracia. */
+  payAction: () => Promise<void>;
 }) {
   const [cancelState, cancelAction, cancelPending] = useActionState(
     cancelSubscriptionAction,
@@ -56,11 +61,27 @@ export function SubscriptionPanel({
     initialState,
   );
 
+  // Cancelar conserva el plan hasta el fin del período solo si ese período
+  // sigue vigente; si ya venció (o nunca hubo uno), termina de inmediato.
+  const keepsUntil =
+    state.kind === "renewing" || (state.kind === "overdue" && !state.periodEnded)
+      ? state.periodEnd
+      : null;
+
   return (
-    <section id="suscripcion" className="rounded-2xl border border-gray-line bg-card p-5">
+    <section
+      id="suscripcion"
+      className={`rounded-2xl border bg-card p-5 ${
+        state.kind === "overdue" ? "border-amber-300" : "border-gray-line"
+      }`}
+    >
       <div className="flex items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-cloud">
-          <CalendarClock className="size-4 text-brand" />
+          {state.kind === "overdue" ? (
+            <CreditCard className="size-4 text-amber-700" />
+          ) : (
+            <CalendarClock className="size-4 text-brand" />
+          )}
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="font-heading font-semibold text-navy">Suscripción</h2>
@@ -77,11 +98,17 @@ export function SubscriptionPanel({
               historia clínica ni reporte.
             </p>
           )}
-          {state.kind === "unpaid" && (
+          {state.kind === "overdue" && (
             <p className="text-sm text-foreground/90">
-              {state.lapsedOn
-                ? `La renovación del plan ${planLabel} del ${state.lapsedOn} está pendiente de pago.`
-                : `El plan ${planLabel} no tiene un período pagado vigente.`}
+              {state.periodEnded
+                ? `La renovación del plan ${planLabel} venció el ${state.periodEnd} y no se ha podido cobrar. Conservas el plan hasta el ${state.graceEndsOn}; si no se paga antes, tu clínica pasa a Free.`
+                : `No se pudo cobrar la renovación del plan ${planLabel}. Lo pagado cubre hasta el ${state.periodEnd}; si el pago no se completa antes del ${state.graceEndsOn}, tu clínica pasa a Free.`}{" "}
+              No se borra ningún dato.
+            </p>
+          )}
+          {state.kind === "unbilled" && (
+            <p className="text-sm text-foreground/90">
+              El plan {planLabel} no tiene un cobro automático asociado.
             </p>
           )}
           {!canManage && (
@@ -91,6 +118,18 @@ export function SubscriptionPanel({
           )}
         </div>
       </div>
+
+      {state.kind === "overdue" && (
+        <form action={payAction} className="mt-4 flex flex-wrap items-center gap-3">
+          <Button type="submit" size="sm">
+            <CreditCard className="size-3.5" />
+            Pagar ahora
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Al pagar, el plan se renueva por un mes desde ese día.
+          </p>
+        </form>
+      )}
 
       {canManage && state.kind === "canceling" && (
         <form action={revertAction} className="mt-4 flex flex-wrap items-center gap-3">
@@ -112,8 +151,8 @@ export function SubscriptionPanel({
               <DialogHeader>
                 <DialogTitle>¿Cancelar la suscripción?</DialogTitle>
                 <DialogDescription>
-                  {state.kind === "renewing"
-                    ? `Conservas el plan ${planLabel} hasta el ${state.periodEnd} y no se te vuelve a cobrar. Ese día tu clínica pasa a Free.`
+                  {keepsUntil
+                    ? `Conservas el plan ${planLabel} hasta el ${keepsUntil} y no se te vuelve a cobrar. Ese día tu clínica pasa a Free.`
                     : "Tu clínica pasa a Free de inmediato."}
                 </DialogDescription>
               </DialogHeader>
@@ -123,7 +162,7 @@ export function SubscriptionPanel({
                   volver a un plan pago.
                 </li>
                 <li>No se borra nada: tus pacientes, historias clínicas y reportes siguen disponibles.</li>
-                {state.kind === "renewing" && <li>Puedes reactivarla antes del {state.periodEnd}.</li>}
+                {keepsUntil && <li>Puedes reactivarla antes del {keepsUntil}.</li>}
               </ul>
               {cancelState.error && (
                 <p className="flex items-start gap-1.5 text-xs text-destructive">
