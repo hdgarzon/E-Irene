@@ -1,0 +1,6 @@
+# pnpm no ejecuta scripts de instalación de dependencias sin aprobarlos. Ninguno
+# hace falta: sharp y unrs-resolver traen sus binarios precompilados como
+# dependencias opcionales, y sus scripts solo son el plan B para compilarlos.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

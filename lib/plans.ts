@@ -80,8 +80,9 @@ export function canAddDoctor(plan: Plan, currentCount: number): boolean {
   return currentCount < PLANS[plan].maxDoctors;
 }
 
-export function canStartConsultation(plan: Plan, consultationsThisMonth: number): boolean {
-  return consultationsThisMonth < PLANS[plan].consultationsPerMonth;
+/** El límite de consultas se aplica por ciclo de facturación (ver billingCycleBounds). */
+export function canStartConsultation(plan: Plan, consultationsThisCycle: number): boolean {
+  return consultationsThisCycle < PLANS[plan].consultationsPerMonth;
 }
 
 /** "5" o "Ilimitado" para mostrar límites. */
@@ -90,7 +91,7 @@ export function limitLabel(n: number): string {
 }
 
 /**
- * Cuota mensual de transcripción en segundos; null = ilimitado (enterprise).
+ * Cuota de transcripción por ciclo, en segundos; null = ilimitado (enterprise).
  * Es el valor que se pasa a begin_transcription_session (ver migración 0039):
  * el límite de cumplimiento vive aquí, no en la base de datos (criterio de la
  * migración 0014).
@@ -105,7 +106,7 @@ export function transcriptionHoursLabel(seconds: number): string {
   return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 }).format(seconds / 3600);
 }
 
-/** Contador de consumo mensual: "1,5 h / 2 h" o "3,2 h / Ilimitado". */
+/** Contador de consumo del ciclo: "1,5 h / 2 h" o "3,2 h / Ilimitado". */
 export function transcriptionUsageLabel(usedSeconds: number, plan: Plan): string {
   const used = transcriptionHoursLabel(usedSeconds);
   const max = PLANS[plan].transcriptionHours;

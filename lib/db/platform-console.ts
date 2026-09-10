@@ -195,15 +195,18 @@ export interface ClinicMapEntry {
   clinicName: string;
   plan: string;
   suspended: boolean;
+  /** Cancelación pedida: conserva el plan hasta currentPeriodEnd (migración 0041). */
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string | null;
   doctors: { id: string; fullName: string; email: string; role: UserRole }[];
   patientCount: number;
-  /** Segundos de transcripción consumidos en el mes en curso (migración 0039). */
-  transcriptionSecondsMonth: number;
+  /** Segundos de transcripción consumidos en el ciclo vigente de la clínica (0039, 0041). */
+  transcriptionSecondsCycle: number;
 }
 
 /**
  * Clínicas con sus doctores, conteo de pacientes y consumo de transcripción
- * del mes (el "mapa").
+ * del ciclo vigente (el "mapa").
  *
  * El conteo de pacientes viene de get_platform_clinic_overview() (SECURITY
  * DEFINER, solo count, sin PII) — NO de leer filas de `patients`, a las que el
@@ -217,7 +220,7 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
     supabase
       .from("clinics")
       .select(
-        "id, name, plan, suspended_at, " +
+        "id, name, plan, suspended_at, cancel_at_period_end, current_period_end, " +
           "users:users!users_clinic_id_fkey(id, full_name, email, role)",
       )
       .order("created_at", { ascending: false }),
@@ -235,6 +238,8 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
       name: string;
       plan: string;
       suspended_at: string | null;
+      cancel_at_period_end: boolean;
+      current_period_end: string | null;
       users: { id: string; full_name: string; email: string; role: UserRole }[];
     }[]
   ).map((c) => ({
@@ -242,10 +247,12 @@ export async function getClinicMap(): Promise<ClinicMapEntry[]> {
     clinicName: c.name,
     plan: c.plan,
     suspended: Boolean(c.suspended_at),
+    cancelAtPeriodEnd: c.cancel_at_period_end,
+    currentPeriodEnd: c.current_period_end,
     doctors: (c.users ?? [])
       .filter((u) => u.role !== "paciente")
       .map((u) => ({ id: u.id, fullName: u.full_name, email: u.email, role: u.role })),
     patientCount: patientCountByClinic.get(c.id) ?? 0,
-    transcriptionSecondsMonth: usageByClinic.get(c.id) ?? 0,
+    transcriptionSecondsCycle: usageByClinic.get(c.id) ?? 0,
   }));
 }

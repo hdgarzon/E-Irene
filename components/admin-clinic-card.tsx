@@ -5,6 +5,7 @@ import { Building2, Users, Ban, RotateCcw, Stethoscope } from "lucide-react";
 import type { ClinicMapEntry } from "@/lib/db/platform-console";
 import { setClinicPlanAction, setClinicSuspendedAction } from "@/app/admin/actions";
 import { PLANS, transcriptionHoursLabel, type Plan } from "@/lib/plans";
+import { formatLongDate } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -33,11 +34,16 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
               {clinic.suspended && (
                 <Badge className="bg-destructive/15 text-destructive">Suspendida</Badge>
               )}
+              {clinic.cancelAtPeriodEnd && clinic.currentPeriodEnd && (
+                <Badge className="bg-amber-100 text-amber-800">
+                  Cancela el {formatLongDate(clinic.currentPeriodEnd)}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {clinic.doctors.length} profesional{clinic.doctors.length === 1 ? "" : "es"} ·{" "}
               {clinic.patientCount} paciente{clinic.patientCount === 1 ? "" : "s"} ·{" "}
-              {transcriptionHoursLabel(clinic.transcriptionSecondsMonth)} h transcritas este mes
+              {transcriptionHoursLabel(clinic.transcriptionSecondsCycle)} h transcritas en el ciclo
             </p>
           </div>
         </div>

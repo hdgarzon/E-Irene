@@ -338,3 +338,68 @@ dv("verificación profesional (RLS)", () => {
     expect((data ?? []).length).toBeGreaterThanOrEqual(1);
   });
 });
+
+dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
+  // Hasta la migración 0041 la política clinic_update (0001) dejaba al admin de
+  // una clínica actualizar CUALQUIER columna de su fila con un PATCH directo a
+  // la API: subirse a enterprise sin pagar, fijarse un período pagado, quitarse
+  // una suspensión o reiniciar su ciclo de cuota. Nada de eso se decide desde la
+  // sesión de la clínica: lo escriben el webhook/cron (service-role) y las
+  // funciones SECURITY DEFINER de plataforma y de cancelación.
+  let A: { client: SupabaseClient; clinicId: string; userId: string };
+
+  beforeAll(async () => {
+    A = await bootstrapClinic("Clínica Facturación");
+  }, 30000);
+
+  async function clinicRow() {
+    const { data, error } = await service()
+      .from("clinics")
+      .select("plan, billing_status, current_period_end, suspended_at")
+      .eq("id", A.clinicId)
+      .single();
+    expect(error).toBeNull();
+    return data!;
+  }
+
+  it("el admin NO puede subirse de plan con un PATCH directo a clinics", async () => {
+    const { error } = await A.client
+      .from("clinics")
+      .update({ plan: "enterprise" })
+      .eq("id", A.clinicId);
+    expect(error).not.toBeNull();
+    expect((await clinicRow()).plan).toBe("free");
+  });
+
+  it("tampoco puede fijarse estado de cobro, período pagado, ciclo, cancelación ni medio de pago", async () => {
+    const patches: Record<string, unknown>[] = [
+      { billing_status: "activo" },
+      { current_period_end: "2099-01-01T00:00:00Z" },
+      { billing_cycle_anchor: new Date().toISOString() },
+      { cancel_at_period_end: true },
+      { wompi_payment_source_id_enc: "token-inventado" },
+    ];
+    for (const patch of patches) {
+      const { error } = await A.client.from("clinics").update(patch).eq("id", A.clinicId);
+      expect(error, JSON.stringify(patch)).not.toBeNull();
+    }
+    const row = await clinicRow();
+    expect(row.billing_status).toBe("sin_configurar");
+    expect(row.current_period_end).toBeNull();
+  });
+
+  it("ni quitarse una suspensión impuesta por la plataforma", async () => {
+    const { error: suspendErr } = await service()
+      .from("clinics")
+      .update({ suspended_at: new Date().toISOString() })
+      .eq("id", A.clinicId);
+    expect(suspendErr).toBeNull();
+
+    const { error } = await A.client
+      .from("clinics")
+      .update({ suspended_at: null })
+      .eq("id", A.clinicId);
+    expect(error).not.toBeNull();
+    expect((await clinicRow()).suspended_at).not.toBeNull();
+  });
+});

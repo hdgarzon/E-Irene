@@ -50,7 +50,7 @@ export function LiveConsultation({
   sessionToken?: string;
   videoRoomUrl?: string;
   videoToken?: string;
-  /** Cuota mensual de transcripción agotada: no hay sesión (ni mock) y se
+  /** Cuota de transcripción del ciclo agotada: no hay sesión (ni mock) y se
    *  explica por qué. La videollamada, si la hay, sigue funcionando. */
   quotaExceeded?: boolean;
   /** true = el usuario puede cambiar el plan (admin) → se enlaza a /settings/plan. */
@@ -352,7 +352,7 @@ export function LiveConsultation({
               <span>
                 {transcriptionMode === "video"
                   ? "Videollamada en curso · sin transcripción (cuota agotada)"
-                  : "Sin transcripción — cuota mensual del plan agotada"}
+                  : "Sin transcripción — cuota del plan agotada en este ciclo"}
               </span>
             ) : (
               <>
@@ -390,7 +390,7 @@ export function LiveConsultation({
           <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" />
           <div>
             <p className="font-medium text-navy">
-              Se agotaron las horas de transcripción del plan este mes
+              Se agotaron las horas de transcripción de este ciclo
             </p>
             <p className="mt-0.5 text-muted-foreground">
               Esta consulta no se transcribirá ni generará reporte automático

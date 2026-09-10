@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import {
   verifyWompiChecksum,
   extractWompiTimestamp,
+  parseRenewalReference,
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
+import { settleRenewalPayment } from "@/lib/billing/recurring";
 import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
 import { resolveTransactionOwner } from "@/lib/db/billing-checkouts";
 import { PLANS } from "@/lib/plans";
@@ -76,6 +78,25 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!transaction) {
     logger.warn("wompi_webhook.missing_transaction", { event: payload.event });
     return NextResponse.json({ error: "missing_transaction" }, { status: 400 });
+  }
+
+  // Cobro recurrente (transacción directa con el token guardado): solo avanza el
+  // período. Va antes que la resolución de compras porque una renovación tratada
+  // como compra reiniciaba el ciclo del cliente en cada cobro.
+  const renewal = parseRenewalReference(transaction.reference);
+  if (renewal) {
+    const outcome = await settleRenewalPayment({
+      transaction,
+      reference: renewal,
+      wompiEvent: payload.event,
+      rawPayload: payload,
+    });
+    logger.info("wompi_webhook.renewal_settled", {
+      clinicId: renewal.clinicId,
+      transactionId: transaction.id,
+      ...outcome,
+    });
+    return NextResponse.json({ ok: true });
   }
 
   // Wompi NO devuelve nuestra `reference` en los pagos por payment link:

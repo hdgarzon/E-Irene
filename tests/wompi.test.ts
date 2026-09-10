@@ -5,6 +5,8 @@ import {
   extractWompiTimestamp,
   buildBillingReference,
   parseBillingReference,
+  buildRenewalReference,
+  parseRenewalReference,
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 
@@ -100,5 +102,31 @@ describe("wompi (verificación de firma de webhooks) — SOLO consistencia inter
     expect(parseBillingReference("algo-inventado")).toBeNull();
     expect(parseBillingReference("planupgrade-no-es-un-uuid-123")).toBeNull();
     expect(parseBillingReference("planupgrade-6550747c-13a0-4cfb-a88a-b1cb9bb99952-999")).toBeNull();
+  });
+});
+
+describe("referencia de cobros recurrentes", () => {
+  const clinicId = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
+
+  it("buildRenewalReference/parseRenewalReference son inversas y conservan el período", () => {
+    const reference = buildRenewalReference(clinicId, "clinica", "2026-10-18");
+    expect(parseRenewalReference(reference)).toEqual({
+      clinicId,
+      plan: "clinica",
+      periodKey: "2026-10-18",
+    });
+  });
+
+  it("una renovación nunca se interpreta como la compra de un plan, ni al revés", () => {
+    // Si el webhook tomara una renovación por compra, reiniciaría el ciclo del
+    // cliente y le correría la fecha de corte en cada cobro.
+    expect(parseBillingReference(buildRenewalReference(clinicId, "pro", "2026-10-18"))).toBeNull();
+    expect(parseRenewalReference(buildBillingReference(clinicId, "pro"))).toBeNull();
+  });
+
+  it("rechaza referencias de renovación mal formadas o de un plan gratuito", () => {
+    expect(parseRenewalReference("renewal-no-es-un-uuid-pro-2026-10-18-1")).toBeNull();
+    expect(parseRenewalReference(`renewal-${clinicId}-free-2026-10-18-1`)).toBeNull();
+    expect(parseRenewalReference(`renewal-${clinicId}-pro-18-10-2026-1`)).toBeNull();
   });
 });

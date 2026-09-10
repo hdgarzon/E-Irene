@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { addMember } from "@/lib/db/team";
-import { getClinicOverview, setClinicPlan } from "@/lib/db/clinic";
+import { getClinicOverview } from "@/lib/db/clinic";
+import {
+  requestSubscriptionCancellation,
+  revertSubscriptionCancellation,
+} from "@/lib/db/subscription";
 import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
@@ -78,22 +82,6 @@ export async function addMemberAction(
   return { ok: true };
 }
 
-export async function changePlanAction(plan: Plan): Promise<void> {
-  const user = await requireRole(["admin"]);
-  await setClinicPlan(user.clinicId, plan);
-  await logAudit({
-    clinicId: user.clinicId,
-    actorId: user.id,
-    action: "plan.changed",
-    entityType: "clinic",
-    entityId: user.clinicId,
-    metadata: { plan },
-  });
-  revalidatePath("/settings/plan");
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
-}
-
 export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   const user = await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
@@ -101,20 +89,11 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
     redirect("/settings/plan");
   }
 
-  const amountInCents = PLANS[plan].priceInCents;
-  if (amountInCents <= 0) {
-    // Plan gratis: se cambia inmediatamente sin pasar por Wompi.
-    await setClinicPlan(user.clinicId, plan);
-    await logAudit({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      action: "plan.downgraded_to_free",
-      entityType: "clinic",
-      entityId: user.clinicId,
-      metadata: { plan },
-    });
-    revalidatePath("/settings/plan");
-    return;
+  // Pasar a Free no es un cambio de plan sino cancelar la suscripción, que
+  // conserva lo pagado hasta el fin del período (cancelSubscriptionAction). Antes
+  // bajaba el plan al instante, perdiendo el resto del período ya cobrado.
+  if (PLANS[plan].priceInCents <= 0) {
+    redirect("/settings/plan#suscripcion");
   }
 
   // Sin query params propios: Wompi agrega `?id=<transaction_id>` al volver, y
@@ -157,4 +136,61 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
 
   if (!checkoutUrl) redirect("/settings/plan?wompi=error");
   redirect(checkoutUrl);
+}
+
+export type SubscriptionState = { ok?: boolean; error?: string };
+
+/**
+ * Cancela la suscripción al final del período pagado (o de inmediato si no hay
+ * período vigente). Solo el admin: la función de la base lo exige igual, esto
+ * es para no llegar hasta ella. La constancia queda en audit_logs desde la base.
+ */
+export async function cancelSubscriptionAction(): Promise<SubscriptionState> {
+  const user = await requireRole(["admin"]);
+  try {
+    const result = await requestSubscriptionCancellation();
+    logger.info("subscription.cancel_requested", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      status: result.status,
+      effectiveAt: result.effectiveAt,
+    });
+  } catch (error) {
+    logger.error("subscription.cancel_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      error,
+    });
+    return { error: "No se pudo cancelar la suscripción. Intenta de nuevo o escríbenos." };
+  }
+  revalidatePath("/settings/plan");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function revertCancellationAction(): Promise<SubscriptionState> {
+  const user = await requireRole(["admin"]);
+  try {
+    const status = await revertSubscriptionCancellation();
+    logger.info("subscription.cancel_reverted", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      status,
+    });
+    if (status === "too_late") {
+      return {
+        error: "El período pagado ya terminó: para volver a un plan pago elige uno abajo.",
+      };
+    }
+  } catch (error) {
+    logger.error("subscription.revert_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      error,
+    });
+    return { error: "No se pudo reactivar la suscripción. Intenta de nuevo o escríbenos." };
+  }
+  revalidatePath("/settings/plan");
+  revalidatePath("/settings");
+  return { ok: true };
 }
