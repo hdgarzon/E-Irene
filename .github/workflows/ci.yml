@@ -15,17 +15,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # La versión la toma de `packageManager` en package.json.
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Instalar dependencias
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm typecheck
 
       - name: Configurar Supabase CLI
         uses: supabase/setup-cli@v1
@@ -55,10 +59,10 @@ jobs:
       # Sin OPENAI_API_KEY/DEEPGRAM_API_KEY: los proveedores mock se activan
       # solos (misma lógica que en dev/prod) — sin costo, determinista.
       - name: Tests unitarios (incluye aislamiento RLS multi-tenant)
-        run: npm test
+        run: pnpm test
 
       - name: Build de producción
-        run: npm run build
+        run: pnpm build
 
       # Los binarios (~150 MB) se cachean entre corridas. Sin esto, cada corrida
       # los baja de nuevo y el paso depende de la velocidad de los mirrors: el
@@ -69,7 +73,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Instalar navegadores de Playwright
         timeout-minutes: 8
@@ -84,14 +88,14 @@ jobs:
           # requisito: se intenta con un tope corto y, si el mirror está
           # caído, se sigue igual. Si de verdad faltara una librería, los
           # tests E2E fallarían con un error claro en vez de colgarse acá.
-          timeout 180 npx playwright install-deps chromium \
+          timeout 180 pnpm exec playwright install-deps chromium \
             || echo "::warning::install-deps falló o expiró (mirror de apt); se continúa sin él"
           # Los binarios sí se cachean (ver paso anterior): esto es instantáneo
           # cuando hay acierto.
-          npx playwright install chromium
+          pnpm exec playwright install chromium
 
       - name: Tests E2E
-        run: npm run test:e2e
+        run: pnpm test:e2e
 
       - name: Subir reporte de Playwright si falla
         if: failure()
