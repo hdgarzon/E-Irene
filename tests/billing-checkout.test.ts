@@ -226,6 +226,11 @@ describe("chargeClinic", () => {
     const body = JSON.parse(fetchCall[1].body);
     expect(body.payment_source_id).toBe("ps-123");
     expect(body.amount_in_cents).toBe(2_900_000);
+    // Referencia de renovación con el período cobrado: el webhook la distingue de
+    // la compra de un plan y solo avanza el período.
+    expect(body.reference).toMatch(
+      /^renewal-6550747c-13a0-4cfb-a88a-b1cb9bb99952-pro-2026-01-01-\d+$/,
+    );
   });
 
   it("returns failure when clinic has no payment source", async () => {

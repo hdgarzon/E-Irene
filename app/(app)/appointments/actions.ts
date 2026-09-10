@@ -21,6 +21,7 @@ import { getEmailProvider } from "@/lib/email/providers";
 import { buildReminderEmail } from "@/lib/email/templates";
 import { getWhatsAppProvider, buildReminderWhatsApp } from "@/lib/whatsapp/providers";
 import { PLANS, canStartConsultation, limitLabel } from "@/lib/plans";
+import { formatLongDate } from "@/lib/dates";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 import { fromInputDateTime, formatFullDate, formatTime } from "@/lib/dates";
@@ -288,12 +289,14 @@ export async function startVideoConsultationAction(
       redirectTo = `/consultations/${existing.id}/live`;
     } else {
       const overview = await getClinicOverview();
-      if (!canStartConsultation(overview.plan, overview.consultationsThisMonth)) {
+      if (!canStartConsultation(overview.plan, overview.consultationsThisCycle)) {
         return {
           ok: false,
           message: `Alcanzaste el límite de ${limitLabel(
             PLANS[overview.plan].consultationsPerMonth,
-          )} consultas de este mes en el plan ${PLANS[overview.plan].label}. Mejora tu plan en Configuración.`,
+          )} consultas de este ciclo en el plan ${PLANS[overview.plan].label}. Se reinicia el ${formatLongDate(
+            overview.cycleEnd,
+          )}, o puedes mejorar tu plan en Configuración.`,
         };
       }
 

@@ -1,11 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSessionUser } from "@/lib/auth";
 import type { Plan } from "@/lib/plans";
-import { startOfCurrentMonthBogota } from "@/lib/dates";
+import type { BillingStatus } from "@/lib/db/billing";
+import { billingCycleBounds } from "@/lib/dates";
 
 export interface DoctorOption {
   id: string;
   fullName: string;
+}
+
+export interface ClinicSubscription {
+  status: BillingStatus;
+  /** Hasta cuándo cubre lo pagado; null sin suscripción paga. */
+  currentPeriodEnd: string | null;
+  /** Cancelación pedida: conserva el plan hasta currentPeriodEnd y no se renueva. */
+  cancelAtPeriodEnd: boolean;
 }
 
 export interface ClinicOverview {
@@ -13,14 +23,36 @@ export interface ClinicOverview {
   patientCount: number;
   doctorCount: number;
   memberCount: number;
-  consultationsThisMonth: number;
+  /** Consultas iniciadas en el ciclo vigente: el límite del plan se aplica por ciclo. */
+  consultationsThisCycle: number;
+  /** Ciclo vigente [cycleStart, cycleEnd). Las cuotas se reinician en cycleEnd. */
+  cycleStart: string;
+  cycleEnd: string;
+  subscription: ClinicSubscription;
 }
 
-/** Plan + conteos de la clínica del usuario (RLS scoped). */
+/**
+ * Plan, ciclo, suscripción y conteos de la clínica del usuario (RLS scoped).
+ *
+ * La fila de la clínica va primero porque su ancla define desde cuándo se
+ * cuentan las consultas. Se filtra por id en vez de confiar en que RLS deje una
+ * sola fila: para un platform admin, clinic_select las devuelve todas (ver
+ * lib/db/transcription-usage.ts).
+ */
 export async function getClinicOverview(): Promise<ClinicOverview> {
+  const user = await getSessionUser();
+  if (!user) throw new Error("getClinicOverview requiere una sesión");
   const supabase = await createClient();
-  const [clinic, patients, doctors, members, consultations] = await Promise.all([
-    supabase.from("clinics").select("plan").single(),
+
+  const { data: clinic, error } = await supabase
+    .from("clinics")
+    .select("plan, billing_cycle_anchor, billing_status, current_period_end, cancel_at_period_end")
+    .eq("id", user.clinicId)
+    .single();
+  if (error) throw error;
+
+  const cycle = billingCycleBounds(clinic.billing_cycle_anchor);
+  const [patients, doctors, members, consultations] = await Promise.all([
     supabase.from("patients").select("*", { count: "exact", head: true }),
     supabase
       .from("users")
@@ -30,21 +62,22 @@ export async function getClinicOverview(): Promise<ClinicOverview> {
     supabase
       .from("consultations")
       .select("*", { count: "exact", head: true })
-      .gte("started_at", startOfCurrentMonthBogota()),
+      .gte("started_at", cycle.start.toISOString()),
   ]);
   return {
-    plan: (clinic.data?.plan ?? "free") as Plan,
+    plan: clinic.plan as Plan,
     patientCount: patients.count ?? 0,
     doctorCount: doctors.count ?? 0,
     memberCount: members.count ?? 0,
-    consultationsThisMonth: consultations.count ?? 0,
+    consultationsThisCycle: consultations.count ?? 0,
+    cycleStart: cycle.start.toISOString(),
+    cycleEnd: cycle.end.toISOString(),
+    subscription: {
+      status: clinic.billing_status as BillingStatus,
+      currentPeriodEnd: clinic.current_period_end,
+      cancelAtPeriodEnd: clinic.cancel_at_period_end,
+    },
   };
-}
-
-export async function setClinicPlan(clinicId: string, plan: Plan): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("clinics").update({ plan }).eq("id", clinicId);
-  if (error) throw error;
 }
 
 /** Profesionales de la clínica (admin/doctor) para selectores. RLS scoped. */

@@ -295,7 +295,10 @@ export type Database = {
       }
       clinics: {
         Row: {
+          billing_cycle_anchor: string
           billing_status: string
+          cancel_at_period_end: boolean
+          cancel_requested_at: string | null
           created_at: string
           current_period_end: string | null
           id: string
@@ -307,7 +310,10 @@ export type Database = {
           wompi_payment_source_id_enc: string | null
         }
         Insert: {
+          billing_cycle_anchor?: string
           billing_status?: string
+          cancel_at_period_end?: boolean
+          cancel_requested_at?: string | null
           created_at?: string
           current_period_end?: string | null
           id?: string
@@ -319,7 +325,10 @@ export type Database = {
           wompi_payment_source_id_enc?: string | null
         }
         Update: {
+          billing_cycle_anchor?: string
           billing_status?: string
+          cancel_at_period_end?: boolean
+          cancel_requested_at?: string | null
           created_at?: string
           current_period_end?: string | null
           id?: string
@@ -424,6 +433,7 @@ export type Database = {
           started_at: string
           status: Database["public"]["Enums"]["consultation_status"]
           transcript_enc: string | null
+          transcript_purged_at: string | null
           updated_at: string
         }
         Insert: {
@@ -441,6 +451,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["consultation_status"]
           transcript_enc?: string | null
+          transcript_purged_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -458,6 +469,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["consultation_status"]
           transcript_enc?: string | null
+          transcript_purged_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -846,6 +858,60 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      policy_acceptances: {
+        Row: {
+          accepted_at: string
+          clinic_id: string
+          created_at: string
+          document_hash: string
+          document_version: string
+          id: string
+          ip: string | null
+          marketing_opt_in: boolean
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          clinic_id: string
+          created_at?: string
+          document_hash: string
+          document_version: string
+          id?: string
+          ip?: string | null
+          marketing_opt_in?: boolean
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string
+          clinic_id?: string
+          created_at?: string
+          document_hash?: string
+          document_version?: string
+          id?: string
+          ip?: string | null
+          marketing_opt_in?: boolean
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_acceptances_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_acceptances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       psychometric_assessments: {
         Row: {
@@ -1373,60 +1439,6 @@ export type Database = {
           },
         ]
       }
-      policy_acceptances: {
-        Row: {
-          accepted_at: string
-          clinic_id: string
-          created_at: string
-          document_hash: string
-          document_version: string
-          id: string
-          ip: string | null
-          marketing_opt_in: boolean
-          user_agent: string | null
-          user_id: string
-        }
-        Insert: {
-          accepted_at?: string
-          clinic_id: string
-          created_at?: string
-          document_hash: string
-          document_version: string
-          id?: string
-          ip?: string | null
-          marketing_opt_in?: boolean
-          user_agent?: string | null
-          user_id: string
-        }
-        Update: {
-          accepted_at?: string
-          clinic_id?: string
-          created_at?: string
-          document_hash?: string
-          document_version?: string
-          id?: string
-          ip?: string | null
-          marketing_opt_in?: boolean
-          user_agent?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "policy_acceptances_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "policy_acceptances_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       users: {
         Row: {
           clinic_id: string
@@ -1516,6 +1528,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_subscription: {
+        Args: {
+          p_clinic: string
+          p_payment_source_enc?: string
+          p_plan: Database["public"]["Enums"]["clinic_plan"]
+        }
+        Returns: string
+      }
+      add_billing_months: {
+        Args: { p_from: string; p_months: number }
+        Returns: string
+      }
       auth_can_access_clinical: { Args: never; Returns: boolean }
       auth_clinic_id: { Args: never; Returns: string }
       auth_role: {
@@ -1526,13 +1550,31 @@ export type Database = {
         Args: { p_consultation_id: string; p_limit_seconds: number | null }
         Returns: Json
       }
+      billing_cycle_bounds: {
+        Args: { p_anchor: string; p_at?: string }
+        Returns: {
+          cycle_end: string
+          cycle_start: string
+        }[]
+      }
+      billing_grace_period: { Args: never; Returns: string }
       check_rate_limit: {
         Args: { p_key: string; p_max: number; p_window_seconds: number }
         Returns: boolean
       }
+      clinic_cycle_start: { Args: { p_clinic: string }; Returns: string }
       create_clinic_and_admin: {
         Args: { clinic_name: string; full_name: string }
         Returns: string
+      }
+      end_canceled_subscriptions: { Args: never; Returns: number }
+      end_subscription: {
+        Args: { p_actor?: string; p_clinic: string; p_reason: string }
+        Returns: undefined
+      }
+      expire_grandfathered_verifications: {
+        Args: { p_deadline?: string }
+        Returns: undefined
       }
       finalize_transcription_session: {
         Args: { p_consultation_id: string }
@@ -1570,10 +1612,7 @@ export type Database = {
           used_seconds: number
         }[]
       }
-      get_transcription_usage: {
-        Args: never
-        Returns: Json
-      }
+      get_transcription_usage: { Args: never; Returns: Json }
       is_platform_admin: { Args: never; Returns: boolean }
       platform_set_clinic_plan: {
         Args: { new_plan: string; target_clinic: string }
@@ -1591,6 +1630,18 @@ export type Database = {
           p_price: string
         }
         Returns: undefined
+      }
+      purge_expired_transcripts: { Args: never; Returns: undefined }
+      renew_subscription_period: {
+        Args: { p_charged_period_end: string; p_clinic: string }
+        Returns: string
+      }
+      request_subscription_cancellation: { Args: never; Returns: Json }
+      revert_subscription_cancellation: { Args: never; Returns: Json }
+      transcription_month_start: { Args: never; Returns: string }
+      transcription_seconds_used: {
+        Args: { p_clinic: string }
+        Returns: number
       }
     }
     Enums: {
@@ -1748,8 +1799,16 @@ export const Constants = {
       clinic_plan: ["free", "pro", "clinica", "enterprise"],
       consultation_status: ["in_progress", "ended", "analyzed"],
       notification_channel: ["email", "whatsapp"],
-      notification_status: ["pending", "sent", "failed"],
+      notification_status: ["pending", "sent", "failed", "simulated"],
       user_role: ["admin", "doctor", "secretaria", "paciente"],
+      verification_status: [
+        "pending_documents",
+        "pending_review",
+        "verified",
+        "rejected",
+        "suspended",
+      ],
     },
   },
 } as const
+

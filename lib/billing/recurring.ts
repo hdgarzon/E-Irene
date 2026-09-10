@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getClinicsDueForCharge,
+  isStillDueForCharge,
   createScheduledCharge,
   markScheduledChargeSuccess,
   markScheduledChargeFailed,
@@ -11,9 +12,12 @@ import {
   flagClinicForBillingReview,
   expireStaleProcessingCharges,
   periodKeyFor,
+  recordBillingEvent,
+  clinicExists,
+  findScheduledChargeForPeriod,
   type ClinicDueForCharge,
 } from "@/lib/db/billing";
-import { buildBillingReference } from "./wompi";
+import { buildRenewalReference, type RenewalReference } from "./wompi";
 
 const WOMPI_BASE = {
   sandbox: "https://sandbox.wompi.co/v1",
@@ -58,7 +62,13 @@ export async function chargeClinic(
     return { success: false, error: "clinic_has_no_payment_source" };
   }
 
-  const reference = buildBillingReference(clinic.id, clinic.plan);
+  // Referencia de renovación, no de compra: el webhook la distingue y solo
+  // avanza el período en vez de reiniciar el ciclo (ver lib/billing/wompi.ts).
+  const reference = buildRenewalReference(
+    clinic.id,
+    clinic.plan,
+    periodKeyFor(clinic.currentPeriodEnd),
+  );
   const amountInCents = PLANS[clinic.plan].priceInCents;
 
   const body = {
@@ -185,7 +195,23 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     }
 
     const periodKey = periodKeyFor(clinic.currentPeriodEnd);
-    const dueAt = clinic.currentPeriodEnd ?? new Date().toISOString();
+    const dueAt = clinic.currentPeriodEnd;
+
+    // Ante la duda, no cobrar: si desde la consulta de arriba el admin canceló
+    // o cambió de plan, este cobro ya no corresponde.
+    let stillDue: boolean;
+    try {
+      stillDue = await isStillDueForCharge(clinic);
+    } catch (error) {
+      logger.error("billing.recheck_before_charge_failed", { clinicId: clinic.id, error });
+      result.failed++;
+      continue;
+    }
+    if (!stillDue) {
+      result.skipped++;
+      logger.info("billing.charge_skipped_state_changed", { clinicId: clinic.id, periodKey });
+      continue;
+    }
 
     let chargeId: string | null;
     try {
@@ -241,7 +267,10 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
         });
       }
       try {
-        await renewBilling(clinic.id);
+        // Renueva el período que se cobró, no "desde hoy": el cron cobra hasta
+        // 3 días antes del vencimiento y contar desde la fecha del cobro le
+        // quitaba esos días al cliente en cada renovación.
+        await renewBilling(clinic.id, clinic.currentPeriodEnd);
         result.succeeded++;
       } catch (error) {
         logger.error("billing.renew_after_charge_failed", {
@@ -301,4 +330,95 @@ async function flagClinicsWithRepeatedFailures(): Promise<void> {
       await flagClinicForBillingReview(clinicId, count);
     }
   }
+}
+
+export type RenewalSettlement =
+  | { result: "renewed"; periodEnd: string }
+  | { result: "already_applied" }
+  | { result: "not_approved"; status: string }
+  | { result: "ignored"; reason: string };
+
+/**
+ * Resuelve por webhook el desenlace de un cobro recurrente (referencia
+ * `renewal-…`). Es el camino de los cobros que Wompi dejó PENDING (PSE, Nequi)
+ * y la red de seguridad de los aprobados al instante si el cron murió antes de
+ * renovar.
+ *
+ * Una renovación NUNCA activa un plan: activar reinicia el ciclo, y hacerlo en
+ * cada cobro le corría la fecha de corte al cliente. Aquí solo avanza el
+ * período, contra el fin de período del intento registrado.
+ *
+ * A diferencia de la compra de un plan, no se corta cuando el evento ya estaba
+ * registrado: renovar es idempotente, así que reintentar un evento cuyo primer
+ * procesamiento se cayó a mitad de camino es seguro, y es la única forma de que
+ * ese cobro no quede sin renovar.
+ */
+export async function settleRenewalPayment(input: {
+  transaction: { id: string; status: string; amount_in_cents: number };
+  reference: RenewalReference;
+  wompiEvent: string;
+  rawPayload: unknown;
+}): Promise<RenewalSettlement> {
+  const { transaction, reference } = input;
+
+  if (!(await clinicExists(reference.clinicId))) {
+    logger.warn("billing.renewal_unknown_clinic", { transactionId: transaction.id });
+    return { result: "ignored", reason: "clinica_inexistente" };
+  }
+
+  await recordBillingEvent({
+    clinicId: reference.clinicId,
+    wompiTransactionId: transaction.id,
+    wompiEvent: input.wompiEvent,
+    status: transaction.status,
+    amountInCents: transaction.amount_in_cents,
+    rawPayload: input.rawPayload,
+  });
+
+  if (transaction.status !== "APPROVED") {
+    return { result: "not_approved", status: transaction.status };
+  }
+
+  const charge = await findScheduledChargeForPeriod(reference.clinicId, reference.periodKey);
+  if (!charge) {
+    logger.error("billing.renewal_without_scheduled_charge", {
+      clinicId: reference.clinicId,
+      transactionId: transaction.id,
+      periodKey: reference.periodKey,
+      action: "COBRO APROBADO sin intento registrado — conciliar manualmente",
+    });
+    return { result: "ignored", reason: "cobro_no_registrado" };
+  }
+
+  // Contra lo que se pidió cobrar, no contra el precio de hoy: si el precio del
+  // plan cambió entre el cobro y el webhook, lo que importa es que se aprobó el
+  // monto que se pidió.
+  if (transaction.amount_in_cents !== charge.amountInCents || charge.plan !== reference.plan) {
+    logger.error("billing.renewal_mismatch", {
+      clinicId: reference.clinicId,
+      transactionId: transaction.id,
+      periodKey: reference.periodKey,
+      expectedAmount: charge.amountInCents,
+      receivedAmount: transaction.amount_in_cents,
+      action: "NO se renovó el período; conciliar manualmente",
+    });
+    return { result: "ignored", reason: "no_coincide_con_el_cobro" };
+  }
+
+  if (charge.status === "pending" || charge.status === "processing") {
+    await markScheduledChargeSuccess(charge.id, transaction.id);
+  } else if (charge.status === "failed") {
+    // Se dio por fallido (24 h sin confirmación) y Wompi lo aprobó después. El
+    // cliente pagó, así que el período se renueva igual; pero para ese período
+    // pudo crearse otro intento y cobrarse de nuevo.
+    logger.error("billing.renewal_approved_after_marked_failed", {
+      clinicId: reference.clinicId,
+      transactionId: transaction.id,
+      periodKey: reference.periodKey,
+      action: "revisar si hubo un segundo cobro del mismo período y reembolsarlo",
+    });
+  }
+
+  const periodEnd = await renewBilling(reference.clinicId, charge.dueAt);
+  return periodEnd ? { result: "renewed", periodEnd } : { result: "already_applied" };
 }

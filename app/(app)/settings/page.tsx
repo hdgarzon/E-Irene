@@ -1,10 +1,22 @@
 import Link from "next/link";
 import { Users, CreditCard, ChevronRight } from "lucide-react";
 import { requireRole } from "@/lib/auth";
-import { getClinicOverview } from "@/lib/db/clinic";
+import { getClinicOverview, type ClinicOverview } from "@/lib/db/clinic";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import { PLANS, transcriptionUsageLabel } from "@/lib/plans";
+import { formatLongDate } from "@/lib/dates";
 import { UsageBar } from "@/components/usage-bar";
+
+/** Qué pasa con el plan y cuándo, en una línea. */
+function planStatusLine(overview: ClinicOverview): string {
+  const { currentPeriodEnd, cancelAtPeriodEnd } = overview.subscription;
+  if (PLANS[overview.plan].priceInCents > 0 && currentPeriodEnd) {
+    const date = formatLongDate(currentPeriodEnd);
+    if (cancelAtPeriodEnd) return `Suscripción cancelada: pasas a Free el ${date}.`;
+    if (new Date(currentPeriodEnd).getTime() > Date.now()) return `Se renueva el ${date}.`;
+  }
+  return `Las cuotas del plan se reinician el ${formatLongDate(overview.cycleEnd)}.`;
+}
 
 export default async function SettingsPage() {
   const user = await requireRole(["admin", "doctor"]);
@@ -26,13 +38,19 @@ export default async function SettingsPage() {
             {limits.label} · {limits.price}
           </span>
         </div>
+        <p className="mt-1 text-xs text-muted-foreground">{planStatusLine(overview)}</p>
         <div className="mt-4 space-y-3">
           <UsageBar used={overview.patientCount} max={limits.maxPatients} label="Pacientes" />
           <UsageBar used={overview.doctorCount} max={limits.maxDoctors} label="Profesionales" />
           <UsageBar
+            used={overview.consultationsThisCycle}
+            max={limits.consultationsPerMonth}
+            label="Consultas del ciclo"
+          />
+          <UsageBar
             used={usage.usedSeconds / 3600}
             max={limits.transcriptionHours}
-            label="Transcripción este mes"
+            label="Transcripción del ciclo"
             display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
           />
         </div>

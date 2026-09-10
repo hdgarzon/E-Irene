@@ -24,7 +24,7 @@ export async function startConsultationAction(
   if (!consent) redirect(`/patients/${patientId}/consent`);
 
   const overview = await getClinicOverview();
-  if (!canStartConsultation(overview.plan, overview.consultationsThisMonth)) {
+  if (!canStartConsultation(overview.plan, overview.consultationsThisCycle)) {
     redirect(`/consultations/new?patientId=${patientId}`);
   }
 

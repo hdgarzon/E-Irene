@@ -112,3 +112,34 @@ export function parseBillingReference(reference: string): BillingReference | nul
   if (!match) return null;
   return { clinicId: match[1], plan: match[2] as Plan };
 }
+
+// ── Referencia de los cobros recurrentes ────────────────────────────────────
+//
+// Los cobros recurrentes son transacciones directas con el token guardado, y en
+// ellas Wompi SÍ devuelve nuestra referencia. Llevan un prefijo propio para que
+// el webhook no los confunda con la compra de un plan: una compra empieza una
+// suscripción (ciclo nuevo) y una renovación solo avanza el período. Tratar las
+// renovaciones como compras corría la fecha de corte del cliente cada mes.
+//
+// Incluye el período que se cobra (periodKeyFor): con él, el webhook encuentra
+// el intento en billing_scheduled_charges y sabe qué fin de período renovar.
+
+const RENEWAL_PREFIX = "renewal";
+const RENEWAL_RE =
+  /^renewal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(pro|clinica|enterprise)-(\d{4}-\d{2}-\d{2})-\d+$/i;
+
+export interface RenewalReference {
+  clinicId: string;
+  plan: Plan;
+  periodKey: string;
+}
+
+export function buildRenewalReference(clinicId: string, plan: Plan, periodKey: string): string {
+  return `${RENEWAL_PREFIX}-${clinicId}-${plan}-${periodKey}-${Date.now()}`;
+}
+
+export function parseRenewalReference(reference: string): RenewalReference | null {
+  const match = RENEWAL_RE.exec(reference);
+  if (!match) return null;
+  return { clinicId: match[1], plan: match[2] as Plan, periodKey: match[3] };
+}

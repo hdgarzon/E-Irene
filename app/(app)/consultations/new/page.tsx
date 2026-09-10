@@ -5,6 +5,7 @@ import { getPatient } from "@/lib/db/patients";
 import { getActiveConsent } from "@/lib/db/consents";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { canStartConsultation, limitLabel, PLANS } from "@/lib/plans";
+import { formatLongDate } from "@/lib/dates";
 import { startConsultationAction } from "@/app/(app)/consultations/actions";
 import { requireVerifiedProfessional } from "@/lib/auth";
 import { isVideoSimulated } from "@/lib/channel-status";
@@ -26,7 +27,7 @@ export default async function NewConsultationPage({
   const patient = await getPatient(patientId);
   if (!patient) notFound();
   const [consent, overview] = await Promise.all([getActiveConsent(patientId), getClinicOverview()]);
-  const limitReached = !canStartConsultation(overview.plan, overview.consultationsThisMonth);
+  const limitReached = !canStartConsultation(overview.plan, overview.consultationsThisCycle);
 
   const start = startConsultationAction.bind(null, patientId);
 
@@ -75,7 +76,8 @@ export default async function NewConsultationPage({
             <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
               <TriangleAlert className="size-4 text-coral" />
               Alcanzaste el límite de {limitLabel(PLANS[overview.plan].consultationsPerMonth)}{" "}
-              consultas de este mes en el plan {PLANS[overview.plan].label}.
+              consultas de este ciclo en el plan {PLANS[overview.plan].label}. Se reinicia el{" "}
+              {formatLongDate(overview.cycleEnd)}.
             </p>
             <Link href="/settings/plan" className={cn(buttonVariants(), "mt-6")}>
               Mejorar plan

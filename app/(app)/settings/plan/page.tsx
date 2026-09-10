@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
-import { getClinicOverview } from "@/lib/db/clinic";
+import { getClinicOverview, type ClinicOverview } from "@/lib/db/clinic";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import {
   PLANS,
@@ -10,14 +10,40 @@ import {
   transcriptionLimitSeconds,
   transcriptionUsageLabel,
 } from "@/lib/plans";
+import { formatLongDate } from "@/lib/dates";
 import { initiatePlanUpgradeAction } from "@/app/(app)/settings/actions";
 import { reconcilePlanPayment, type ReconcileOutcome } from "@/lib/billing/reconcile";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { UsageBar } from "@/components/usage-bar";
+import { SubscriptionPanel, type SubscriptionPanelState } from "@/components/subscription-panel";
 
 interface PlanPageProps {
   searchParams: Promise<{ wompi?: string; id?: string }>;
+}
+
+/** Qué incluye Free, en una frase: lo que ve quien está por cancelar. */
+function freeLimitsSummary(): string {
+  const f = PLANS.free;
+  return (
+    `${limitLabel(f.maxDoctors)} profesional${f.maxDoctors === 1 ? "" : "es"}, ` +
+    `${limitLabel(f.maxPatients)} pacientes, ${limitLabel(f.consultationsPerMonth)} consultas y ` +
+    `${limitLabel(f.transcriptionHours)} h de transcripción por ciclo, ` +
+    (f.ai ? "con análisis con IA" : "sin análisis con IA")
+  );
+}
+
+function subscriptionPanelState(overview: ClinicOverview): SubscriptionPanelState {
+  const { currentPeriodEnd, cancelAtPeriodEnd } = overview.subscription;
+  // Cancelada pero con el período recién vencido: el barrido horario todavía no
+  // la pasó a Free. Se sigue mostrando como cancelación, no como deuda.
+  if (cancelAtPeriodEnd && currentPeriodEnd) {
+    return { kind: "canceling", periodEnd: formatLongDate(currentPeriodEnd) };
+  }
+  if (currentPeriodEnd && new Date(currentPeriodEnd).getTime() > Date.now()) {
+    return { kind: "renewing", periodEnd: formatLongDate(currentPeriodEnd) };
+  }
+  return { kind: "unpaid", lapsedOn: currentPeriodEnd ? formatLongDate(currentPeriodEnd) : null };
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
@@ -46,8 +72,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   // El consumo de transcripción no depende de la reconciliación: se pide en
   // paralelo.
   const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
+  const limits = PLANS[overview.plan];
   const limitSeconds = transcriptionLimitSeconds(overview.plan);
   const quotaExhausted = limitSeconds !== null && usage.usedSeconds >= limitSeconds;
+  const isAdmin = user.role === "admin";
+  const cycleEndLabel = formatLongDate(overview.cycleEnd);
+  const panelState = limits.priceInCents > 0 ? subscriptionPanelState(overview) : null;
 
   function features(plan: (typeof PLAN_ORDER)[number]) {
     const l = PLANS[plan];
@@ -130,24 +160,40 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         </div>
       )}
 
+      {panelState && (
+        <SubscriptionPanel
+          planLabel={limits.label}
+          state={panelState}
+          freeLimits={freeLimitsSummary()}
+          canManage={isAdmin}
+        />
+      )}
+
       <div className="rounded-2xl border border-gray-line bg-card p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-navy">Consumo del mes</h2>
-          <span className="text-xs text-muted-foreground">
-            {usage.sessions} consulta{usage.sessions === 1 ? "" : "s"} con transcripción
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-heading font-semibold text-navy">Consumo del ciclo</h2>
+          <span className="text-xs text-muted-foreground">Se reinicia el {cycleEndLabel}</span>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
+          <UsageBar
+            used={overview.consultationsThisCycle}
+            max={limits.consultationsPerMonth}
+            label="Consultas"
+          />
           <UsageBar
             used={usage.usedSeconds / 3600}
-            max={PLANS[overview.plan].transcriptionHours}
+            max={limits.transcriptionHours}
             label="Horas de transcripción"
             display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
           />
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {usage.sessions} consulta{usage.sessions === 1 ? "" : "s"} con transcripción en este
+          ciclo. Lo que no se usa no se acumula para el siguiente.
+        </p>
         {quotaExhausted && (
-          <p className="mt-3 text-xs text-destructive">
-            Cuota agotada: las nuevas consultas no se transcribirán hasta el próximo mes o hasta
+          <p className="mt-2 text-xs text-destructive">
+            Cuota agotada: las nuevas consultas no se transcribirán hasta el {cycleEndLabel} o hasta
             ampliar el plan.
           </p>
         )}
@@ -180,10 +226,27 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                   <Button variant="outline" size="sm" className="w-full" disabled>
                     Plan actual
                   </Button>
+                ) : !paid ? (
+                  // Free no se "compra": se llega cancelando la suscripción, que
+                  // conserva lo pagado hasta el fin del período.
+                  <p className="text-center text-xs text-muted-foreground">
+                    {overview.subscription.cancelAtPeriodEnd ? (
+                      <>
+                        Pasas a Free el{" "}
+                        {formatLongDate(overview.subscription.currentPeriodEnd ?? overview.cycleEnd)}
+                      </>
+                    ) : isAdmin ? (
+                      <a href="#suscripcion" className="font-medium text-brand hover:underline">
+                        Cancela la suscripción para pasar a Free
+                      </a>
+                    ) : (
+                      "Para pasar a Free, el administrador debe cancelar la suscripción"
+                    )}
+                  </p>
                 ) : (
                   <form action={initiatePlanUpgradeAction.bind(null, plan)}>
                     <Button type="submit" size="sm" className="w-full">
-                      {paid ? `Pagar y cambiar a ${l.label}` : `Cambiar a ${l.label}`}
+                      Pagar y cambiar a {l.label}
                     </Button>
                   </form>
                 )}
@@ -195,7 +258,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
       <p className="text-center text-xs text-muted-foreground">
         Los pagos se procesan de forma segura a través de Wompi. Tu tarjeta o medio de pago se
-        tokeniza para la suscripción mensual.
+        tokeniza para la suscripción mensual. Puedes cancelar en cualquier momento y conservas el
+        plan hasta el final del período pagado.
       </p>
     </div>
   );
