@@ -29,16 +29,21 @@ const hace = (dias: number) => new Date(Date.now() - dias * 86400000).toISOStrin
 async function profesionalConDocumentos(dias: number) {
   const s = svc();
   const email = `docs_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@e-irene.test`;
-  const { data: auth } = await s.auth.admin.createUser({
+  // Cada paso del fixture comprueba su error: si uno falla en silencio, la prueba
+  // cae más adelante con un "null" que no dice qué pasó, y esta suite cubre una
+  // obligación legal (no se puede dar por intermitente sin saber la causa).
+  const { data: auth, error: authError } = await s.auth.admin.createUser({
     email,
     password: "Password123!",
     email_confirm: true,
   });
-  const { data: clinic } = await s
+  expect(authError).toBeNull();
+  const { data: clinic, error: clinicError } = await s
     .from("clinics")
     .insert({ name: "Docs Test", slug: `docs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` })
     .select("id")
     .single();
+  expect(clinicError).toBeNull();
 
   const userId = auth.user!.id;
   const clinicId = clinic!.id as string;
@@ -46,16 +51,18 @@ async function profesionalConDocumentos(dias: number) {
   const tarjeta = `${clinicId}/${userId}/tarjeta-1.txt`;
   const contenidoCedula = `cedula de ${email}`;
 
-  await s.storage.from(DOCUMENTS_BUCKET).upload(cedula, contenidoCedula, {
+  const { error: cedulaError } = await s.storage.from(DOCUMENTS_BUCKET).upload(cedula, contenidoCedula, {
     contentType: "text/plain",
     upsert: true,
   });
-  await s.storage.from(DOCUMENTS_BUCKET).upload(tarjeta, "tarjeta profesional", {
+  expect(cedulaError).toBeNull();
+  const { error: tarjetaError } = await s.storage.from(DOCUMENTS_BUCKET).upload(tarjeta, "tarjeta profesional", {
     contentType: "text/plain",
     upsert: true,
   });
+  expect(tarjetaError).toBeNull();
 
-  await s.from("users").insert({
+  const { error: userError } = await s.from("users").insert({
     id: userId,
     clinic_id: clinicId,
     role: "doctor",
@@ -66,6 +73,7 @@ async function profesionalConDocumentos(dias: number) {
     id_document_path: cedula,
     license_document_path: tarjeta,
   });
+  expect(userError).toBeNull();
 
   return { s, userId, clinicId, cedula, tarjeta, contenidoCedula };
 }
