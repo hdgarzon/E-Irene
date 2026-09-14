@@ -24,7 +24,7 @@ const GROUPS: { title: string; vars: EnvVar[] }[] = [
     title: "Notificaciones",
     vars: [
       { name: "RESEND_API_KEY", desc: "Clave de Resend (envío de correos).", secret: true },
-      { name: "EMAIL_FROM", desc: "Remitente de los correos.", secret: false },
+      { name: "EMAIL_FROM", desc: "Remitente, con dominio verificado en Resend. Sin él no sale ningún correo.", secret: false },
       { name: "TWILIO_ACCOUNT_SID", desc: "Twilio (WhatsApp) — SID de cuenta.", secret: true },
       { name: "TWILIO_AUTH_TOKEN", desc: "Twilio (WhatsApp) — token.", secret: true },
       { name: "TWILIO_WHATSAPP_FROM", desc: "Número de WhatsApp emisor.", secret: false },

@@ -57,14 +57,26 @@ describe("estado de los canales externos", () => {
 
   it("una cadena en blanco no cuenta como configurada", () => {
     process.env.RESEND_API_KEY = "   ";
+    process.env.EMAIL_FROM = "E-Irene <notificaciones@example.com>";
     const correo = getChannelStatuses().find((c) => c.key === "email");
     expect(correo?.missing).toContain("RESEND_API_KEY");
+    expect(correo?.mode).toBe("simulated");
   });
 
-  it("el correo exige remitente además de la clave", () => {
+  it("el correo exige remitente además de la clave: sin él sigue simulado", () => {
+    // El panel no puede decir "activo" si falta algo que el propio panel pide.
     process.env.RESEND_API_KEY = "clave";
     const correo = getChannelStatuses().find((c) => c.key === "email");
     expect(correo?.missing).toEqual(["EMAIL_FROM"]);
+    expect(correo?.mode).toBe("simulated");
+  });
+
+  it("con clave y remitente, el correo sale como activo", () => {
+    process.env.RESEND_API_KEY = "clave";
+    process.env.EMAIL_FROM = "E-Irene <notificaciones@example.com>";
+    const correo = getChannelStatuses().find((c) => c.key === "email");
+    expect(correo?.mode).toBe("live");
+    expect(correo?.missing).toEqual([]);
   });
 
   it("isVideoSimulated coincide con el estado del canal de video", () => {

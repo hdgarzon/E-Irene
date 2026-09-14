@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { getEmailProvider, LogEmailProvider } from "@/lib/email/providers";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { getEmailProvider, LogEmailProvider, ResendEmailProvider } from "@/lib/email/providers";
 import {
   buildReminderEmail,
   buildReportReadyEmail,
@@ -14,13 +14,62 @@ const INYECCION = '<a href="https://example.com">x</a>';
 const INYECCION_ESCAPADA = "&lt;a href=&quot;https://example.com&quot;&gt;x&lt;/a&gt;";
 
 describe("email", () => {
+  const saved = { key: process.env.RESEND_API_KEY, from: process.env.EMAIL_FROM };
+
   beforeEach(() => {
     delete process.env.RESEND_API_KEY;
+    delete process.env.EMAIL_FROM;
+  });
+  afterEach(() => {
+    for (const [name, value] of [
+      ["RESEND_API_KEY", saved.key],
+      ["EMAIL_FROM", saved.from],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   it("sin RESEND_API_KEY usa el provider de log", () => {
     expect(getEmailProvider()).toBeInstanceOf(LogEmailProvider);
     expect(getEmailProvider().mode).toBe("log");
+  });
+
+  it("con clave pero sin remitente sigue en log: no cae al remitente de pruebas de Resend", () => {
+    // onboarding@resend.dev solo entrega al dueño de la cuenta: con él, el panel
+    // decía "activo" mientras los correos a cualquier otra dirección rebotaban.
+    process.env.RESEND_API_KEY = "re_test_xxx";
+    expect(getEmailProvider()).toBeInstanceOf(LogEmailProvider);
+    process.env.EMAIL_FROM = "   ";
+    expect(getEmailProvider().mode).toBe("log");
+  });
+
+  it("con clave y remitente envía por Resend, con ese remitente", async () => {
+    process.env.RESEND_API_KEY = "re_test_xxx";
+    process.env.EMAIL_FROM = " E-Irene <notificaciones@example.com> ";
+    const provider = getEmailProvider();
+    expect(provider).toBeInstanceOf(ResendEmailProvider);
+
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(
+      async () => new Response(JSON.stringify({ id: "email_1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await provider.send({
+        to: "paciente@example.com",
+        subject: "Prueba",
+        html: "<p>Prueba</p>",
+        text: "Prueba",
+      });
+      expect(res.id).toBe("email_1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.resend.com/emails");
+    expect(JSON.parse(String(init.body)).from).toBe("E-Irene <notificaciones@example.com>");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_test_xxx");
   });
 
   it("plantilla de recordatorio incluye nombre, fecha y hora", () => {
