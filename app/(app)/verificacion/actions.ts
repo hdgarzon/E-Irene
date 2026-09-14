@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { canSubmitDocuments, isOwnDocumentPath } from "@/lib/verification";
+import { canSubmitDocuments, isOwnDocumentPath, legacyVerificationState } from "@/lib/verification";
 import { getMyVerification, submitForReview } from "@/lib/db/verification";
+import { submitLegacyDocuments } from "@/lib/db/legacy-verification";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 
@@ -38,7 +39,13 @@ export async function submitVerificationAction(
 
   const current = await getMyVerification(user.id);
   if (!current) return { error: FAILED };
-  if (!canSubmitDocuments(current.status)) {
+  // Las cuentas heredadas figuran como verificadas y aun así deben aportar
+  // documentos (migración 0043): ese envío no pasa por la máquina de estados.
+  const legacy = legacyVerificationState(current);
+  if (legacy === "awaiting_review") {
+    return { error: "Ya recibimos tus documentos; los estamos revisando." };
+  }
+  if (legacy === "none" && !canSubmitDocuments(current.status)) {
     return { error: "Tu verificación ya está en curso o aprobada." };
   }
 
@@ -70,22 +77,31 @@ export async function submitVerificationAction(
     return { error: FAILED };
   }
 
+  const declared = {
+    userId: user.id,
+    profession: parsed.data.profession,
+    licenseNumber: parsed.data.licenseNumber,
+    document: parsed.data.document,
+    idDocumentPath: parsed.data.idDocumentPath,
+    licenseDocumentPath: parsed.data.licenseDocumentPath,
+  };
+
   try {
-    await submitForReview({
-      userId: user.id,
-      currentStatus: current.status,
-      profession: parsed.data.profession,
-      licenseNumber: parsed.data.licenseNumber,
-      document: parsed.data.document,
-      idDocumentPath: parsed.data.idDocumentPath,
-      licenseDocumentPath: parsed.data.licenseDocumentPath,
-    });
+    if (legacy === "needs_documents") {
+      // Conserva el acceso: la cuenta sigue verificada mientras se revisa.
+      await submitLegacyDocuments({ ...declared, clinicId: user.clinicId });
+    } else {
+      await submitForReview({ ...declared, currentStatus: current.status });
+    }
 
     // Sin cédula ni rutas en el metadata: audit_logs lo lee toda la clínica.
     await logAudit({
       clinicId: user.clinicId,
       actorId: user.id,
-      action: "verification.submitted",
+      action:
+        legacy === "needs_documents"
+          ? "verification.legacy_documents_submitted"
+          : "verification.submitted",
       entityType: "users",
       entityId: user.id,
       metadata: { profession: parsed.data.profession, from: current.status },

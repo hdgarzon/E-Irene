@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { supabaseConnectSources } from "@/lib/csp";
 
 /**
  * proxy.ts (Next.js 16; reemplaza a middleware.ts).
@@ -75,7 +76,14 @@ function buildCsp(nonce: string): string {
     // y *.pluot.blue (infraestructura de Daily), más wss: genérico porque los
     // servidores de medios/relay se asignan dinámicamente y no siguen un
     // subdominio fijo (ver https://docs.daily.co/guides/privacy-and-security/content-security-policy).
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://*.daily.co https://*.pluot.blue wss:",
+    [
+      "connect-src 'self'",
+      // Supabase configurado (lib/csp.ts). En producción ya lo cubre
+      // https://*.supabase.co; en local es lo único que deja al navegador hablar
+      // con el Supabase de desarrollo.
+      ...supabaseConnectSources(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      "https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://*.daily.co https://*.pluot.blue wss:",
+    ].join(" "),
     // Web workers de @daily-co/daily-js se cargan vía blob: — sin esto caerían
     // en default-src y se bloquearían.
     "worker-src 'self' blob:",

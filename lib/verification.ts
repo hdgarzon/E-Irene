@@ -165,3 +165,44 @@ export function validateDocumentFile(
   }
   return null;
 }
+
+// ====================== Cuentas heredadas (0032, 0040, 0043) ===============
+
+/**
+ * Comienzo de la nota que el backfill de la 0032 dejó en las cuentas que ya
+ * existían. Truncado igual que el predicado SQL (`like 'Cuenta anterior a la
+ * verificaci%'`), para no depender de cómo quedó guardada la tilde.
+ */
+export const LEGACY_VERIFICATION_NOTE_PREFIX = "Cuenta anterior a la verificaci";
+
+/**
+ * Plazo para que las cuentas heredadas aporten documentos. Espejo de
+ * grandfather_verification_deadline() (migración 0043), que es el que aplica el
+ * barrido: tests/verification-grandfather.test.ts compara los dos.
+ */
+export const LEGACY_VERIFICATION_DEADLINE = "2026-10-18T23:59:00-05:00";
+
+export type LegacyVerificationState =
+  /** No es una cuenta heredada pendiente de revisión retroactiva. */
+  | "none"
+  /** Heredada y sin documentos: tiene que subirlos antes del plazo. */
+  | "needs_documents"
+  /** Heredada y con documentos: conserva el acceso mientras se revisan. */
+  | "awaiting_review";
+
+/**
+ * ¿Es una cuenta aprobada por el backfill de la 0032 que aún debe verificarse?
+ * Misma regla que expire_grandfathered_verifications: verificada, con la nota
+ * del backfill y, para seguir pendiente de documentos, sin ninguno aportado.
+ */
+export function legacyVerificationState(v: {
+  status: VerificationStatus;
+  notes: string | null;
+  hasIdDocument: boolean;
+  hasLicenseDocument: boolean;
+}): LegacyVerificationState {
+  if (v.status !== "verified" || !v.notes?.startsWith(LEGACY_VERIFICATION_NOTE_PREFIX)) {
+    return "none";
+  }
+  return v.hasIdDocument || v.hasLicenseDocument ? "awaiting_review" : "needs_documents";
+}

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { decideVerification, getDocumentUrl } from "@/lib/db/verification";
+import { confirmLegacyVerification } from "@/lib/db/legacy-verification";
 import { storeDocumentHashes } from "@/lib/db/verification-documents";
 import { logAuditPublic } from "@/lib/db/audit";
 import { getEmailProvider } from "@/lib/email/providers";
@@ -91,4 +92,62 @@ export async function decideVerificationAction(
 export async function getDocumentUrlAction(path: string): Promise<string | null> {
   await requirePlatformAdmin();
   return getDocumentUrl(path);
+}
+
+/**
+ * Confirma la habilitación de una cuenta heredada tras revisar sus documentos
+ * (migración 0043). No pasa por decideVerification porque no hay transición de
+ * estado: la cuenta ya figuraba como verificada sin que nadie hubiera visto sus
+ * credenciales. Si los documentos no corresponden, lo que procede es suspender.
+ */
+export async function confirmLegacyVerificationAction(
+  _prev: ReviewState,
+  formData: FormData,
+): Promise<ReviewState> {
+  const reviewer = await requirePlatformAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: FAILED };
+
+  try {
+    const { clinicId, email, fullName } = await confirmLegacyVerification({
+      userId,
+      reviewerId: reviewer.id,
+    });
+
+    // Huella de lo revisado antes de que la purga borre los archivos a los 30
+    // días, igual que en una decisión normal.
+    try {
+      await storeDocumentHashes(userId);
+    } catch (hashError) {
+      logger.error("verification.hash_failed", { userId, error: hashError });
+    }
+
+    try {
+      await getEmailProvider().send(
+        buildVerificationDecisionEmail({
+          to: email,
+          doctorName: fullName,
+          decision: "verified",
+          notes: null,
+          actionUrl: `${appBaseUrl()}/dashboard`,
+        }),
+      );
+    } catch (mailError) {
+      logger.error("verification.email_failed", { userId, decision: "legacy_confirmed", error: mailError });
+    }
+
+    await logAuditPublic({
+      clinicId,
+      action: "verification.legacy_confirmed",
+      entityType: "users",
+      entityId: userId,
+      metadata: { reviewerId: reviewer.id },
+    });
+  } catch (error) {
+    logger.error("verification.legacy_confirm_failed", { userId, error });
+    return { error: error instanceof Error ? error.message : FAILED };
+  }
+
+  revalidatePath("/admin/verificaciones");
+  return { success: "Habilitación confirmada." };
 }

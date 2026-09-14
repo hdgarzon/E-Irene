@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { DOCUMENTS_BUCKET, LEGACY_VERIFICATION_DEADLINE } from "@/lib/verification";
+import {
+  confirmLegacyVerification,
+  submitLegacyDocuments,
+} from "@/lib/db/legacy-verification";
 
 // Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
 // no apunta a un stack local. Estas pruebas escriben con service-role y algunas
@@ -181,5 +186,193 @@ d("vencimiento de las verificaciones heredadas", () => {
       .eq("clinic_id", f.clinicId);
     expect(error).toBeNull();
     expect((data ?? []).length).toBeGreaterThanOrEqual(1);
+  }, 30000);
+});
+
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const dl = URL && SERVICE && ANON ? describe : describe.skip;
+const RAISE_EXCEPTION = "P0001";
+
+/**
+ * Cuenta heredada tal como quedó en producción: verificada por el backfill de la
+ * 0032, con la "decisión" fechada en el alta y la purga ya marcada. Devuelve
+ * también una sesión propia, para probar lo que el usuario puede hacer por API.
+ */
+async function heredadaConSesion() {
+  const s = svc();
+  const sufijo = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const email = `heredada_${sufijo}@e-irene.test`;
+
+  const { data: auth, error: authErr } = await s.auth.admin.createUser({
+    email,
+    password: "Password123!",
+    email_confirm: true,
+  });
+  expect(authErr).toBeNull();
+
+  const { data: clinic, error: clinicErr } = await s
+    .from("clinics")
+    .insert({ name: "Clínica Heredada", slug: `heredada-${sufijo}` })
+    .select("id")
+    .single();
+  expect(clinicErr).toBeNull();
+
+  const userId = auth.user!.id;
+  const clinicId = clinic!.id as string;
+  const { error: userErr } = await s.from("users").insert({
+    id: userId,
+    clinic_id: clinicId,
+    role: "doctor",
+    full_name: "Doctor Heredado",
+    email,
+    verification_status: "verified",
+    verification_notes: NOTA_HEREDADA,
+    verification_decided_at: new Date(Date.now() - 40 * 86400000).toISOString(),
+    documents_purged_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  });
+  expect(userErr).toBeNull();
+
+  const client = createClient(URL!, ANON!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { error: loginErr } = await client.auth.signInWithPassword({
+    email,
+    password: "Password123!",
+  });
+  expect(loginErr).toBeNull();
+
+  return { s, client, userId, clinicId };
+}
+
+async function subirDocumentos(s: SupabaseClient, clinicId: string, userId: string) {
+  const cedula = `${clinicId}/${userId}/cedula-1.pdf`;
+  const tarjeta = `${clinicId}/${userId}/tarjeta-1.pdf`;
+  for (const path of [cedula, tarjeta]) {
+    const { error } = await s.storage
+      .from(DOCUMENTS_BUCKET)
+      .upload(path, `documento de prueba ${path}`, { contentType: "application/pdf", upsert: true });
+    expect(error).toBeNull();
+  }
+  return { cedula, tarjeta };
+}
+
+function declarados(paths: { cedula: string; tarjeta: string }) {
+  return {
+    profession: "Psicología clínica",
+    licenseNumber: "123456",
+    document: "1000000000",
+    idDocumentPath: paths.cedula,
+    licenseDocumentPath: paths.tarjeta,
+  };
+}
+
+async function filaDe(s: SupabaseClient, userId: string) {
+  const { data, error } = await s
+    .from("users")
+    .select(
+      "verification_status, verification_notes, verification_decided_at, verification_submitted_at, verified_by, documents_purged_at, id_document_path, license_document_path",
+    )
+    .eq("id", userId)
+    .single();
+  expect(error).toBeNull();
+  return data!;
+}
+
+dl("verificación retroactiva de las cuentas heredadas (prórroga 0043)", () => {
+  it("el plazo del barrido coincide con el que muestra la app", async () => {
+    const { data, error } = await svc().rpc("grandfather_verification_deadline");
+    expect(error).toBeNull();
+    expect(new Date(data as string).toISOString()).toBe(
+      new Date(LEGACY_VERIFICATION_DEADLINE).toISOString(),
+    );
+  });
+
+  it("la sesión de la cuenta no puede esquivar el plazo tocando su nota, sus rutas o la purga", async () => {
+    const f = await heredadaConSesion();
+    const intentos: Record<string, unknown>[] = [
+      { verification_notes: null },
+      { id_document_path: `${f.clinicId}/${f.userId}/inventado.pdf` },
+      { documents_purged_at: null },
+    ];
+    for (const patch of intentos) {
+      const { error } = await f.client.from("users").update(patch).eq("id", f.userId);
+      expect(error?.code, JSON.stringify(patch)).toBe(RAISE_EXCEPTION);
+    }
+
+    const fila = await filaDe(f.s, f.userId);
+    expect(fila.verification_notes).toBe(NOTA_HEREDADA);
+    expect(fila.id_document_path).toBeNull();
+  }, 30000);
+
+  it("subir documentos conserva el acceso, deja la decisión en blanco y la saca del barrido", async () => {
+    const f = await heredadaConSesion();
+    const paths = await subirDocumentos(f.s, f.clinicId, f.userId);
+
+    await submitLegacyDocuments({ userId: f.userId, clinicId: f.clinicId, ...declarados(paths) });
+
+    const fila = await filaDe(f.s, f.userId);
+    expect(fila.verification_status).toBe("verified");
+    expect(fila.id_document_path).toBe(paths.cedula);
+    expect(fila.license_document_path).toBe(paths.tarjeta);
+    expect(fila.verification_submitted_at).not.toBeNull();
+    // Sin decisión ni marca de purga: la purga de 30 días no toca los archivos
+    // hasta que el revisor decida (con la fecha del backfill los borraría ya).
+    expect(fila.verification_decided_at).toBeNull();
+    expect(fila.documents_purged_at).toBeNull();
+
+    await f.s.rpc("expire_grandfathered_verifications", { p_deadline: PLAZO_VENCIDO });
+    expect((await estadoDe(f.s, f.userId)).verification_status).toBe("verified");
+  }, 30000);
+
+  it("no acepta rutas sin archivo: no se sale del barrido declarando documentos que no subió", async () => {
+    const f = await heredadaConSesion();
+    const inexistentes = {
+      cedula: `${f.clinicId}/${f.userId}/no-existe.pdf`,
+      tarjeta: `${f.clinicId}/${f.userId}/tampoco.pdf`,
+    };
+
+    await expect(
+      submitLegacyDocuments({ userId: f.userId, clinicId: f.clinicId, ...declarados(inexistentes) }),
+    ).rejects.toThrow();
+
+    const fila = await filaDe(f.s, f.userId);
+    expect(fila.id_document_path).toBeNull();
+    expect(fila.verification_notes).toBe(NOTA_HEREDADA);
+  }, 30000);
+
+  it("no acepta documentos de la carpeta de otro profesional", async () => {
+    const f = await heredadaConSesion();
+    const otra = await heredadaConSesion();
+    const ajenos = await subirDocumentos(otra.s, otra.clinicId, otra.userId);
+
+    await expect(
+      submitLegacyDocuments({ userId: f.userId, clinicId: f.clinicId, ...declarados(ajenos) }),
+    ).rejects.toThrow(/ajena/);
+  }, 30000);
+
+  it("el revisor confirma la habilitación: sigue verificada, con decisión fechada y fuera del plazo", async () => {
+    const f = await heredadaConSesion();
+    const revisor = await heredadaConSesion();
+    const paths = await subirDocumentos(f.s, f.clinicId, f.userId);
+    await submitLegacyDocuments({ userId: f.userId, clinicId: f.clinicId, ...declarados(paths) });
+
+    await confirmLegacyVerification({ userId: f.userId, reviewerId: revisor.userId });
+
+    const fila = await filaDe(f.s, f.userId);
+    expect(fila.verification_status).toBe("verified");
+    expect(fila.verified_by).toBe(revisor.userId);
+    expect(fila.verification_decided_at).not.toBeNull();
+    expect(fila.verification_notes).toMatch(/retroactiva confirmada/i);
+
+    await f.s.rpc("expire_grandfathered_verifications", { p_deadline: PLAZO_VENCIDO });
+    expect((await estadoDe(f.s, f.userId)).verification_status).toBe("verified");
+  }, 30000);
+
+  it("no confirma una cuenta heredada que todavía no subió documentos", async () => {
+    const f = await heredadaConSesion();
+    await expect(
+      confirmLegacyVerification({ userId: f.userId, reviewerId: f.userId }),
+    ).rejects.toThrow();
+    expect((await filaDe(f.s, f.userId)).verification_notes).toBe(NOTA_HEREDADA);
   }, 30000);
 });

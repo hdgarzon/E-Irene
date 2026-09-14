@@ -3,12 +3,13 @@
 import { useActionState, useState, useTransition } from "react";
 import { Check, ExternalLink, Ban, X } from "lucide-react";
 import {
+  confirmLegacyVerificationAction,
   decideVerificationAction,
   getDocumentUrlAction,
   type ReviewState,
 } from "@/app/admin/verificaciones/actions";
 import type { PendingVerification } from "@/lib/db/verification";
-import { VERIFICATION_LABELS } from "@/lib/verification";
+import { VERIFICATION_LABELS, legacyVerificationState } from "@/lib/verification";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,9 +54,20 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
     decideVerificationAction,
     {},
   );
+  const [confirmState, confirmAction, confirmPending] = useActionState<ReviewState, FormData>(
+    confirmLegacyVerificationAction,
+    {},
+  );
   // Rechazar y suspender exigen motivo (lo pide decideVerificationAction), así
   // que ambos abren el mismo campo antes de poder confirmarse.
   const [mode, setMode] = useState<"reject" | "suspend" | null>(null);
+  // Cuenta aprobada por el backfill de la 0032 sin revisar credenciales.
+  const legacy = legacyVerificationState({
+    status: item.status,
+    notes: item.notes,
+    hasIdDocument: Boolean(item.idDocumentPath),
+    hasLicenseDocument: Boolean(item.licenseDocumentPath),
+  });
 
   return (
     <li className="space-y-3 py-4">
@@ -66,9 +78,17 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
             {item.email} · {item.clinicName}
           </p>
         </div>
-        <Badge className={STATUS_TONE[item.status] ?? "bg-muted text-foreground/70"}>
-          {VERIFICATION_LABELS[item.status]}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {legacy === "awaiting_review" && (
+            <Badge className="bg-blue-100 text-blue-900">Revisión retroactiva</Badge>
+          )}
+          {legacy === "needs_documents" && (
+            <Badge className="bg-amber-100 text-amber-900">Heredada · sin documentos</Badge>
+          )}
+          <Badge className={STATUS_TONE[item.status] ?? "bg-muted text-foreground/70"}>
+            {VERIFICATION_LABELS[item.status]}
+          </Badge>
+        </div>
       </div>
 
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
@@ -99,6 +119,24 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
         <p className="text-sm text-muted-foreground">
           <span className="font-medium">Nota anterior:</span> {item.notes}
         </p>
+      )}
+
+      {legacy === "awaiting_review" && !mode && (
+        <form action={confirmAction} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="userId" value={item.id} />
+          <Button type="submit" size="sm" disabled={confirmPending}>
+            <Check className="size-3.5" /> Confirmar habilitación
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Si los documentos no corresponden, suspende la cuenta.
+          </span>
+          {confirmState.error && (
+            <span className="text-xs text-destructive">{confirmState.error}</span>
+          )}
+          {confirmState.success && (
+            <span className="text-xs text-emerald-700">{confirmState.success}</span>
+          )}
+        </form>
       )}
 
       <form action={formAction} className="space-y-2">

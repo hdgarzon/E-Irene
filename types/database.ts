@@ -1614,6 +1614,7 @@ export type Database = {
         }[]
       }
       get_transcription_usage: { Args: never; Returns: Json }
+      grandfather_verification_deadline: { Args: never; Returns: string }
       is_platform_admin: { Args: never; Returns: boolean }
       mark_subscription_payment_failed: {
         Args: { p_clinic: string; p_reason: string }

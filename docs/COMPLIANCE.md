@@ -52,7 +52,7 @@
 
 | Brecha | Impacto | Estado |
 |---|---|---|
-| **Cuentas anteriores a la verificación quedaron aprobadas automáticamente** | Nadie revisó sus credenciales | La migración 0032 las marca aparte; revisión retroactiva pendiente en `/admin/verificaciones` |
+| **Cuentas anteriores a la verificación quedaron aprobadas automáticamente** | Nadie revisó sus credenciales | Deben subir cédula y tarjeta antes del 18-oct-2026: plazo de la 0040, prorrogado por la 0043 porque no tenían cómo cumplir. Conservan el acceso mientras el admin revisa en `/admin/verificaciones`; sin documentos, al vencer pierden la creación de registros clínicos |
 | **No hay acuerdos de tratamiento (DPA/BAA) con Deepgram ni OpenAI** | La política no puede afirmar que las transferencias internacionales tienen garantías contractuales | Pendiente, es gestión comercial |
 | **Canales sin credenciales en producción** | Sin `RESEND_API_KEY`, `TWILIO_*`, `DAILY_API_KEY` ni `NEXT_PUBLIC_SITE_URL`, el correo y WhatsApp no envían y las videollamadas corren en modo simulado (`https://mock.video/...`) | Pendiente, son credenciales. La app ya lo registra como `simulated` en vez de afirmar el envío |
 
