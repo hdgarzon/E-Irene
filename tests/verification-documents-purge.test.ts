@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { createHash } from "node:crypto";
+import { describe, it, expect, vi } from "vitest";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   purgeExpiredVerificationDocuments,
+  purgeOrphanVerificationDocuments,
   storeDocumentHashes,
   DOCUMENT_RETENTION_DAYS,
+  ORPHAN_DOCUMENT_GRACE_HOURS,
 } from "@/lib/db/verification-documents";
 import { DOCUMENTS_BUCKET } from "@/lib/verification";
 
@@ -169,4 +171,194 @@ d("purga de documentos de identidad", () => {
       .eq("action", "verification_docs.purge");
     expect(count).toBe(1);
   }, 30000);
+});
+
+// ============================ Huérfanos =====================================
+
+/**
+ * La API de Storage no deja fechar un archivo en el pasado, así que en vez de
+ * envejecer el archivo se adelanta el reloj del barrido más allá del margen.
+ */
+const pasadoElMargen = () =>
+  new Date(Date.now() + (ORPHAN_DOCUMENT_GRACE_HOURS + 1) * 3600000);
+
+async function subir(s: SupabaseClient, path: string) {
+  const { error } = await s.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(path, `archivo ${path}`, { contentType: "text/plain", upsert: true });
+  expect(error).toBeNull();
+}
+
+/**
+ * Cada barrido se limita a la clínica de la prueba: con el reloj adelantado,
+ * uno sobre todo el bucket borraría archivos que otras suites acaban de subir
+ * y aún no referencian.
+ */
+d("barrido de documentos huérfanos", () => {
+  it("borra los archivos de un envío anterior que el reenvío dejó sin referencia", async () => {
+    const f = await profesionalConDocumentos(1);
+    const anteriores = [
+      `${f.clinicId}/${f.userId}/cedula-0.txt`,
+      `${f.clinicId}/${f.userId}/tarjeta-0.txt`,
+    ];
+    for (const path of anteriores) await subir(f.s, path);
+
+    const result = await purgeOrphanVerificationDocuments({
+      now: pasadoElMargen(),
+      clinicId: f.clinicId,
+    });
+
+    for (const path of anteriores) expect(await existeEnBucket(f.s, path)).toBe(false);
+    expect(result.filesDeleted).toBe(2);
+  }, 30000);
+
+  it("nunca borra los documentos vigentes, por viejos que sean", async () => {
+    const f = await profesionalConDocumentos(1);
+
+    const result = await purgeOrphanVerificationDocuments({
+      now: pasadoElMargen(),
+      clinicId: f.clinicId,
+    });
+
+    expect(await existeEnBucket(f.s, f.cedula)).toBe(true);
+    expect(await existeEnBucket(f.s, f.tarjeta)).toBe(true);
+    expect(result.scanned).toBe(2);
+    expect(result.filesDeleted).toBe(0);
+  }, 30000);
+
+  it("borra lo que se subió para un envío que el servidor rechazó", async () => {
+    const f = await profesionalConDocumentos(1);
+    // Carpeta de otro profesional de la clínica cuyo envío nunca quedó guardado.
+    const rechazado = `${f.clinicId}/${randomUUID()}/cedula-${Date.now()}.pdf`;
+    await subir(f.s, rechazado);
+
+    await purgeOrphanVerificationDocuments({ now: pasadoElMargen(), clinicId: f.clinicId });
+
+    expect(await existeEnBucket(f.s, rechazado)).toBe(false);
+  }, 30000);
+
+  it("respeta el margen: no toca una subida sin referencia todavía reciente", async () => {
+    const f = await profesionalConDocumentos(1);
+    const enCurso = `${f.clinicId}/${f.userId}/cedula-${Date.now()}.pdf`;
+    await subir(f.s, enCurso);
+
+    const antesDelMargen = new Date(Date.now() + (ORPHAN_DOCUMENT_GRACE_HOURS - 1) * 3600000);
+    for (const now of [new Date(), antesDelMargen]) {
+      const result = await purgeOrphanVerificationDocuments({ now, clinicId: f.clinicId });
+      expect(result.filesDeleted).toBe(0);
+    }
+
+    expect(await existeEnBucket(f.s, enCurso)).toBe(true);
+  }, 30000);
+
+  it("deja constancia en audit_logs por clínica, sin rutas en el metadata", async () => {
+    const f = await profesionalConDocumentos(1);
+    await subir(f.s, `${f.clinicId}/${f.userId}/cedula-0.txt`);
+    await subir(f.s, `${f.clinicId}/${f.userId}/tarjeta-0.txt`);
+
+    await purgeOrphanVerificationDocuments({ now: pasadoElMargen(), clinicId: f.clinicId });
+
+    const { data } = await f.s
+      .from("audit_logs")
+      .select("entity_type, metadata")
+      .eq("clinic_id", f.clinicId)
+      .eq("action", "verification_docs.orphan_purge");
+
+    expect(data ?? []).toHaveLength(1);
+    expect(data![0].entity_type).toBe("users");
+    expect(data![0].metadata).toEqual({
+      deleted_count: 2,
+      grace_hours: ORPHAN_DOCUMENT_GRACE_HOURS,
+    });
+  }, 30000);
+
+  it("es idempotente: una segunda corrida no borra ni registra de nuevo", async () => {
+    const f = await profesionalConDocumentos(1);
+    await subir(f.s, `${f.clinicId}/${f.userId}/cedula-0.txt`);
+
+    const opciones = { now: pasadoElMargen(), clinicId: f.clinicId };
+    await purgeOrphanVerificationDocuments(opciones);
+    const segunda = await purgeOrphanVerificationDocuments(opciones);
+
+    expect(segunda.filesDeleted).toBe(0);
+    const { count } = await f.s
+      .from("audit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", f.clinicId)
+      .eq("action", "verification_docs.orphan_purge");
+    expect(count).toBe(1);
+  }, 30000);
+
+  it("sin huérfanos no registra nada en audit_logs", async () => {
+    const f = await profesionalConDocumentos(1);
+    await purgeOrphanVerificationDocuments({ now: pasadoElMargen(), clinicId: f.clinicId });
+
+    const { count } = await f.s
+      .from("audit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", f.clinicId)
+      .eq("action", "verification_docs.orphan_purge");
+    expect(count).toBe(0);
+  }, 30000);
+
+  it("limitado a una clínica, no toca los huérfanos de otra", async () => {
+    const f = await profesionalConDocumentos(1);
+    const g = await profesionalConDocumentos(1);
+    const deOtra = `${g.clinicId}/${g.userId}/cedula-0.txt`;
+    await subir(g.s, deOtra);
+
+    await purgeOrphanVerificationDocuments({ now: pasadoElMargen(), clinicId: f.clinicId });
+
+    expect(await existeEnBucket(g.s, deOtra)).toBe(true);
+  }, 30000);
+});
+
+describe("barrido de documentos huérfanos: fallos", () => {
+  it("si no puede leer las rutas vigentes, no borra nada", async () => {
+    // Con un conjunto de rutas vacío por error, todo el bucket parecería huérfano.
+    const viejo = new Date(Date.now() - 10 * 86400000).toISOString();
+    const remove = vi.fn();
+    const falla = { data: null, error: { message: "sin conexión" } };
+    const consulta: Record<string, unknown> = {
+      then: (resolve: (value: typeof falla) => void) => resolve(falla),
+    };
+    for (const metodo of ["select", "or", "gt", "order", "limit"]) {
+      consulta[metodo] = () => consulta;
+    }
+    const admin = {
+      from: () => consulta,
+      storage: {
+        from: () => ({
+          remove,
+          listV2: async () => ({
+            data: {
+              hasNext: false,
+              folders: [],
+              objects: [
+                {
+                  name: `${randomUUID()}/${randomUUID()}/cedula-1.pdf`,
+                  created_at: viejo,
+                  updated_at: viejo,
+                },
+              ],
+            },
+            error: null,
+          }),
+        }),
+      },
+    };
+
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: () => admin }));
+    try {
+      const { purgeOrphanVerificationDocuments: barrer } = await import(
+        "@/lib/db/verification-documents"
+      );
+      await expect(barrer()).rejects.toMatchObject({ message: "sin conexión" });
+      expect(remove).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("@/lib/supabase/admin");
+      vi.resetModules();
+    }
+  });
 });

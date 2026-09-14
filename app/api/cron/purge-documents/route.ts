@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { purgeExpiredVerificationDocuments } from "@/lib/db/verification-documents";
+import {
+  purgeExpiredVerificationDocuments,
+  purgeOrphanVerificationDocuments,
+  type OrphanSweepResult,
+  type PurgeResult,
+} from "@/lib/db/verification-documents";
 import { logger } from "@/lib/logger";
 
 /**
  * Borrado de los documentos de identidad del profesional cuya verificación ya
- * cumplió el plazo de retención (ver lib/db/verification-documents.ts).
+ * cumplió el plazo de retención (ver lib/db/verification-documents.ts), y de
+ * los que ya no referencia ninguna fila: envíos reemplazados o rechazados.
  *
  * Corre aquí y no en pg_cron —a diferencia de la purga de transcripciones—
  * porque hay que pasar por la API de Storage: borrar filas de
@@ -27,12 +33,25 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  let expired: PurgeResult | null = null;
   try {
-    const result = await purgeExpiredVerificationDocuments();
-    logger.info("cron_purge_docs.done", { ...result });
-    return NextResponse.json({ ok: true, ...result });
+    expired = await purgeExpiredVerificationDocuments();
+    logger.info("cron_purge_docs.done", { ...expired });
   } catch (error) {
     logger.error("cron_purge_docs.failed", { error });
+  }
+
+  // Independiente de la purga por plazo: que una falle no deja sin correr la otra.
+  let orphans: OrphanSweepResult | null = null;
+  try {
+    orphans = await purgeOrphanVerificationDocuments();
+    logger.info("cron_purge_docs.orphans_done", { ...orphans });
+  } catch (error) {
+    logger.error("cron_purge_docs.orphans_failed", { error });
+  }
+
+  if (!expired || !orphans) {
     return NextResponse.json({ error: "processing_failed" }, { status: 500 });
   }
+  return NextResponse.json({ ok: true, ...expired, orphans });
 }
