@@ -22,5 +22,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     globals: true,
+    // Antes de cualquier archivo: el Supabase local tiene que ser el de e-irene.
+    globalSetup: ["./tests/helpers/global-setup.ts"],
   },
 });

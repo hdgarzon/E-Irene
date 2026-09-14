@@ -26,6 +26,10 @@
  *   Lanzar y no saltar es deliberado: un `describe.skip` silencioso ante una
  *   URL remota escondería justo la condición peligrosa, y alguien podría
  *   creer que sus pruebas pasaron cuando en realidad no corrieron.
+ *
+ *   Que la URL sea local no garantiza que sea e-irene: otro proyecto de
+ *   Supabase puede ocupar los mismos puertos con las mismas claves. Eso lo
+ *   comprueba global-setup.ts antes de que corra la suite.
  */
 
 /** Hosts que se consideran un stack de desarrollo. */
