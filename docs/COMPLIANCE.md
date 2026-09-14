@@ -17,7 +17,7 @@
 | Minimización de datos de audio | el audio **nunca se persiste**; solo texto cifrado. Exige `mip_opt_out=true` en la URL de Deepgram, sin el cual el proveedor persiste audio para entrenar modelos. La exclusión es **por petición**, no de cuenta: una sola conexión sin el parámetro vuelve a exponer el audio | `lib/providers/deepgram.ts` (invariante que impide arrancar sin él), test de regresión, y `scripts/audit-deepgram-mip.mjs` para auditar el tráfico real del proveedor |
 | Retención de transcripción | purga automática: 30 días tras validar el reporte, techo duro de 90 días, incluidas consultas abandonadas. Cada purga queda en `audit_logs` y en `transcript_purged_at` | migración 0033 |
 | Aceptación de la política por el profesional | compuerta en `/terminos`: sin aceptar la versión vigente no hay acceso. Prueba inmutable con versión + hash SHA-256 + IP + user-agent; autorización comercial separada | migración 0035; `lib/legal.ts` |
-| Verificación de habilitación profesional | cédula + tarjeta profesional con aprobación manual; RLS `auth_can_access_clinical()` bloquea crear pacientes/consultas sin verificar, y un trigger impide auto-verificarse | migración 0032; `lib/verification.ts` |
+| Verificación de habilitación profesional | cédula + tarjeta profesional con aprobación manual; RLS `auth_can_access_clinical()` bloquea crear pacientes/consultas sin verificar. Con la sesión no se puede auto-verificar, cambiar el propio rol, insertar perfiles, ni declarar documentos ajenos o sacarlos de la purga | migraciones 0032, 0043 y 0044; `lib/verification.ts` |
 | Firma del profesional en reportes | validación con `validated_by`/`validated_at` | `reports` |
 | Almacenamiento seguro de archivos | buckets privados con RLS por clínica | migración 0003 |
 

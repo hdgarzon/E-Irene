@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   LEGACY_VERIFICATION_DEADLINE,
+  buildLegacyReturnNote,
+  legacyReturnReason,
   legacyVerificationState,
   type VerificationStatus,
 } from "@/lib/verification";
@@ -39,6 +41,21 @@ describe("verificación heredada", () => {
       ),
     ).toBe("none");
     expect(legacyVerificationState(cuenta({ notes: null }))).toBe("none");
+  });
+
+  it("una secretaria heredada no tiene nada que verificar; un doctor sí", () => {
+    expect(legacyVerificationState(cuenta({ role: "secretaria" }))).toBe("none");
+    expect(legacyVerificationState(cuenta({ role: "doctor" }))).toBe("needs_documents");
+  });
+
+  it("con los documentos devueltos vuelve a deberlos, y la app puede mostrar el motivo", () => {
+    const nota = buildLegacyReturnNote("14/09/2026", " La tarjeta está ilegible: tómale otra foto ");
+    expect(legacyVerificationState(cuenta({ notes: nota }))).toBe("needs_documents");
+    expect(legacyReturnReason(nota)).toBe("La tarjeta está ilegible: tómale otra foto");
+
+    expect(legacyReturnReason(NOTA_HEREDADA)).toBeNull();
+    expect(legacyReturnReason("Verificación retroactiva confirmada el 20/09/2026.")).toBeNull();
+    expect(legacyReturnReason(null)).toBeNull();
   });
 
   it("una heredada que el plazo ya degradó sigue el camino normal de verificación", () => {

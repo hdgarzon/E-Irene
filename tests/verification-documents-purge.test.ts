@@ -169,4 +169,25 @@ d("purga de documentos de identidad", () => {
       .eq("action", "verification_docs.purge");
     expect(count).toBe(1);
   }, 30000);
+
+  it("purga también a quien ya tenía la marca de una purga anterior y volvió a declarar documentos", async () => {
+    const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
+    // Como las cuentas heredadas: una purga pasó sobre la fila cuando no tenía archivos.
+    const { error: prepErr } = await f.s
+      .from("users")
+      .update({ documents_purged_at: hace(60) })
+      .eq("id", f.userId);
+    expect(prepErr).toBeNull();
+
+    await purgeExpiredVerificationDocuments();
+
+    expect(await existeEnBucket(f.s, f.cedula)).toBe(false);
+    const { data } = await f.s
+      .from("users")
+      .select("id_document_path, license_document_path")
+      .eq("id", f.userId)
+      .single();
+    expect(data?.id_document_path).toBeNull();
+    expect(data?.license_document_path).toBeNull();
+  }, 30000);
 });

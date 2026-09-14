@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DOCUMENTS_BUCKET, LEGACY_VERIFICATION_DEADLINE } from "@/lib/verification";
 import {
   confirmLegacyVerification,
+  returnLegacyDocuments,
   submitLegacyDocuments,
 } from "@/lib/db/legacy-verification";
 
@@ -374,5 +375,72 @@ dl("verificación retroactiva de las cuentas heredadas (prórroga 0043)", () => 
       confirmLegacyVerification({ userId: f.userId, reviewerId: f.userId }),
     ).rejects.toThrow();
     expect((await filaDe(f.s, f.userId)).verification_notes).toBe(NOTA_HEREDADA);
+  }, 30000);
+});
+
+dl("devolución de documentos y secretarias heredadas (0044)", () => {
+  it("devolver documentos la deja otra vez pendiente de subirlos, con el motivo, sin archivos y dentro del plazo", async () => {
+    const f = await heredadaConSesion();
+    const paths = await subirDocumentos(f.s, f.clinicId, f.userId);
+    await submitLegacyDocuments({ userId: f.userId, clinicId: f.clinicId, ...declarados(paths) });
+
+    const devuelto = await returnLegacyDocuments({
+      userId: f.userId,
+      reason: "La tarjeta profesional está ilegible",
+    });
+    expect(devuelto.filesRemoved).toBe(true);
+
+    const fila = await filaDe(f.s, f.userId);
+    expect(fila.verification_status).toBe("verified");
+    expect(fila.id_document_path).toBeNull();
+    expect(fila.license_document_path).toBeNull();
+    expect(fila.verification_notes).toMatch(/^Cuenta anterior a la verificaci/);
+    expect(fila.verification_notes).toMatch(/ilegible/);
+
+    const { data: archivo } = await f.s.storage.from(DOCUMENTS_BUCKET).download(paths.cedula);
+    expect(archivo).toBeNull();
+
+    // Sin documentos, el plazo vuelve a aplicarle.
+    await f.s.rpc("expire_grandfathered_verifications", { p_deadline: PLAZO_VENCIDO });
+    expect((await estadoDe(f.s, f.userId)).verification_status).toBe("pending_documents");
+  }, 30000);
+
+  it("no devuelve documentos de una cuenta que no los subió", async () => {
+    const f = await heredadaConSesion();
+    await expect(
+      returnLegacyDocuments({ userId: f.userId, reason: "Motivo cualquiera" }),
+    ).rejects.toThrow();
+  }, 30000);
+
+  it("el barrido del plazo no degrada a una secretaria heredada: no se verifica", async () => {
+    const s = svc();
+    const sufijo = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const email = `secretaria_heredada_${sufijo}@e-irene.test`;
+    const { data: auth, error: authErr } = await s.auth.admin.createUser({
+      email,
+      password: "Password123!",
+      email_confirm: true,
+    });
+    expect(authErr).toBeNull();
+    const { data: clinic, error: clinicErr } = await s
+      .from("clinics")
+      .insert({ name: "Clínica Secretaria Heredada", slug: `secretaria-heredada-${sufijo}` })
+      .select("id")
+      .single();
+    expect(clinicErr).toBeNull();
+    const userId = auth.user!.id;
+    const { error: userErr } = await s.from("users").insert({
+      id: userId,
+      clinic_id: clinic!.id,
+      role: "secretaria",
+      full_name: "Secretaria Heredada",
+      email,
+      verification_status: "verified",
+      verification_notes: NOTA_HEREDADA,
+    });
+    expect(userErr).toBeNull();
+
+    await s.rpc("expire_grandfathered_verifications", { p_deadline: PLAZO_VENCIDO });
+    expect((await estadoDe(s, userId)).verification_status).toBe("verified");
   }, 30000);
 });

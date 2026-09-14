@@ -79,7 +79,10 @@ export async function purgeExpiredVerificationDocuments(): Promise<PurgeResult> 
   const { data: expired, error } = await admin
     .from("users")
     .select("id, clinic_id, id_document_path, license_document_path")
-    .is("documents_purged_at", null)
+    // Sin marca de purga, o con rutas vigentes aunque la tenga: una fila que
+    // volvió a declarar documentos después de una purga anterior también debe
+    // borrarlos a los 30 días de su nueva decisión.
+    .or("documents_purged_at.is.null,id_document_path.not.is.null,license_document_path.not.is.null")
     .not("verification_decided_at", "is", null)
     .lt("verification_decided_at", cutoff);
   if (error) throw error;

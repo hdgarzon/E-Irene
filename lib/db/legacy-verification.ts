@@ -4,6 +4,7 @@ import { dayKey } from "@/lib/dates";
 import {
   DOCUMENTS_BUCKET,
   LEGACY_VERIFICATION_NOTE_PREFIX,
+  buildLegacyReturnNote,
   isOwnDocumentPath,
   legacyVerificationState,
   roleRequiresVerification,
@@ -56,6 +57,7 @@ function stateOf(row: LegacyRow) {
     notes: row.verification_notes,
     hasIdDocument: Boolean(row.id_document_path),
     hasLicenseDocument: Boolean(row.license_document_path),
+    role: row.role,
   });
 }
 
@@ -160,6 +162,9 @@ export async function confirmLegacyVerification(params: {
     .eq("id", params.userId)
     .eq("verification_status", "verified")
     .like("verification_notes", `${LEGACY_VERIFICATION_NOTE_PREFIX}%`)
+    // Con documentos todavía: si otro revisor los devolvió entre la lectura y
+    // esta escritura, no se confirma una habilitación sin nada que la respalde.
+    .or("id_document_path.not.is.null,license_document_path.not.is.null")
     .select("id");
   if (error) throw error;
   if (!data || data.length === 0) {
@@ -167,4 +172,64 @@ export async function confirmLegacyVerification(params: {
   }
 
   return { clinicId: row.clinic_id, email: row.email, fullName: row.full_name };
+}
+
+/**
+ * El revisor devuelve los documentos de una cuenta heredada que no sirven
+ * (ilegibles, equivocados). La cuenta sigue verificada y vuelve a tener que
+ * subirlos antes del plazo: suspenderla por un error de carga le cortaría el
+ * acceso clínico a quien sí puede estar habilitado. La nota conserva el
+ * prefijo del backfill, así el barrido del plazo la sigue alcanzando.
+ *
+ * Los archivos devueltos se borran: no respaldan ninguna decisión. Primero se
+ * desvinculan de la cuenta y después se borran; si el borrado falla, quedan
+ * huérfanos pero la cuenta ya no los declara, y se avisa al llamador.
+ */
+export async function returnLegacyDocuments(params: {
+  userId: string;
+  reason: string;
+}): Promise<{ clinicId: string; email: string; fullName: string; filesRemoved: boolean }> {
+  const row = await readRow(params.userId);
+  if (stateOf(row) !== "awaiting_review") {
+    throw new Error("La cuenta no tiene documentos heredados por revisar");
+  }
+
+  const [year, month, day] = dayKey(new Date()).split("-");
+  const admin = createAdminClient();
+  let update = admin
+    .from("users")
+    .update({
+      id_document_path: null,
+      license_document_path: null,
+      verification_submitted_at: null,
+      verification_notes: buildLegacyReturnNote(`${day}/${month}/${year}`, params.reason),
+    })
+    .eq("id", params.userId)
+    .eq("verification_status", "verified")
+    .like("verification_notes", `${LEGACY_VERIFICATION_NOTE_PREFIX}%`);
+  // Optimista y exacto: se desvinculan —y abajo se borran— los mismos archivos
+  // que se leyeron, no otros que hubieran llegado entre tanto.
+  update = row.id_document_path
+    ? update.eq("id_document_path", row.id_document_path)
+    : update.is("id_document_path", null);
+  update = row.license_document_path
+    ? update.eq("license_document_path", row.license_document_path)
+    : update.is("license_document_path", null);
+  const { data, error } = await update.select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("La verificación cambió antes de devolver los documentos");
+  }
+
+  const paths = [row.id_document_path, row.license_document_path].filter(
+    (p): p is string => Boolean(p),
+  );
+  const { error: removeError } = await admin.storage.from(DOCUMENTS_BUCKET).remove(paths);
+
+  return {
+    clinicId: row.clinic_id,
+    email: row.email,
+    fullName: row.full_name,
+    filesRemoved: !removeError,
+  };
 }

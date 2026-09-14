@@ -279,11 +279,12 @@ dv("verificación profesional (RLS)", () => {
   });
 
   it("un admin de clínica NO puede verificar a otro miembro de su clínica", async () => {
-    // El admin de la clínica sí puede crear el perfil del colega (users_insert),
-    // pero no aprobarlo.
+    // El perfil del colega lo crea el servidor (addMember, service-role): desde
+    // la 0044 la sesión no inserta en users. Lo que se prueba es que el admin de
+    // la clínica no pueda aprobarlo.
     const { userId: colegaId } = await signUpUser();
     await setVerification(doc.userId, "verified"); // el admin ya está habilitado
-    const { error: insertErr } = await doc.client.from("users").insert({
+    const { error: insertErr } = await service().from("users").insert({
       id: colegaId,
       clinic_id: doc.clinicId,
       role: "doctor",
@@ -402,4 +403,87 @@ dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
     expect(error).not.toBeNull();
     expect((await clinicRow()).suspended_at).not.toBeNull();
   });
+});
+
+dv("perfiles: lo que la sesión no puede escribir (0044)", () => {
+  let A: { client: SupabaseClient; clinicId: string; userId: string };
+
+  beforeAll(async () => {
+    A = await bootstrapClinic("Clínica Perfiles");
+  }, 30000);
+
+  it("un admin de clínica NO puede insertar perfiles con su sesión, ni ya verificados", async () => {
+    const { userId: otraCuenta } = await signUpUser();
+    const { error } = await A.client.from("users").insert({
+      id: otraCuenta,
+      clinic_id: A.clinicId,
+      role: "doctor",
+      full_name: "Colega Inventado",
+      email: `colega_${otraCuenta.slice(0, 8)}@e-irene.test`,
+      verification_status: "verified",
+    });
+    expect(error?.code).toBe("42501");
+
+    const { data } = await service().from("users").select("id").eq("id", otraCuenta);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("una secretaria NO puede cambiarse a admin con su sesión", async () => {
+    const { client, userId } = await signUpUser();
+    const { error: insertErr } = await service().from("users").insert({
+      id: userId,
+      clinic_id: A.clinicId,
+      role: "secretaria",
+      full_name: "Secretaria Demo",
+      email: `secretaria_${userId.slice(0, 8)}@e-irene.test`,
+    });
+    expect(insertErr).toBeNull();
+
+    const { error } = await client.from("users").update({ role: "admin" }).eq("id", userId);
+    expect(error?.code).toBe("P0001");
+
+    const { data } = await service().from("users").select("role").eq("id", userId).single();
+    expect(data?.role).toBe("secretaria");
+  });
+
+  it("un envío a revisión NO acepta rutas de la carpeta de otro profesional", async () => {
+    const doc = await bootstrapClinic("Clínica Rutas", { verified: false });
+    const { error } = await doc.client
+      .from("users")
+      .update({
+        verification_status: "pending_review",
+        id_document_path: `${doc.clinicId}/${A.userId}/cedula.pdf`,
+        license_document_path: `${doc.clinicId}/${doc.userId}/tarjeta.pdf`,
+      })
+      .eq("id", doc.userId);
+    expect(error?.code).toBe("P0001");
+  }, 30000);
+
+  it("el envío a revisión reinicia la marca de purga y las huellas, aunque la sesión mande otra cosa", async () => {
+    const doc = await bootstrapClinic("Clínica Purga", { verified: false });
+    const { error: prepErr } = await service()
+      .from("users")
+      .update({ documents_purged_at: new Date().toISOString(), id_document_hash: "a".repeat(64) })
+      .eq("id", doc.userId);
+    expect(prepErr).toBeNull();
+
+    const { error } = await doc.client
+      .from("users")
+      .update({
+        verification_status: "pending_review",
+        id_document_path: `${doc.clinicId}/${doc.userId}/cedula.pdf`,
+        license_document_path: `${doc.clinicId}/${doc.userId}/tarjeta.pdf`,
+        documents_purged_at: "2020-01-01T00:00:00Z",
+      })
+      .eq("id", doc.userId);
+    expect(error).toBeNull();
+
+    const { data } = await service()
+      .from("users")
+      .select("documents_purged_at, id_document_hash")
+      .eq("id", doc.userId)
+      .single();
+    expect(data?.documents_purged_at).toBeNull();
+    expect(data?.id_document_hash).toBeNull();
+  }, 30000);
 });

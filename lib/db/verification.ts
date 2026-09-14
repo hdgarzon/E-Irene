@@ -84,6 +84,12 @@ export async function submitForReview(params: {
       // no debe seguir mostrándose mientras se revisa el nuevo envío.
       verification_decided_at: null,
       verification_notes: null,
+      // Documentos nuevos, plazo de purga nuevo. Si la marca quedó puesta por
+      // una purga anterior (las cuentas heredadas la tienen), estos archivos no
+      // se borrarían nunca. El trigger de la 0044 lo impone igual.
+      documents_purged_at: null,
+      id_document_hash: null,
+      license_document_hash: null,
     })
     .eq("id", params.userId);
   if (error) throw error;

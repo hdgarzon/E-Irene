@@ -278,3 +278,46 @@ export function buildVerificationDecisionEmail(input: {
     ),
   };
 }
+
+/**
+ * Documentos devueltos a una cuenta heredada (migración 0044). No es un rechazo:
+ * la cuenta conserva el acceso y solo tiene que volver a subirlos antes del
+ * plazo. Con la plantilla de rechazo leería que perdió el acceso a registrar
+ * pacientes, y no es cierto.
+ */
+export function buildLegacyDocumentsReturnedEmail(input: {
+  to: string;
+  doctorName: string;
+  reason: string;
+  /** Fecha legible del plazo, p. ej. "18 de octubre de 2026". */
+  deadline: string;
+  actionUrl: string;
+}): EmailMessage {
+  const nombre = input.doctorName.split(" ")[0] || input.doctorName;
+  const motivo = input.reason.trim();
+
+  return {
+    to: input.to,
+    subject: "Necesitamos que vuelvas a subir tus documentos",
+    text:
+      `Hola ${nombre}, revisamos los documentos que subiste para confirmar tu habilitación ` +
+      `profesional y necesitamos que los vuelvas a enviar. Motivo: ${motivo}. Súbelos antes del ` +
+      `${input.deadline}; mientras tanto conservas el acceso. ${input.actionUrl}`,
+    html: wrapPlatform(
+      "Vuelve a subir tus documentos",
+      `<p>Hola <strong>${nombre}</strong>,</p>
+       <p>Revisamos los documentos que subiste para confirmar tu habilitación profesional y
+       necesitamos que los vuelvas a enviar.</p>
+       <p style="background:#fff7e6;border-radius:8px;padding:12px;font-size:14px;color:#8a5300">
+         <strong>Motivo:</strong> ${motivo}
+       </p>
+       <p>Súbelos antes del <strong>${input.deadline}</strong>. Mientras tanto
+       <strong>conservas el acceso</strong> a la plataforma.</p>
+       <p style="margin:20px 0">
+         <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+           Subir documentos
+         </a>
+       </p>`,
+    ),
+  };
+}

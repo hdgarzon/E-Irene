@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildVerificationDecisionEmail } from "@/lib/email/templates";
+import {
+  buildLegacyDocumentsReturnedEmail,
+  buildVerificationDecisionEmail,
+} from "@/lib/email/templates";
 
 const base = {
   to: "doctora@ejemplo.co",
@@ -90,5 +93,31 @@ describe("correo de decisión de verificación", () => {
     expect(mail.html).not.toContain("Motivo:");
     expect(mail.subject).toBeTruthy();
     expect(mail.text).toBeTruthy();
+  });
+});
+
+describe("correo de documentos devueltos a una cuenta heredada", () => {
+  const mail = buildLegacyDocumentsReturnedEmail({
+    ...base,
+    reason: "La foto de la cédula está cortada",
+    deadline: "18 de octubre de 2026",
+  });
+
+  it("incluye el motivo y el plazo", () => {
+    expect(mail.html).toContain("La foto de la cédula está cortada");
+    expect(mail.text).toContain("La foto de la cédula está cortada");
+    expect(mail.html).toContain("18 de octubre de 2026");
+    expect(mail.text).toContain("18 de octubre de 2026");
+  });
+
+  it("no es un rechazo: aclara que conserva el acceso y lleva a subirlos", () => {
+    expect(mail.subject).not.toMatch(/no pudimos verificar/i);
+    expect(mail.html).not.toMatch(/no pudimos confirmar/i);
+    expect(mail.html).toMatch(/conservas el acceso/i);
+    expect(mail.html).toContain("https://e-irene.co/verificacion");
+  });
+
+  it("usa el pie de la plataforma, no el de paciente", () => {
+    expect(mail.html).toContain("tu cuenta profesional");
   });
 });
