@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { TestProject } from "vitest/node";
 import { isLocalSupabase } from "./supabase-env";
 
 /**
@@ -15,7 +16,7 @@ import { isLocalSupabase } from "./supabase-env";
  *   (billing_grace_period, migración 0041) y antes de que corra ningún archivo
  *   de pruebas: abortar aquí no deja escribir ni un registro.
  */
-export default async function checkSupabaseProject(): Promise<void> {
+async function checkSupabaseProject(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   // Sin stack, las pruebas que lo necesitan se saltan solas; con una URL remota,
@@ -35,4 +36,11 @@ export default async function checkSupabaseProject(): Promise<void> {
         `No se corrió ninguna prueba: no se escribió nada en esa base.`,
     );
   }
+}
+
+export default async function setup(project: TestProject): Promise<void> {
+  await checkSupabaseProject();
+  // En modo watch el globalSetup corre una sola vez: si a mitad de la sesión otro
+  // proyecto toma los puertos, cada re-ejecución vuelve a comprobarlo.
+  project.onTestsRerun(checkSupabaseProject);
 }
