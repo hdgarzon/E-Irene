@@ -88,6 +88,40 @@ describe("correo de decisión de verificación", () => {
     });
   });
 
+  describe("escape de HTML", () => {
+    const INYECCION = '<a href="https://example.com">x</a>';
+
+    it("el motivo sale escapado en html y literal en text", () => {
+      const mail = buildVerificationDecisionEmail({ ...base, decision: "rejected", notes: INYECCION });
+      expect(mail.html).not.toContain(INYECCION);
+      expect(mail.html).not.toContain('href="https://example.com"');
+      expect(mail.html).toContain("&lt;a href=&quot;https://example.com&quot;&gt;x&lt;/a&gt;");
+      expect(mail.text).toContain(INYECCION);
+    });
+
+    it("el nombre de pila sale escapado", () => {
+      const mail = buildVerificationDecisionEmail({
+        ...base,
+        doctorName: '<img src="https://example.com/x.png"> Demo',
+        decision: "verified",
+      });
+      expect(mail.html).not.toContain("<img");
+      expect(mail.html).toContain("&lt;img");
+    });
+
+    it("con URL que no es http(s), el rechazo no lleva enlace pero sigue indicando qué hacer", () => {
+      const mail = buildVerificationDecisionEmail({
+        ...base,
+        decision: "rejected",
+        notes: "Documento ilegible",
+        actionUrl: "javascript:alert(1)",
+      });
+      expect(mail.html).not.toContain("javascript:");
+      expect(mail.html).toMatch(/volver a enviar tus documentos/i);
+      expect(mail.html).toContain("Documento ilegible");
+    });
+  });
+
   it("sin motivo, el correo sigue siendo coherente", () => {
     const mail = buildVerificationDecisionEmail({ ...base, decision: "rejected", notes: null });
     expect(mail.html).not.toContain("Motivo:");
@@ -119,5 +153,32 @@ describe("correo de documentos devueltos a una cuenta heredada", () => {
 
   it("usa el pie de la plataforma, no el de paciente", () => {
     expect(mail.html).toContain("tu cuenta profesional");
+  });
+
+  it("el motivo, el nombre y el plazo salen escapados en html y literales en text", () => {
+    const INYECCION = '<a href="https://example.com">x</a>';
+    const conInyeccion = buildLegacyDocumentsReturnedEmail({
+      ...base,
+      doctorName: '<img src="https://example.com/x.png"> Demo',
+      reason: INYECCION,
+      deadline: INYECCION,
+    });
+    expect(conInyeccion.html).not.toContain(INYECCION);
+    expect(conInyeccion.html).not.toContain('href="https://example.com"');
+    expect(conInyeccion.html).not.toContain("<img");
+    expect(conInyeccion.html).toContain("&lt;a href=&quot;https://example.com&quot;&gt;x&lt;/a&gt;");
+    expect(conInyeccion.text).toContain(INYECCION);
+  });
+
+  it("con URL que no es http(s) no lleva enlace pero conserva motivo y plazo", () => {
+    const sinEnlace = buildLegacyDocumentsReturnedEmail({
+      ...base,
+      reason: "La foto de la cédula está cortada",
+      deadline: "18 de octubre de 2026",
+      actionUrl: "javascript:alert(1)",
+    });
+    expect(sinEnlace.html).not.toContain("javascript:");
+    expect(sinEnlace.html).toContain("La foto de la cédula está cortada");
+    expect(sinEnlace.html).toContain("18 de octubre de 2026");
   });
 });
