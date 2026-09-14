@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Archivos que genera `supabase start` (el runtime de edge functions, minificado).
+    "supabase/.temp/**",
   ]),
 ]);
 
