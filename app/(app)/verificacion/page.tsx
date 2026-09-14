@@ -6,6 +6,7 @@ import {
   VERIFICATION_LABELS,
   LEGACY_VERIFICATION_DEADLINE,
   canSubmitDocuments,
+  legacyReturnReason,
   legacyVerificationState,
   roleRequiresVerification,
   type VerificationStatus,
@@ -40,7 +41,10 @@ export default async function VerificacionPage() {
   const { status } = verification;
   const Icon = ICONS[status];
   // Cuenta aprobada por el backfill de la 0032 que todavía debe verificarse.
-  const legacy = legacyVerificationState(verification);
+  const legacy = legacyVerificationState({ ...verification, role: user.role });
+  // Motivo, si el revisor le devolvió los documentos que había subido.
+  const returnReason =
+    legacy === "needs_documents" ? legacyReturnReason(verification.notes) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -92,6 +96,11 @@ export default async function VerificacionPage() {
                 ? `Tu cuenta es anterior a la verificación obligatoria y se aprobó sin revisar documentos. Sube tu cédula y tu tarjeta profesional antes del ${formatLongDate(LEGACY_VERIFICATION_DEADLINE)}: sin ellos, desde esa fecha no podrás crear pacientes ni consultas. Mientras tanto conservas el acceso.`
                 : "Estamos revisando tus documentos. Conservas el acceso completo mientras tanto."}
             </p>
+            {returnReason && (
+              <p className="text-sm">
+                <span className="font-medium">Documentos devueltos:</span> {returnReason}
+              </p>
+            )}
             {legacy === "awaiting_review" && verification.submittedAt && (
               <p className="text-sm opacity-75">
                 Enviados el {formatFullDate(verification.submittedAt)}.

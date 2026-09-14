@@ -3,13 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { decideVerification, getDocumentUrl } from "@/lib/db/verification";
-import { confirmLegacyVerification } from "@/lib/db/legacy-verification";
+import {
+  confirmLegacyVerification,
+  returnLegacyDocuments,
+} from "@/lib/db/legacy-verification";
 import { storeDocumentHashes } from "@/lib/db/verification-documents";
 import { logAuditPublic } from "@/lib/db/audit";
 import { getEmailProvider } from "@/lib/email/providers";
-import { buildVerificationDecisionEmail } from "@/lib/email/templates";
+import {
+  buildLegacyDocumentsReturnedEmail,
+  buildVerificationDecisionEmail,
+} from "@/lib/email/templates";
 import { appBaseUrl } from "@/lib/app-url";
+import { formatLongDate } from "@/lib/dates";
 import { logger } from "@/lib/logger";
+import { LEGACY_VERIFICATION_DEADLINE } from "@/lib/verification";
 
 export type ReviewState = { error?: string; success?: string };
 
@@ -98,7 +106,8 @@ export async function getDocumentUrlAction(path: string): Promise<string | null>
  * Confirma la habilitación de una cuenta heredada tras revisar sus documentos
  * (migración 0043). No pasa por decideVerification porque no hay transición de
  * estado: la cuenta ya figuraba como verificada sin que nadie hubiera visto sus
- * credenciales. Si los documentos no corresponden, lo que procede es suspender.
+ * credenciales. Si los documentos no sirven, se devuelven
+ * (returnLegacyDocumentsAction); si muestran que no está habilitado, se suspende.
  */
 export async function confirmLegacyVerificationAction(
   _prev: ReviewState,
@@ -150,4 +159,64 @@ export async function confirmLegacyVerificationAction(
 
   revalidatePath("/admin/verificaciones");
   return { success: "Habilitación confirmada." };
+}
+
+/**
+ * Devuelve los documentos de una cuenta heredada que no sirven, sin suspenderla
+ * (migración 0044): sigue verificada y vuelve a tener que subirlos antes del
+ * plazo. Suspender por un error de carga le cortaría el acceso clínico.
+ */
+export async function returnLegacyDocumentsAction(
+  _prev: ReviewState,
+  formData: FormData,
+): Promise<ReviewState> {
+  const reviewer = await requirePlatformAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!userId) return { error: FAILED };
+  // Sin motivo, el profesional no sabe qué corregir.
+  if (reason.length < 5) {
+    return { error: "Indica qué debe corregir: el profesional lo verá en su pantalla." };
+  }
+
+  try {
+    const { clinicId, email, fullName, filesRemoved } = await returnLegacyDocuments({
+      userId,
+      reason,
+    });
+    if (!filesRemoved) {
+      logger.error("verification.legacy_return_files_not_removed", {
+        userId,
+        action: "los archivos devueltos quedaron en professional-docs: borrarlos a mano",
+      });
+    }
+
+    try {
+      await getEmailProvider().send(
+        buildLegacyDocumentsReturnedEmail({
+          to: email,
+          doctorName: fullName,
+          reason,
+          deadline: formatLongDate(LEGACY_VERIFICATION_DEADLINE),
+          actionUrl: `${appBaseUrl()}/verificacion`,
+        }),
+      );
+    } catch (mailError) {
+      logger.error("verification.email_failed", { userId, decision: "legacy_returned", error: mailError });
+    }
+
+    await logAuditPublic({
+      clinicId,
+      action: "verification.legacy_documents_returned",
+      entityType: "users",
+      entityId: userId,
+      metadata: { reviewerId: reviewer.id, reason },
+    });
+  } catch (error) {
+    logger.error("verification.legacy_return_failed", { userId, error });
+    return { error: error instanceof Error ? error.message : FAILED };
+  }
+
+  revalidatePath("/admin/verificaciones");
+  return { success: "Documentos devueltos." };
 }

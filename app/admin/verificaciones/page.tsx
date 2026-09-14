@@ -10,6 +10,7 @@ import { AdminVerificationRow } from "@/components/admin-verification-row";
 function legacyStateOf(v: PendingVerification) {
   return legacyVerificationState({
     status: v.status,
+    role: v.role,
     notes: v.notes,
     hasIdDocument: Boolean(v.idDocumentPath),
     hasLicenseDocument: Boolean(v.licenseDocumentPath),

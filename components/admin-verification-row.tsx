@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Check, ExternalLink, Ban, X } from "lucide-react";
+import { Check, ExternalLink, Ban, Undo2, X } from "lucide-react";
 import {
   confirmLegacyVerificationAction,
   decideVerificationAction,
   getDocumentUrlAction,
+  returnLegacyDocumentsAction,
   type ReviewState,
 } from "@/app/admin/verificaciones/actions";
 import type { PendingVerification } from "@/lib/db/verification";
@@ -58,16 +59,26 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
     confirmLegacyVerificationAction,
     {},
   );
+  const [returnState, returnAction, returnPending] = useActionState<ReviewState, FormData>(
+    returnLegacyDocumentsAction,
+    {},
+  );
+  // Devolver documentos heredados abre su propio campo de motivo.
+  const [returning, setReturning] = useState(false);
   // Rechazar y suspender exigen motivo (lo pide decideVerificationAction), así
   // que ambos abren el mismo campo antes de poder confirmarse.
   const [mode, setMode] = useState<"reject" | "suspend" | null>(null);
   // Cuenta aprobada por el backfill de la 0032 sin revisar credenciales.
   const legacy = legacyVerificationState({
     status: item.status,
+    role: item.role,
     notes: item.notes,
     hasIdDocument: Boolean(item.idDocumentPath),
     hasLicenseDocument: Boolean(item.licenseDocumentPath),
   });
+  // Solo mientras la cuenta sigue esperando revisión: devueltos los documentos,
+  // la fila cambia de estado y vuelven los demás botones.
+  const returningDocuments = returning && legacy === "awaiting_review";
 
   return (
     <li className="space-y-3 py-4">
@@ -121,14 +132,18 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
         </p>
       )}
 
-      {legacy === "awaiting_review" && !mode && (
+      {legacy === "awaiting_review" && !mode && !returningDocuments && (
         <form action={confirmAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="userId" value={item.id} />
           <Button type="submit" size="sm" disabled={confirmPending}>
             <Check className="size-3.5" /> Confirmar habilitación
           </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setReturning(true)}>
+            <Undo2 className="size-3.5" /> Devolver documentos
+          </Button>
           <span className="text-xs text-muted-foreground">
-            Si los documentos no corresponden, suspende la cuenta.
+            Si los documentos no sirven, devuélvelos para que los suba de nuevo. Suspende solo si
+            hay un problema con la habilitación.
           </span>
           {confirmState.error && (
             <span className="text-xs text-destructive">{confirmState.error}</span>
@@ -137,6 +152,33 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
             <span className="text-xs text-emerald-700">{confirmState.success}</span>
           )}
         </form>
+      )}
+
+      {returningDocuments && (
+        <form action={returnAction} className="space-y-2">
+          <input type="hidden" name="userId" value={item.id} />
+          <Textarea
+            name="reason"
+            required
+            rows={2}
+            placeholder="Qué debe corregir — el profesional lo verá en su pantalla"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" size="sm" variant="outline" disabled={returnPending}>
+              Confirmar devolución
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setReturning(false)}>
+              Cancelar
+            </Button>
+            {returnState.error && (
+              <span className="text-xs text-destructive">{returnState.error}</span>
+            )}
+          </div>
+        </form>
+      )}
+
+      {returnState.success && !returningDocuments && (
+        <p className="text-xs text-emerald-700">{returnState.success}</p>
       )}
 
       <form action={formAction} className="space-y-2">
@@ -172,7 +214,7 @@ export function AdminVerificationRow({ item }: { item: PendingVerification }) {
             </>
           )}
 
-          {item.status === "verified" && !mode && (
+          {item.status === "verified" && !mode && !returningDocuments && (
             <Button
               type="button"
               size="sm"

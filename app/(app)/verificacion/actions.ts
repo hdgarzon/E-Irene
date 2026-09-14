@@ -41,7 +41,7 @@ export async function submitVerificationAction(
   if (!current) return { error: FAILED };
   // Las cuentas heredadas figuran como verificadas y aun así deben aportar
   // documentos (migración 0043): ese envío no pasa por la máquina de estados.
-  const legacy = legacyVerificationState(current);
+  const legacy = legacyVerificationState({ ...current, role: user.role });
   if (legacy === "awaiting_review") {
     return { error: "Ya recibimos tus documentos; los estamos revisando." };
   }

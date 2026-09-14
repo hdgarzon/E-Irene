@@ -192,17 +192,45 @@ export type LegacyVerificationState =
 
 /**
  * ¿Es una cuenta aprobada por el backfill de la 0032 que aún debe verificarse?
- * Misma regla que expire_grandfathered_verifications: verificada, con la nota
- * del backfill y, para seguir pendiente de documentos, sin ninguno aportado.
+ * Misma regla que expire_grandfathered_verifications: verificada, de un rol que
+ * ejerce, con la nota del backfill y, para seguir pendiente de documentos, sin
+ * ninguno aportado. El backfill también marcó a las secretarias, que no se
+ * verifican: con el rol, quedan fuera (migración 0044).
  */
 export function legacyVerificationState(v: {
   status: VerificationStatus;
   notes: string | null;
   hasIdDocument: boolean;
   hasLicenseDocument: boolean;
+  role?: UserRole;
 }): LegacyVerificationState {
+  if (v.role && !roleRequiresVerification(v.role)) return "none";
   if (v.status !== "verified" || !v.notes?.startsWith(LEGACY_VERIFICATION_NOTE_PREFIX)) {
     return "none";
   }
   return v.hasIdDocument || v.hasLicenseDocument ? "awaiting_review" : "needs_documents";
+}
+
+const LEGACY_RETURN_MARKER = "; documentos devueltos el ";
+
+/**
+ * Nota que deja el revisor al devolver los documentos de una cuenta heredada que
+ * no sirven (ilegibles, equivocados). Empieza como la del backfill a propósito:
+ * la cuenta sigue siendo heredada para la app y para el barrido del plazo, que
+ * vuelve a alcanzarla si no sube documentos nuevos a tiempo.
+ *
+ * @param day  fecha de la devolución, DD/MM/YYYY en hora de Bogotá.
+ */
+export function buildLegacyReturnNote(day: string, reason: string): string {
+  return `Cuenta anterior a la verificación obligatoria${LEGACY_RETURN_MARKER}${day}: ${reason.trim()}`;
+}
+
+/** Motivo de la devolución de documentos heredados, o null si la nota no es de una. */
+export function legacyReturnReason(notes: string | null): string | null {
+  if (!notes?.startsWith(LEGACY_VERIFICATION_NOTE_PREFIX)) return null;
+  const marker = notes.indexOf(LEGACY_RETURN_MARKER);
+  if (marker === -1) return null;
+  const separator = notes.indexOf(": ", marker + LEGACY_RETURN_MARKER.length);
+  if (separator === -1) return null;
+  return notes.slice(separator + 2).trim() || null;
 }

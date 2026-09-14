@@ -154,7 +154,9 @@ export default async function DashboardPage() {
       {user && (
         <VerificationBanner
           status={user.verificationStatus}
-          legacy={verification ? legacyVerificationState(verification) : "none"}
+          legacy={
+            verification ? legacyVerificationState({ ...verification, role: user.role }) : "none"
+          }
         />
       )}
 
