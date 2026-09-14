@@ -4,12 +4,14 @@ import { getMyVerification } from "@/lib/db/verification";
 import {
   VERIFICATION_DESCRIPTIONS,
   VERIFICATION_LABELS,
+  LEGACY_VERIFICATION_DEADLINE,
   canSubmitDocuments,
+  legacyVerificationState,
   roleRequiresVerification,
   type VerificationStatus,
 } from "@/lib/verification";
 import { VerificationForm } from "@/components/verification-form";
-import { formatFullDate } from "@/lib/dates";
+import { formatFullDate, formatLongDate } from "@/lib/dates";
 
 const ICONS: Record<VerificationStatus, typeof ShieldCheck> = {
   pending_documents: FileWarning,
@@ -37,6 +39,8 @@ export default async function VerificacionPage() {
 
   const { status } = verification;
   const Icon = ICONS[status];
+  // Cuenta aprobada por el backfill de la 0032 que todavía debe verificarse.
+  const legacy = legacyVerificationState(verification);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -48,23 +52,54 @@ export default async function VerificacionPage() {
         </p>
       </div>
 
-      <div className={`flex gap-3 rounded-2xl border p-5 ${TONES[status]}`}>
-        <Icon className="mt-0.5 size-5 shrink-0" />
-        <div className="space-y-1">
-          <p className="font-medium">{VERIFICATION_LABELS[status]}</p>
-          <p className="text-sm opacity-90">{VERIFICATION_DESCRIPTIONS[status]}</p>
-          {status === "pending_review" && verification.submittedAt && (
-            <p className="text-sm opacity-75">
-              Enviado el {formatFullDate(verification.submittedAt)}.
-            </p>
-          )}
-          {(status === "rejected" || status === "suspended") && verification.notes && (
-            <p className="text-sm">
-              <span className="font-medium">Motivo:</span> {verification.notes}
-            </p>
-          )}
+      {legacy === "none" ? (
+        <div className={`flex gap-3 rounded-2xl border p-5 ${TONES[status]}`}>
+          <Icon className="mt-0.5 size-5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-medium">{VERIFICATION_LABELS[status]}</p>
+            <p className="text-sm opacity-90">{VERIFICATION_DESCRIPTIONS[status]}</p>
+            {status === "pending_review" && verification.submittedAt && (
+              <p className="text-sm opacity-75">
+                Enviado el {formatFullDate(verification.submittedAt)}.
+              </p>
+            )}
+            {(status === "rejected" || status === "suspended") && verification.notes && (
+              <p className="text-sm">
+                <span className="font-medium">Motivo:</span> {verification.notes}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          className={`flex gap-3 rounded-2xl border p-5 ${
+            legacy === "needs_documents" ? TONES.pending_documents : TONES.pending_review
+          }`}
+        >
+          {legacy === "needs_documents" ? (
+            <FileWarning className="mt-0.5 size-5 shrink-0" />
+          ) : (
+            <Clock className="mt-0.5 size-5 shrink-0" />
+          )}
+          <div className="space-y-1">
+            <p className="font-medium">
+              {legacy === "needs_documents"
+                ? "Confirma tu habilitación profesional"
+                : "Documentos recibidos"}
+            </p>
+            <p className="text-sm opacity-90">
+              {legacy === "needs_documents"
+                ? `Tu cuenta es anterior a la verificación obligatoria y se aprobó sin revisar documentos. Sube tu cédula y tu tarjeta profesional antes del ${formatLongDate(LEGACY_VERIFICATION_DEADLINE)}: sin ellos, desde esa fecha no podrás crear pacientes ni consultas. Mientras tanto conservas el acceso.`
+                : "Estamos revisando tus documentos. Conservas el acceso completo mientras tanto."}
+            </p>
+            {legacy === "awaiting_review" && verification.submittedAt && (
+              <p className="text-sm opacity-75">
+                Enviados el {formatFullDate(verification.submittedAt)}.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {!roleRequiresVerification(user.role) && (
         <div className="rounded-2xl border border-gray-line bg-card p-5 text-sm text-muted-foreground">
@@ -73,7 +108,7 @@ export default async function VerificacionPage() {
         </div>
       )}
 
-      {status === "verified" && (
+      {status === "verified" && legacy === "none" && (
         <div className="rounded-2xl border border-gray-line bg-card p-5">
           <dl className="grid gap-4 sm:grid-cols-2 text-sm">
             <div>
@@ -96,15 +131,18 @@ export default async function VerificacionPage() {
         </div>
       )}
 
-      {canSubmitDocuments(status) && roleRequiresVerification(user.role) && (
+      {(canSubmitDocuments(status) || legacy === "needs_documents") &&
+        roleRequiresVerification(user.role) && (
         <div className="rounded-2xl border border-gray-line bg-card p-6">
           <h2 className="mb-4 font-heading text-lg font-semibold text-navy">
-            {status === "pending_documents" ? "Envía tus documentos" : "Vuelve a enviar tus documentos"}
+            {status === "pending_documents" || legacy === "needs_documents"
+              ? "Envía tus documentos"
+              : "Vuelve a enviar tus documentos"}
           </h2>
           <VerificationForm
             clinicId={user.clinicId}
             userId={user.id}
-            resubmit={status !== "pending_documents"}
+            resubmit={status !== "pending_documents" && legacy === "none"}
           />
         </div>
       )}

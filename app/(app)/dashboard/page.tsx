@@ -17,6 +17,8 @@ import { listOpenRiskAlerts, type RiskAlert } from "@/lib/db/risk-alerts";
 import { listPhq9RiskAlerts, type Phq9RiskAlert } from "@/lib/db/assessments";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
 import { getClinicSubscription } from "@/lib/db/clinic";
+import { getMyVerification } from "@/lib/db/verification";
+import { legacyVerificationState } from "@/lib/verification";
 import { logger } from "@/lib/logger";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
@@ -90,7 +92,16 @@ export default async function DashboardPage() {
   const isClinician = user?.role === "admin" || user?.role === "doctor";
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
-  const [patients, todayAppts, pendingReports, patientsNoConsent, persistedAlerts, phq9Alerts, billing] =
+  const [
+    patients,
+    todayAppts,
+    pendingReports,
+    patientsNoConsent,
+    persistedAlerts,
+    phq9Alerts,
+    billing,
+    verification,
+  ] =
     await Promise.all([
       patientCount(),
       listTodayAppointments(),
@@ -103,6 +114,14 @@ export default async function DashboardPage() {
       isClinician
         ? getClinicSubscription().catch((error) => {
             logger.error("dashboard.billing_status_failed", { clinicId: user?.clinicId, error });
+            return null;
+          })
+        : Promise.resolve(null),
+      // Mismo criterio que el aviso de cobro: si falla, se registra y la página
+      // sigue sin el aviso de verificación heredada.
+      isClinician && user
+        ? getMyVerification(user.id).catch((error) => {
+            logger.error("dashboard.verification_status_failed", { userId: user.id, error });
             return null;
           })
         : Promise.resolve(null),
@@ -132,7 +151,12 @@ export default async function DashboardPage() {
 
       {/* Verificación pendiente: sin ella las rutas clínicas redirigen sin más
           contexto, así que el aviso va antes que nada. */}
-      {user && <VerificationBanner status={user.verificationStatus} />}
+      {user && (
+        <VerificationBanner
+          status={user.verificationStatus}
+          legacy={verification ? legacyVerificationState(verification) : "none"}
+        />
+      )}
 
       {/* Renovación sin cobrar: la primera noticia de la gracia no puede ser el
           paso a Free. */}

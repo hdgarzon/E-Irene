@@ -1,6 +1,20 @@
-import { listVerifications } from "@/lib/db/verification";
-import { isAwaitingReview } from "@/lib/verification";
+import { listVerifications, type PendingVerification } from "@/lib/db/verification";
+import {
+  LEGACY_VERIFICATION_DEADLINE,
+  isAwaitingReview,
+  legacyVerificationState,
+} from "@/lib/verification";
+import { formatLongDate } from "@/lib/dates";
 import { AdminVerificationRow } from "@/components/admin-verification-row";
+
+function legacyStateOf(v: PendingVerification) {
+  return legacyVerificationState({
+    status: v.status,
+    notes: v.notes,
+    hasIdDocument: Boolean(v.idDocumentPath),
+    hasLicenseDocument: Boolean(v.licenseDocumentPath),
+  });
+}
 
 export default async function AdminVerificacionesPage() {
   // Incluye 'verified' para poder suspender a alguien ya aprobado si llega el
@@ -12,8 +26,12 @@ export default async function AdminVerificacionesPage() {
     "verified",
   ]);
 
-  const pending = all.filter((v) => isAwaitingReview(v.status));
-  const decided = all.filter((v) => !isAwaitingReview(v.status));
+  // Las cuentas heredadas que ya subieron documentos figuran como verificadas,
+  // pero esperan la revisión retroactiva (migración 0043): son accionables.
+  const needsDecision = (v: PendingVerification) =>
+    isAwaitingReview(v.status) || legacyStateOf(v) === "awaiting_review";
+  const pending = all.filter(needsDecision);
+  const decided = all.filter((v) => !needsDecision(v));
 
   return (
     <div className="space-y-6">
@@ -45,8 +63,9 @@ export default async function AdminVerificacionesPage() {
           Cuentas revisadas ({decided.length})
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Incluye las cuentas anteriores a la verificación obligatoria, aprobadas
-          automáticamente en la migración y pendientes de revisión retroactiva.
+          Incluye las cuentas anteriores a la verificación obligatoria que todavía no aportan
+          documentos: tienen hasta el {formatLongDate(LEGACY_VERIFICATION_DEADLINE)}. Cuando los
+          suben, pasan a Por revisar.
         </p>
         {decided.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aún no hay cuentas revisadas.</p>
