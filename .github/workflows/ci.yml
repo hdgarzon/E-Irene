@@ -13,14 +13,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # La versión la toma de `packageManager` en package.json.
       - name: Configurar pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Configurar Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -32,7 +32,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Configurar Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
@@ -70,7 +70,7 @@ jobs:
       # del job y bloqueando el despliegue con el código en perfecto estado.
       - name: Cachear navegadores de Playwright
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -99,7 +99,7 @@ jobs:
 
       - name: Subir reporte de Playwright si falla
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -150,7 +150,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ── Fase 1: esquema ──────────────────────────────────────────────────
       # Va primero. Si falla, el job se detiene y el código nuevo nunca llega:
@@ -161,7 +161,7 @@ jobs:
       # repo son aditivas. Una destructiva (drop/rename de algo en uso) rompe
       # esa premisa: hay que partirla en dos despliegues.
       - name: Configurar Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
