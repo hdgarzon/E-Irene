@@ -1,5 +1,45 @@
 import type { EmailMessage } from "./types";
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/**
+ * Escapa un valor para interpolarlo en el HTML de un correo, como texto o
+ * dentro de un atributo entre comillas. El nombre de la clínica lo escribe el
+ * admin de cualquier clínica registrada y el del paciente, el personal de la
+ * clínica: sin esto, un `<a href>` en esos campos saldría como enlace real en
+ * un correo con la marca de E-Irene.
+ *
+ * Solo para valores dinámicos. El HTML fijo de las plantillas y lo que reciben
+ * `wrap`/`wrapPlatform` ya es HTML armado y no se escapa.
+ */
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+}
+
+/**
+ * URL lista para un `href`: escapada y solo si es http(s) absoluta. Las URLs
+ * las arma `appBaseUrl()`, pero la plantilla no confía en eso.
+ *
+ * Con una URL inválida devuelve `null` y la plantilla omite el botón. No lanza
+ * a propósito: en las alertas de riesgo el llamador captura el error y el
+ * doctor se quedaría sin aviso. Mejor el correo sin botón que ningún correo.
+ */
+function safeHref(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:" ? escapeHtml(url) : null;
+  } catch {
+    return null;
+  }
+}
+
 function wrap(title: string, body: string): string {
   return `<!doctype html><html><body style="margin:0;background:#f6f9fc;font-family:Arial,sans-serif">
   <div style="max-width:520px;margin:0 auto;padding:24px">
@@ -41,21 +81,22 @@ export function buildReminderEmail(input: {
     ? ` Es una consulta por video — entra desde este enlace a la hora de tu cita: ${input.videoJoinUrl}`
     : "";
   const text = `Hola ${input.patientName}, te recordamos tu cita en ${input.clinicName} el ${input.dateLabel} a las ${input.timeLabel}.${videoLine}`;
+  const videoHref = safeHref(input.videoJoinUrl);
   return {
     to: input.to,
     subject: `Recordatorio de tu cita · ${input.dateLabel}`,
     text,
     html: wrap(
       "Recordatorio de cita",
-      `<p>Hola <strong>${input.patientName}</strong>,</p>
-       <p>Te recordamos tu próxima cita en <strong>${input.clinicName}</strong>:</p>
+      `<p>Hola <strong>${escapeHtml(input.patientName)}</strong>,</p>
+       <p>Te recordamos tu próxima cita en <strong>${escapeHtml(input.clinicName)}</strong>:</p>
        <p style="background:#f6f9fc;border-radius:8px;padding:12px;font-size:16px">
-         📅 ${input.dateLabel} · 🕐 ${input.timeLabel}
+         📅 ${escapeHtml(input.dateLabel)} · 🕐 ${escapeHtml(input.timeLabel)}
        </p>
        ${
-         input.videoJoinUrl
+         videoHref
            ? `<p>Esta es una consulta por <strong>video</strong>. Entra desde este enlace a la hora de tu cita (no necesitas cuenta ni contraseña):</p>
-       <p><a href="${input.videoJoinUrl}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Entrar a la videollamada</a></p>`
+       <p><a href="${videoHref}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Entrar a la videollamada</a></p>`
            : ""
        }
        <p>Si necesitas reprogramar, por favor contáctanos.</p>`,
@@ -75,8 +116,8 @@ export function buildReportReadyEmail(input: {
     text,
     html: wrap(
       "Resumen de sesión disponible",
-      `<p>Hola <strong>${input.patientName}</strong>,</p>
-       <p>Tu profesional de <strong>${input.clinicName}</strong> ha registrado el resumen de tu última sesión en tu historia clínica.</p>
+      `<p>Hola <strong>${escapeHtml(input.patientName)}</strong>,</p>
+       <p>Tu profesional de <strong>${escapeHtml(input.clinicName)}</strong> ha registrado el resumen de tu última sesión en tu historia clínica.</p>
        <p>Por tu privacidad, el contenido clínico no se envía por correo.</p>`,
     ),
   };
@@ -105,19 +146,27 @@ export function buildRiskAlertEmail(input: {
     `${input.clinicName} detectó posibles indicios de riesgo: ${list}. ` +
     `Revisa el detalle y la evidencia en la plataforma: ${input.consultationUrl} — ` +
     `esto es apoyo a la detección temprana, no un diagnóstico; la decisión y la acción son tuyas.`;
+  const htmlList = input.categories
+    .map((c) => `${escapeHtml(c.label)} (${escapeHtml(c.level)})`)
+    .join(", ");
+  const consultationHref = safeHref(input.consultationUrl);
   return {
     to: input.to,
     subject: `⚠️ Alerta de riesgo · ${input.patientName}`,
     text,
     html: wrap(
       "Alerta de riesgo detectada por IA",
-      `<p>Hola <strong>${input.doctorName}</strong>,</p>
-       <p>El análisis de la sesión con <strong>${input.patientName}</strong> en <strong>${input.clinicName}</strong>
+      `<p>Hola <strong>${escapeHtml(input.doctorName)}</strong>,</p>
+       <p>El análisis de la sesión con <strong>${escapeHtml(input.patientName)}</strong> en <strong>${escapeHtml(input.clinicName)}</strong>
        detectó posibles indicios de riesgo:</p>
        <p style="background:#fdecec;border-radius:8px;padding:12px;font-size:14px;color:#9b1c1c;font-weight:bold">
-         ${list}
+         ${htmlList}
        </p>
-       <p><a href="${input.consultationUrl}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Ver detalle y evidencia</a></p>
+       ${
+         consultationHref
+           ? `<p><a href="${consultationHref}" style="display:inline-block;background:#635bff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Ver detalle y evidencia</a></p>`
+           : `<p>Revisa el detalle y la evidencia en la plataforma.</p>`
+       }
        <p style="font-size:12px;color:#5b6b7c">Esto es apoyo a la detección temprana — nunca un diagnóstico ni un protocolo de crisis automatizado. La decisión y la acción son siempre tuyas como profesional tratante.</p>`,
     ),
   };
@@ -139,19 +188,24 @@ export function buildPatientLinkEmail(input: {
     ? "tu profesional de salud mental te pide firmar el consentimiento informado antes de tu próxima sesión."
     : "tu profesional de salud mental te pide completar un breve cuestionario de seguimiento.";
   const text = `Hola ${input.patientName}, ${intro} Abre este enlace para continuar: ${input.url} (válido por 7 días).`;
+  const href = safeHref(input.url);
   return {
     to: input.to,
     subject,
     text,
     html: wrap(
       subject,
-      `<p>Hola <strong>${input.patientName}</strong>,</p>
-       <p>De parte de <strong>${input.clinicName}</strong>: ${intro}</p>
-       <p style="margin:20px 0">
-         <a href="${input.url}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+      `<p>Hola <strong>${escapeHtml(input.patientName)}</strong>,</p>
+       <p>De parte de <strong>${escapeHtml(input.clinicName)}</strong>: ${intro}</p>
+       ${
+         href
+           ? `<p style="margin:20px 0">
+         <a href="${href}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
            ${actionLabel}
          </a>
-       </p>
+       </p>`
+           : ""
+       }
        <p style="font-size:13px;color:#5b6b7c">Este enlace es personal y vence en 7 días. Si no esperabas este correo, puedes ignorarlo.</p>`,
     ),
   };
@@ -174,21 +228,26 @@ export function buildPhq9RiskAlertEmail(input: {
   patientUrl: string;
 }): EmailMessage {
   const text = `Hola ${input.doctorName}, ${input.patientName} completó un cuestionario en ${input.clinicName} con una respuesta que requiere tu atención. Revísalo aquí: ${input.patientUrl}`;
+  const patientHref = safeHref(input.patientUrl);
   return {
     to: input.to,
     subject: "Alerta: respuesta que requiere tu atención",
     text,
     html: wrap(
       "Alerta de seguimiento",
-      `<p>Hola <strong>${input.doctorName}</strong>,</p>
-       <p><strong>${input.patientName}</strong> completó un cuestionario de seguimiento en
-       <strong>${input.clinicName}</strong> con una respuesta que requiere tu atención
+      `<p>Hola <strong>${escapeHtml(input.doctorName)}</strong>,</p>
+       <p><strong>${escapeHtml(input.patientName)}</strong> completó un cuestionario de seguimiento en
+       <strong>${escapeHtml(input.clinicName)}</strong> con una respuesta que requiere tu atención
        cercana.</p>
-       <p style="margin:20px 0">
-         <a href="${input.patientUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+       ${
+         patientHref
+           ? `<p style="margin:20px 0">
+         <a href="${patientHref}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
            Ver expediente del paciente
          </a>
-       </p>
+       </p>`
+           : `<p>Revisa el expediente del paciente en la plataforma.</p>`
+       }
        <p style="font-size:13px;color:#5b6b7c">Por privacidad del paciente, el detalle clínico no se envía por correo.</p>`,
     ),
   };
@@ -212,6 +271,7 @@ export function buildVerificationDecisionEmail(input: {
   actionUrl: string;
 }): EmailMessage {
   const nombre = input.doctorName.split(" ")[0] || input.doctorName;
+  const actionHref = safeHref(input.actionUrl);
 
   if (input.decision === "verified") {
     return {
@@ -222,14 +282,18 @@ export function buildVerificationDecisionEmail(input: {
         `completo a E-Irene: puedes registrar pacientes y transcribir sesiones. ${input.actionUrl}`,
       html: wrapPlatform(
         "Verificación aprobada",
-        `<p>Hola <strong>${nombre}</strong>,</p>
+        `<p>Hola <strong>${escapeHtml(nombre)}</strong>,</p>
          <p>Verificamos tu habilitación profesional. Tu cuenta ya tiene <strong>acceso completo</strong>:
          puedes registrar pacientes y transcribir sesiones.</p>
-         <p style="margin:20px 0">
-           <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+         ${
+           actionHref
+             ? `<p style="margin:20px 0">
+           <a href="${actionHref}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
              Entrar a la plataforma
            </a>
-         </p>`,
+         </p>`
+             : ""
+         }`,
       ),
     };
   }
@@ -251,7 +315,7 @@ export function buildVerificationDecisionEmail(input: {
         : ` Escríbenos para revisar tu caso.`),
     html: wrapPlatform(
       titulo,
-      `<p>Hola <strong>${nombre}</strong>,</p>
+      `<p>Hola <strong>${escapeHtml(nombre)}</strong>,</p>
        <p>${
          esRechazo
            ? "Revisamos los documentos que enviaste y no pudimos confirmar tu habilitación profesional."
@@ -260,18 +324,20 @@ export function buildVerificationDecisionEmail(input: {
        ${
          motivo
            ? `<p style="background:#fdecec;border-radius:8px;padding:12px;font-size:14px;color:#9b1c1c">
-                <strong>Motivo:</strong> ${motivo}
+                <strong>Motivo:</strong> ${escapeHtml(motivo)}
               </p>`
            : ""
        }
        ${
          esRechazo
-           ? `<p>Puedes corregir lo señalado y volver a enviar tus documentos:</p>
+           ? actionHref
+             ? `<p>Puedes corregir lo señalado y volver a enviar tus documentos:</p>
               <p style="margin:20px 0">
-                <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+                <a href="${actionHref}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
                   Reenviar documentos
                 </a>
               </p>`
+             : `<p>Puedes corregir lo señalado y volver a enviar tus documentos desde la plataforma.</p>`
            : `<p>Si crees que se trata de un error, responde a este correo para revisar tu caso.</p>`
        }
        <p style="font-size:13px;color:#5b6b7c">Los registros clínicos que ya creaste siguen accesibles: continúas siendo responsable de esas historias.</p>`,
@@ -295,6 +361,7 @@ export function buildLegacyDocumentsReturnedEmail(input: {
 }): EmailMessage {
   const nombre = input.doctorName.split(" ")[0] || input.doctorName;
   const motivo = input.reason.trim();
+  const actionHref = safeHref(input.actionUrl);
 
   return {
     to: input.to,
@@ -305,19 +372,23 @@ export function buildLegacyDocumentsReturnedEmail(input: {
       `${input.deadline}; mientras tanto conservas el acceso. ${input.actionUrl}`,
     html: wrapPlatform(
       "Vuelve a subir tus documentos",
-      `<p>Hola <strong>${nombre}</strong>,</p>
+      `<p>Hola <strong>${escapeHtml(nombre)}</strong>,</p>
        <p>Revisamos los documentos que subiste para confirmar tu habilitación profesional y
        necesitamos que los vuelvas a enviar.</p>
        <p style="background:#fff7e6;border-radius:8px;padding:12px;font-size:14px;color:#8a5300">
-         <strong>Motivo:</strong> ${motivo}
+         <strong>Motivo:</strong> ${escapeHtml(motivo)}
        </p>
-       <p>Súbelos antes del <strong>${input.deadline}</strong>. Mientras tanto
+       <p>Súbelos antes del <strong>${escapeHtml(input.deadline)}</strong>. Mientras tanto
        <strong>conservas el acceso</strong> a la plataforma.</p>
-       <p style="margin:20px 0">
-         <a href="${input.actionUrl}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+       ${
+         actionHref
+           ? `<p style="margin:20px 0">
+         <a href="${actionHref}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
            Subir documentos
          </a>
-       </p>`,
+       </p>`
+           : ""
+       }`,
     ),
   };
 }
