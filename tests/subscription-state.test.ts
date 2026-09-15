@@ -32,6 +32,13 @@ describe("estado de la suscripción", () => {
     });
   });
 
+  it("un plan a convenir (Enterprise) no tiene suscripción en la app, tenga o no período", () => {
+    expect(subscriptionState("enterprise", subscription(), NOW)).toEqual({ kind: "negotiated" });
+    expect(
+      subscriptionState("enterprise", subscription({ currentPeriodEnd: null }), NOW),
+    ).toEqual({ kind: "negotiated" });
+  });
+
   it("con el período vigente y sin cobros fallidos, se renueva", () => {
     expect(subscriptionState("pro", subscription(), NOW)).toEqual({
       kind: "renewing",

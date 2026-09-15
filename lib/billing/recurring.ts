@@ -71,6 +71,11 @@ export async function chargeClinic(
     periodKeyFor(clinic.currentPeriodEnd),
   );
   const amountInCents = PLANS[clinic.plan].priceInCents;
+  // getClinicsDueForCharge ya deja fuera los planes sin precio fijo; esto evita
+  // mandarle a Wompi un monto vacío si alguien llama directo.
+  if (amountInCents === null || amountInCents <= 0) {
+    return { success: false, error: "plan_without_fixed_price" };
+  }
 
   const body = {
     amount_in_cents: amountInCents,
@@ -175,7 +180,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
   for (const clinic of dueClinics) {
     result.processed++;
     const amountInCents = PLANS[clinic.plan].priceInCents;
-    if (amountInCents <= 0) {
+    if (amountInCents === null || amountInCents <= 0) {
       result.skipped++;
       continue;
     }

@@ -98,6 +98,18 @@ describe("wompi (verificación de firma de webhooks) — SOLO consistencia inter
     expect(parseBillingReference(reference)).toEqual({ clinicId, plan: "pro" });
   });
 
+  it("reconoce la referencia de todos los planes, incluido Esencial", () => {
+    // Con la lista de planes escrita a mano en la expresión, un plan nuevo se
+    // cobraba pero el webhook no reconocía su referencia y no lo activaba.
+    const clinicId = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
+    for (const plan of ["free", "esencial", "pro", "clinica", "enterprise"] as const) {
+      expect(parseBillingReference(buildBillingReference(clinicId, plan))).toEqual({
+        clinicId,
+        plan,
+      });
+    }
+  });
+
   it("parseBillingReference devuelve null para una referencia con formato inválido", () => {
     expect(parseBillingReference("algo-inventado")).toBeNull();
     expect(parseBillingReference("planupgrade-no-es-un-uuid-123")).toBeNull();
@@ -122,6 +134,14 @@ describe("referencia de cobros recurrentes", () => {
     // cliente y le correría la fecha de corte en cada cobro.
     expect(parseBillingReference(buildRenewalReference(clinicId, "pro", "2026-10-18"))).toBeNull();
     expect(parseRenewalReference(buildBillingReference(clinicId, "pro"))).toBeNull();
+  });
+
+  it("renueva Esencial y rechaza la renovación de un plan a convenir", () => {
+    expect(
+      parseRenewalReference(buildRenewalReference(clinicId, "esencial", "2026-10-18")),
+    ).toEqual({ clinicId, plan: "esencial", periodKey: "2026-10-18" });
+    // Enterprise se factura por contrato, fuera de Wompi: una renovación suya no es nuestra.
+    expect(parseRenewalReference(`renewal-${clinicId}-enterprise-2026-10-18-1`)).toBeNull();
   });
 
   it("rechaza referencias de renovación mal formadas o de un plan gratuito", () => {

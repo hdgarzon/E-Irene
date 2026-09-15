@@ -15,13 +15,17 @@ import { formatLongDate } from "@/lib/dates";
 import { initiatePlanUpgradeAction } from "@/app/(app)/settings/actions";
 import { reconcilePlanPayment, type ReconcileOutcome } from "@/lib/billing/reconcile";
 import { logger } from "@/lib/logger";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { UsageBar } from "@/components/usage-bar";
 import { SubscriptionPanel, type SubscriptionPanelState } from "@/components/subscription-panel";
 
 interface PlanPageProps {
   searchParams: Promise<{ wompi?: string; id?: string }>;
 }
+
+/** Enterprise se acuerda por correo, con el mismo contacto de la página pública. */
+const ENTERPRISE_CONTACT_URL = "mailto:hola@e-irene.co?subject=Plan%20Enterprise";
 
 /**
  * Qué incluye Free, en una frase: lo que ve quien está por cancelar.
@@ -41,7 +45,8 @@ function freeLimitsSummary(): string {
 
 /** Estado de la suscripción con las fechas ya en texto, para el panel (cliente). */
 function toPanelState(state: SubscriptionState): SubscriptionPanelState | null {
-  if (state.kind === "free") return null;
+  // Free y los planes a convenir no tienen una suscripción que administrar aquí.
+  if (state.kind === "free" || state.kind === "negotiated") return null;
   if (state.kind === "unbilled") return { kind: "unbilled" };
   if (state.kind === "overdue") {
     return {
@@ -90,13 +95,24 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
   function features(plan: (typeof PLAN_ORDER)[number]) {
     const l = PLANS[plan];
+    const extras = [
+      l.ai ? "Análisis con IA" : "Sin análisis con IA",
+      l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
+    ];
+    // Un plan a convenir no tiene topes en la app: los fija su contrato.
+    if (l.priceInCents === null) {
+      return [
+        "Profesionales y pacientes ilimitados",
+        "Consultas y transcripción según contrato",
+        ...extras,
+      ];
+    }
     return [
       `${limitLabel(l.maxDoctors)} profesional${l.maxDoctors === 1 ? "" : "es"}`,
       `${limitLabel(l.maxPatients)} pacientes`,
       `${limitLabel(l.consultationsPerMonth)} consultas/mes`,
       `${limitLabel(l.transcriptionHours)} h de transcripción`,
-      l.ai ? "Análisis con IA" : "Sin análisis con IA",
-      l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
+      ...extras,
     ];
   }
 
@@ -113,7 +129,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       <div>
         <h1 className="font-heading text-2xl font-bold text-navy">Plan y facturación</h1>
         <p className="text-sm text-muted-foreground">
-          Elige el plan que mejor se ajuste a tu práctica.
+          Elige el plan que mejor se ajuste a tu práctica. Precios mensuales en pesos colombianos.
         </p>
       </div>
 
@@ -209,11 +225,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {PLAN_ORDER.map((plan) => {
           const l = PLANS[plan];
           const current = overview.plan === plan;
-          const paid = l.priceInCents > 0;
+          const negotiated = l.priceInCents === null;
+          const paid = l.priceInCents !== null && l.priceInCents > 0;
           return (
             <div
               key={plan}
@@ -236,6 +253,14 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                   <Button variant="outline" size="sm" className="w-full" disabled>
                     Plan actual
                   </Button>
+                ) : negotiated ? (
+                  // No se vende por la app: el precio y los límites se acuerdan por contrato.
+                  <a
+                    href={ENTERPRISE_CONTACT_URL}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+                  >
+                    Contáctanos
+                  </a>
                 ) : !paid ? (
                   // Free no se "compra": se llega cancelando la suscripción, que
                   // conserva lo pagado hasta el fin del período.
@@ -247,6 +272,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                         Pasas a Free el {formatLongDate(state.graceEndsAt)} si no se paga la
                         renovación
                       </>
+                    ) : state.kind === "negotiated" ? (
+                      "Tu plan tiene condiciones acordadas: escríbenos para cambiarlo"
                     ) : isAdmin ? (
                       <a href="#suscripcion" className="font-medium text-brand hover:underline">
                         Cancela la suscripción para pasar a Free

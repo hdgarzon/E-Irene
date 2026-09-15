@@ -18,6 +18,12 @@ export function graceEndsAt(periodEnd: string): string {
 export type SubscriptionState =
   /** Plan gratuito: no hay suscripción. */
   | { kind: "free" }
+  /**
+   * Plan a convenir (Enterprise): se asigna desde la consola con un contrato. No
+   * se compra ni se renueva por la app, así que tampoco hay nada que cancelar ni
+   * pagar desde ella.
+   */
+  | { kind: "negotiated" }
   /** Plan pago sin período: asignado desde la consola, sin cobro. */
   | { kind: "unbilled" }
   /** Período pagado vigente que se va a renovar. */
@@ -43,7 +49,9 @@ export function subscriptionState(
   subscription: ClinicSubscription,
   now: Date = new Date(),
 ): SubscriptionState {
-  if (PLANS[plan].priceInCents <= 0) return { kind: "free" };
+  const { priceInCents } = PLANS[plan];
+  if (priceInCents === null) return { kind: "negotiated" };
+  if (priceInCents <= 0) return { kind: "free" };
 
   const { status, currentPeriodEnd, cancelAtPeriodEnd } = subscription;
   if (!currentPeriodEnd) return { kind: "unbilled" };

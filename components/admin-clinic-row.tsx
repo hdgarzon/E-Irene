@@ -4,11 +4,11 @@ import { useTransition } from "react";
 import { Building2, Users, Mic, Stethoscope, FileText, CalendarDays, Ban, RotateCcw } from "lucide-react";
 import type { PlatformClinicOverview } from "@/lib/db/platform-admin";
 import { setClinicPlanAction, setClinicSuspendedAction } from "@/app/admin/actions";
-import { PLANS, type Plan } from "@/lib/plans";
+import { PLANS, PLAN_ORDER, type Plan } from "@/lib/plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const PLAN_OPTIONS: Plan[] = ["free", "pro", "clinica", "enterprise"];
+const PLAN_OPTIONS: Plan[] = PLAN_ORDER;
 
 export function AdminClinicRow({ clinic }: { clinic: PlatformClinicOverview }) {
   const [pending, startTransition] = useTransition();
