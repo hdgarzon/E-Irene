@@ -19,6 +19,7 @@ const db = vi.hoisted(() => ({
   clinicExists: vi.fn(),
   findScheduledChargeForPeriod: vi.fn(),
   getSubscriptionPeriod: vi.fn(),
+  recordUnreadablePaymentSource: vi.fn(),
 }));
 
 vi.mock("@/lib/db/billing", async (importOriginal) => {
@@ -151,7 +152,9 @@ describe("processRecurringCharges (cron)", () => {
     plan: "pro" as const,
     currentPeriodEnd: PERIOD_END,
     wompiPaymentSourceId: "ps-123",
+    paymentSourceUnreadable: false,
   };
+  const OTHER_CLINIC = "00000000-0000-4000-8000-000000000002";
 
   beforeEach(() => {
     process.env.WOMPI_PRIVATE_KEY = "test_private_key";
@@ -192,5 +195,130 @@ describe("processRecurringCharges (cron)", () => {
     expect(result.skipped).toBe(1);
     expect(db.createScheduledCharge).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("un token ilegible en una clínica no impide cobrar a las demás, y a esa ni se le cobra ni se la da por cobrada", async () => {
+    const unreadable = {
+      id: OTHER_CLINIC,
+      plan: "pro" as const,
+      currentPeriodEnd: PERIOD_END,
+      wompiPaymentSourceId: null,
+      paymentSourceUnreadable: true,
+    };
+    db.getClinicsDueForCharge.mockResolvedValue([unreadable, due]);
+    db.recordUnreadablePaymentSource.mockResolvedValue(true);
+
+    const result = await processRecurringCharges();
+
+    expect(result).toMatchObject({ processed: 2, succeeded: 1, failed: 0, unreadablePaymentSource: 1 });
+    expect(db.recordUnreadablePaymentSource).toHaveBeenCalledWith(unreadable);
+
+    // Solo la clínica con token legible llega a reservar, cobrar y renovar.
+    expect(db.isStillDueForCharge).toHaveBeenCalledTimes(1);
+    expect(db.createScheduledCharge).toHaveBeenCalledTimes(1);
+    expect(db.createScheduledCharge).toHaveBeenCalledWith(expect.objectContaining({ clinicId: CLINIC }));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string,
+    );
+    expect(body.payment_source_id).toBe("ps-123");
+    expect(db.markScheduledChargeSuccess).toHaveBeenCalledTimes(1);
+    expect(db.renewBilling).toHaveBeenCalledTimes(1);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+
+    // Un token ilegible es un problema nuestro, no un pago rechazado: no se la marca morosa.
+    expect(db.markScheduledChargeFailed).not.toHaveBeenCalled();
+    expect(db.markBillingFailed).not.toHaveBeenCalled();
+  });
+
+  it("si no se puede dejar constancia del token ilegible, igual se cobra a las demás", async () => {
+    db.getClinicsDueForCharge.mockResolvedValue([
+      { ...due, id: OTHER_CLINIC, wompiPaymentSourceId: null, paymentSourceUnreadable: true },
+      due,
+    ]);
+    db.recordUnreadablePaymentSource.mockRejectedValue(new Error("audit_logs no disponible"));
+
+    const result = await processRecurringCharges();
+
+    expect(result).toMatchObject({ succeeded: 1, unreadablePaymentSource: 1 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+  });
+
+  describe("una petición a Wompi que no termina no frena la corrida ni libera el período", () => {
+    const unanswered = {
+      ...due,
+      id: "00000000-0000-4000-8000-000000000003",
+      wompiPaymentSourceId: "ps-demo-sin-respuesta",
+    };
+
+    // Lo que hace undici: un TypeError genérico con la causa real en `cause`.
+    const networkFailures = {
+      "fetch rechaza (DNS, TLS, timeout)": async () => {
+        throw new TypeError("fetch failed", { cause: new Error("Connect Timeout Error") });
+      },
+      "la conexión se corta leyendo la respuesta": async () => ({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new TypeError("terminated", { cause: new Error("other side closed") });
+        },
+      }),
+    };
+
+    it.each(Object.entries(networkFailures))(
+      "%s: la reserva queda en 'processing' sin marcarse fallida ni morosa, y las demás se cobran",
+      async (_, failure) => {
+        db.getClinicsDueForCharge.mockResolvedValue([unanswered, due]);
+        db.createScheduledCharge.mockImplementation(async ({ clinicId }: { clinicId: string }) =>
+          clinicId === unanswered.id ? "charge-sin-respuesta" : "charge-1",
+        );
+        (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(failure);
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        try {
+          const result = await processRecurringCharges();
+          expect(result).toMatchObject({ processed: 2, succeeded: 1, failed: 0, outcomeUnknown: 1 });
+          const { processed, ...outcomes } = result;
+          expect(Object.values(outcomes).reduce((sum, n) => sum + n, 0)).toBe(processed);
+
+          // La segunda clínica se cobra y se renueva igual.
+          expect(fetch).toHaveBeenCalledTimes(2);
+          expect(db.renewBilling).toHaveBeenCalledTimes(1);
+          expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+
+          // La primera sí reservó su período, y la reserva no se toca: Wompi pudo
+          // crear la transacción. Marcarla fallida liberaría el período para un
+          // segundo cobro; la resuelven el webhook o la expiración a las 24 h.
+          expect(db.createScheduledCharge).toHaveBeenCalledTimes(2);
+          expect(db.markScheduledChargeSuccess).toHaveBeenCalledTimes(1);
+          expect(db.markScheduledChargeSuccess).toHaveBeenCalledWith("charge-1", "tx-1");
+          expect(db.markScheduledChargeFailed).not.toHaveBeenCalled();
+          expect(db.markBillingFailed).not.toHaveBeenCalled();
+
+          const report = errors.mock.calls
+            .map(([line]) => String(line))
+            .filter((line) => line.includes("billing.charge_outcome_unknown"));
+          expect(report).toHaveLength(1);
+          expect(report[0]).toContain(unanswered.id);
+          expect(report[0]).toContain(reference.periodKey);
+          expect(report[0]).not.toContain(unanswered.wompiPaymentSourceId);
+        } finally {
+          errors.mockRestore();
+        }
+      },
+    );
+
+    it("sin WOMPI_PRIVATE_KEY la corrida sigue abortando: no es un fallo de red de una clínica", async () => {
+      vi.stubEnv("WOMPI_PRIVATE_KEY", "");
+      try {
+        await expect(processRecurringCharges()).rejects.toThrow("WOMPI_PRIVATE_KEY no está configurada");
+        expect(fetch).not.toHaveBeenCalled();
+        expect(db.markScheduledChargeFailed).not.toHaveBeenCalled();
+        expect(db.markBillingFailed).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 });

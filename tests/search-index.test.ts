@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { computeTrigrams, isSearchableQuery, patientSearchText, MIN_QUERY_LENGTH } from "@/lib/search-index";
 
 beforeAll(() => {
-  process.env.ENCRYPTION_KEY = Buffer.from("a".repeat(32)).toString("base64");
+  vi.stubEnv("ENCRYPTION_KEY", Buffer.from("a".repeat(32)).toString("base64"));
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("isSearchableQuery", () => {

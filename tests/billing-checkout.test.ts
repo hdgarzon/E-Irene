@@ -226,6 +226,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(true);
@@ -249,6 +250,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: null,
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(false);
@@ -271,6 +273,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(false);
@@ -292,6 +295,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.pending).toBe(true);

@@ -211,6 +211,35 @@ export function legacyVerificationState(v: {
   return v.hasIdDocument || v.hasLicenseDocument ? "awaiting_review" : "needs_documents";
 }
 
+// ==================== Cola de revisión (consola de admin) ===================
+//
+// Condiciones de PostgREST (para `.or()` sobre `users`) que parten a los
+// profesionales en las dos listas de /admin/verificaciones. Son el mismo
+// predicado que isAwaitingReview + legacyVerificationState, escrito para que
+// la separación ocurra en la BD: traer todas las cuentas y separarlas en
+// memoria las cortaba en 1000 (max_rows), y las solicitudes más nuevas eran
+// las que no llegaban a la cola. tests/platform-console.test.ts comprueba
+// contra la BD que ambos lados coincidan.
+
+const CLINICAL_ROLE_LIST = `(${CLINICAL_ROLES.join(",")})`;
+const LEGACY_NOTE_PATTERN = `"${LEGACY_VERIFICATION_NOTE_PREFIX}*"`;
+
+/** Heredada de un rol clínico que ya aportó algún documento: espera la revisión retroactiva. */
+const LEGACY_AWAITING_REVIEW =
+  `and(verification_status.eq.verified,role.in.${CLINICAL_ROLE_LIST},` +
+  `verification_notes.like.${LEGACY_NOTE_PATTERN},` +
+  `or(id_document_path.not.is.null,license_document_path.not.is.null))`;
+
+/** Por revisar: `pending_review` y heredadas con documentos por revisar. */
+export const VERIFICATION_QUEUE_FILTER = `verification_status.eq.pending_review,${LEGACY_AWAITING_REVIEW}`;
+
+/** Revisadas: rechazadas, suspendidas y verificadas que no esperan revisión retroactiva. */
+export const VERIFICATION_REVIEWED_FILTER =
+  `verification_status.in.(rejected,suspended),` +
+  `and(verification_status.eq.verified,or(role.not.in.${CLINICAL_ROLE_LIST},` +
+  `verification_notes.is.null,verification_notes.not.like.${LEGACY_NOTE_PATTERN},` +
+  `and(id_document_path.is.null,license_document_path.is.null)))`;
+
 const LEGACY_RETURN_MARKER = "; documentos devueltos el ";
 
 /**
