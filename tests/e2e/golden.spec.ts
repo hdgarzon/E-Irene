@@ -9,7 +9,10 @@ test("camino dorado: signup → dashboard → crear paciente → lista", async (
 
   // 2. Llega al dashboard autenticado
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByText(/Hola,/)).toBeVisible();
+  // Por rol y no por texto: tras navegar, el anunciador de rutas de Next
+  // (#__next-route-announcer__, para lectores de pantalla) repite el h1 de la
+  // página y getByText encontraría dos elementos.
+  await expect(page.getByRole("heading", { name: /Hola,/ })).toBeVisible();
   await expect(page.getByText("Clínica E2E").first()).toBeVisible();
 
   // 2b. Menú de usuario (avatar) abre sin errores y muestra los datos de sesión

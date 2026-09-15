@@ -81,20 +81,7 @@ export async function getTranscriptionUsage(): Promise<TranscriptionUsage> {
   return { usedSeconds: Number(r?.used_seconds ?? 0), sessions: Number(r?.sessions ?? 0) };
 }
 
-export interface PlatformTranscriptionUsage {
-  clinicId: string;
-  usedSeconds: number;
-  sessions: number;
-}
-
-/** Consumo del mes de TODAS las clínicas — solo platform admin (consola). */
-export async function getPlatformTranscriptionUsage(): Promise<PlatformTranscriptionUsage[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_platform_transcription_usage");
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
-    clinicId: r.clinic_id,
-    usedSeconds: Number(r.used_seconds),
-    sessions: Number(r.sessions),
-  }));
-}
+// El consumo por clínica de la consola de plataforma viene de
+// get_platform_clinic_stats (lib/db/platform-console.ts), acotado a la página
+// mostrada: get_platform_transcription_usage devolvía todas y PostgREST las
+// cortaba en 1000.

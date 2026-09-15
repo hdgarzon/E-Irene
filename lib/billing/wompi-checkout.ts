@@ -51,6 +51,9 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   const reference = buildBillingReference(input.clinicId, input.plan);
   const amountInCents = PLANS[input.plan].priceInCents;
 
+  if (amountInCents === null) {
+    throw new Error(`El plan ${input.plan} es a convenir y no se cobra por Wompi`);
+  }
   if (amountInCents <= 0) {
     throw new Error(`El plan ${input.plan} no requiere pago`);
   }

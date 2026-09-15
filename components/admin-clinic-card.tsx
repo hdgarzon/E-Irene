@@ -4,12 +4,12 @@ import { useTransition } from "react";
 import { Building2, Users, Ban, RotateCcw, Stethoscope } from "lucide-react";
 import type { ClinicMapEntry } from "@/lib/db/platform-console";
 import { setClinicPlanAction, setClinicSuspendedAction } from "@/app/admin/actions";
-import { PLANS, transcriptionHoursLabel, type Plan } from "@/lib/plans";
+import { PLANS, PLAN_ORDER, transcriptionHoursLabel, type Plan } from "@/lib/plans";
 import { formatLongDate } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const PLAN_OPTIONS: Plan[] = ["free", "pro", "clinica", "enterprise"];
+const PLAN_OPTIONS: Plan[] = PLAN_ORDER;
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",

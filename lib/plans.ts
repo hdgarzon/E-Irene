@@ -1,10 +1,15 @@
-export type Plan = "free" | "pro" | "clinica" | "enterprise";
+export type Plan = "free" | "esencial" | "pro" | "clinica" | "enterprise";
 
 export interface PlanLimits {
   label: string;
+  /** Precio visible ("$59.000 COP/mes"). Se deriva de priceInCents: nunca se escribe a mano. */
   price: string;
-  /** Precio mensual en centavos para Wompi (COP). 0 = gratis. */
-  priceInCents: number;
+  /**
+   * Precio mensual en centavos de peso colombiano, tal como lo cobra Wompi
+   * (COP 59.000 = 5_900_000). 0 = gratis. null = a convenir: el plan no se vende
+   * ni se renueva por la app; lo asigna la consola con un contrato de por medio.
+   */
+  priceInCents: number | null;
   maxDoctors: number;
   maxPatients: number;
   transcriptionHours: number;
@@ -13,16 +18,32 @@ export interface PlanLimits {
   whatsapp: boolean;
 }
 
-// Nombres y precios vigentes desde 2026-07 (ver
-// docs/E-Irene_Resumen_Ejecutivo_Integral). Los códigos internos
-// (free/pro/clinica/enterprise) no cambian a propósito — son los que ya
-// tienen 12 clínicas reales asignadas en producción; solo cambia lo que se
-// muestra. maxDoctors/maxPatients/transcriptionHours/ai/whatsapp quedan
-// igual que antes de este cambio de precios.
+/** Centavos de COP → "$59.000". */
+export function formatCop(priceInCents: number): string {
+  const pesos = Math.round(priceInCents / 100);
+  return `$${String(pesos).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+}
+
+/** Precio visible de un plan: "$59.000 COP/mes", o "A convenir" si no tiene precio fijo. */
+export function priceLabel(priceInCents: number | null): string {
+  return priceInCents === null ? "A convenir" : `${formatCop(priceInCents)} COP/mes`;
+}
+
+// El precio visible sale del mismo valor que se cobra. Antes eran dos campos
+// escritos a mano y nada impedía que la pantalla mostrara una cifra y Wompi
+// cobrara otra.
+function definePlan(plan: Omit<PlanLimits, "price">): PlanLimits {
+  return { ...plan, price: priceLabel(plan.priceInCents) };
+}
+
+// Escala vigente desde 2026-09, en pesos colombianos. Los códigos internos son
+// los del enum clinic_plan: `pro` es Profesional, `clinica` es Clínica y
+// `esencial` se agregó en la migración 0053. En los planes pagos la bolsa de
+// horas es consultas × 1 h, de modo que "20 consultas de hasta una hora" es a
+// la vez la promesa comercial y el límite que se aplica.
 export const PLANS: Record<Plan, PlanLimits> = {
-  free: {
+  free: definePlan({
     label: "Free",
-    price: "$0/mes",
     priceInCents: 0,
     maxDoctors: 1,
     maxPatients: 5,
@@ -30,43 +51,57 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: 5,
     ai: false,
     whatsapp: false,
-  },
-  pro: {
-    label: "Professional",
-    price: "$29/mes",
-    priceInCents: 2_900_000,
+  }),
+  esencial: definePlan({
+    label: "Esencial",
+    priceInCents: 5_900_000,
     maxDoctors: 1,
     maxPatients: Infinity,
     transcriptionHours: 20,
     consultationsPerMonth: 20,
     ai: true,
     whatsapp: false,
-  },
-  clinica: {
-    label: "Plus",
-    price: "$59/mes",
-    priceInCents: 5_900_000,
+  }),
+  pro: definePlan({
+    label: "Profesional",
+    priceInCents: 9_900_000,
+    maxDoctors: 1,
+    maxPatients: Infinity,
+    transcriptionHours: 30,
+    consultationsPerMonth: 30,
+    ai: true,
+    whatsapp: false,
+  }),
+  clinica: definePlan({
+    label: "Clínica",
+    priceInCents: 24_900_000,
     maxDoctors: 5,
     maxPatients: Infinity,
-    transcriptionHours: 100,
-    consultationsPerMonth: 50,
+    transcriptionHours: 75,
+    consultationsPerMonth: 75,
     ai: true,
     whatsapp: true,
-  },
-  enterprise: {
-    label: "Clinic",
-    price: "$149/mes",
-    priceInCents: 14_900_000,
+  }),
+  // Sin topes en la app: los fija el contrato con el que se asigna.
+  enterprise: definePlan({
+    label: "Enterprise",
+    priceInCents: null,
     maxDoctors: Infinity,
     maxPatients: Infinity,
     transcriptionHours: Infinity,
-    consultationsPerMonth: 120,
+    consultationsPerMonth: Infinity,
     ai: true,
     whatsapp: true,
-  },
+  }),
 };
 
-export const PLAN_ORDER: Plan[] = ["free", "pro", "clinica", "enterprise"];
+export const PLAN_ORDER: Plan[] = ["free", "esencial", "pro", "clinica", "enterprise"];
+
+/** Planes con precio fijo: los únicos que se compran y se renuevan por Wompi. */
+export const PAID_PLANS: Plan[] = PLAN_ORDER.filter((plan) => {
+  const cents = PLANS[plan].priceInCents;
+  return cents !== null && cents > 0;
+});
 
 export function planLimits(plan: Plan): PlanLimits {
   return PLANS[plan];

@@ -93,10 +93,17 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
     redirect("/settings/plan");
   }
 
+  // Los planes a convenir (Enterprise) no se venden por la app: se acuerdan por
+  // contrato y los asigna la consola.
+  const { priceInCents } = PLANS[plan];
+  if (priceInCents === null) {
+    redirect("/settings/plan");
+  }
+
   // Pasar a Free no es un cambio de plan sino cancelar la suscripción, que
   // conserva lo pagado hasta el fin del período (cancelSubscriptionAction). Antes
   // bajaba el plan al instante, perdiendo el resto del período ya cobrado.
-  if (PLANS[plan].priceInCents <= 0) {
+  if (priceInCents <= 0) {
     redirect("/settings/plan#suscripcion");
   }
 

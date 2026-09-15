@@ -47,6 +47,16 @@ describe("createWompiCheckout", () => {
     ).rejects.toThrow("no requiere pago");
   });
 
+  it("rechaza los planes a convenir: Enterprise no se cobra por Wompi", async () => {
+    await expect(
+      createWompiCheckout({
+        clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+        plan: "enterprise",
+        redirectUrl: "https://e-irene.co/settings/plan?wompi=return",
+      }),
+    ).rejects.toThrow("a convenir");
+  });
+
   it("creates a checkout for a paid plan", async () => {
     const result = await createWompiCheckout({
       clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
@@ -62,7 +72,7 @@ describe("createWompiCheckout", () => {
     const fetchCall = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(fetchCall[0]).toBe("https://sandbox.wompi.co/v1/payment_links");
     const body = JSON.parse(fetchCall[1].body);
-    expect(body.amount_in_cents).toBe(2_900_000);
+    expect(body.amount_in_cents).toBe(9_900_000);
     expect(body.currency).toBe("COP");
     expect(body.reference).toBe(result.reference);
     expect(body.redirect_url).toBe("https://e-irene.co/settings/plan?wompi=return");
@@ -88,8 +98,8 @@ describe("createWompiCheckout", () => {
           JSON.stringify({
             data: {
               id: "test_ikE08d",
-              name: "Plan Professional · E-Irene",
-              amount_in_cents: 2_900_000,
+              name: "Plan Profesional · E-Irene",
+              amount_in_cents: 9_900_000,
               currency: "COP",
               single_use: true,
               collect_shipping: false,
@@ -126,7 +136,7 @@ describe("createWompiCheckout", () => {
         paymentLinkId: "pl-123",
         clinicId: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
         plan: "pro",
-        amountInCents: 2_900_000,
+        amountInCents: 9_900_000,
       }),
     );
   });
@@ -216,6 +226,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(true);
@@ -225,7 +236,7 @@ describe("chargeClinic", () => {
     const fetchCall = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
     expect(body.payment_source_id).toBe("ps-123");
-    expect(body.amount_in_cents).toBe(2_900_000);
+    expect(body.amount_in_cents).toBe(9_900_000);
     // Referencia de renovación con el período cobrado: el webhook la distingue de
     // la compra de un plan y solo avanza el período.
     expect(body.reference).toMatch(
@@ -239,6 +250,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: null,
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(false);
@@ -261,6 +273,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.success).toBe(false);
@@ -282,6 +295,7 @@ describe("chargeClinic", () => {
       plan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
     });
 
     expect(result.pending).toBe(true);

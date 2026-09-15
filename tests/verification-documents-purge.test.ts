@@ -83,6 +83,10 @@ async function existeEnBucket(s: SupabaseClient, path: string): Promise<boolean>
   return Boolean(data);
 }
 
+/**
+ * Cada purga se limita a la clínica de la prueba: una sobre todas las clínicas
+ * purgaría las filas de otra corrida que está a mitad de sus aserciones.
+ */
 d("purga de documentos de identidad", () => {
   it("calcula la huella del documento tal como está en el bucket", async () => {
     const f = await profesionalConDocumentos(1);
@@ -102,7 +106,7 @@ d("purga de documentos de identidad", () => {
 
   it("NO borra los documentos de una decisión reciente", async () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS - 5);
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     expect(await existeEnBucket(f.s, f.cedula)).toBe(true);
     const { data } = await f.s
@@ -118,7 +122,7 @@ d("purga de documentos de identidad", () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
     expect(await existeEnBucket(f.s, f.cedula)).toBe(true);
 
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     expect(await existeEnBucket(f.s, f.cedula)).toBe(false);
     expect(await existeEnBucket(f.s, f.tarjeta)).toBe(false);
@@ -126,7 +130,7 @@ d("purga de documentos de identidad", () => {
 
   it("deja la fila sin rutas y con la marca de purga", async () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     const { data } = await f.s
       .from("users")
@@ -141,7 +145,7 @@ d("purga de documentos de identidad", () => {
   it("conserva la huella tras borrar el archivo: es la prueba de qué se revisó", async () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
     await storeDocumentHashes(f.userId);
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     const { data } = await f.s
       .from("users")
@@ -154,7 +158,7 @@ d("purga de documentos de identidad", () => {
 
   it("deja constancia en audit_logs, como la purga de transcripciones", async () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     const { data } = await f.s
       .from("audit_logs")
@@ -169,8 +173,8 @@ d("purga de documentos de identidad", () => {
 
   it("es idempotente: una segunda corrida no vuelve a registrar la purga", async () => {
     const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
-    await purgeExpiredVerificationDocuments();
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     const { count } = await f.s
       .from("audit_logs")
@@ -189,7 +193,7 @@ d("purga de documentos de identidad", () => {
       .eq("id", f.userId);
     expect(prepErr).toBeNull();
 
-    await purgeExpiredVerificationDocuments();
+    await purgeExpiredVerificationDocuments({ clinicId: f.clinicId });
 
     expect(await existeEnBucket(f.s, f.cedula)).toBe(false);
     const { data } = await f.s
@@ -199,6 +203,26 @@ d("purga de documentos de identidad", () => {
       .single();
     expect(data?.id_document_path).toBeNull();
     expect(data?.license_document_path).toBeNull();
+  }, 30000);
+
+  it("dos purgas a la vez sobre la misma fila la acreditan una sola vez", async () => {
+    const f = await profesionalConDocumentos(DOCUMENT_RETENTION_DAYS + 5);
+
+    // Como dos invocaciones del cron que se pisan: las dos leen la fila vencida
+    // antes de que ninguna la marque.
+    const resultados = await Promise.all([
+      purgeExpiredVerificationDocuments({ clinicId: f.clinicId }),
+      purgeExpiredVerificationDocuments({ clinicId: f.clinicId }),
+    ]);
+
+    expect(resultados.reduce((total, r) => total + r.purged, 0)).toBe(1);
+    const { data } = await f.s
+      .from("audit_logs")
+      .select("metadata")
+      .eq("clinic_id", f.clinicId)
+      .eq("action", "verification_docs.purge");
+    expect(data ?? []).toHaveLength(1);
+    expect((data![0].metadata as { purged_count: number }).purged_count).toBe(1);
   }, 30000);
 });
 

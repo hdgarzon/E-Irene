@@ -43,7 +43,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-1",
       status: "APPROVED",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: `planupgrade-${CLINIC}-pro-1700000000000`,
       payment_source_id: 55,
     });
@@ -60,7 +60,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-ajena",
       status: "APPROVED",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: `planupgrade-${OTRA_CLINICA}-enterprise-1700000000000`,
     });
 
@@ -75,11 +75,26 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-barata",
       status: "APPROVED",
-      amount_in_cents: 100, // pagó $1 por un plan de $149.000
-      reference: `planupgrade-${CLINIC}-enterprise-1700000000000`,
+      amount_in_cents: 100, // pagó $1 por un plan de $249.000
+      reference: `planupgrade-${CLINIC}-clinica-1700000000000`,
     });
 
     const out = await reconcilePlanPayment("tx-barata", CLINIC);
+
+    expect(out).toEqual({ result: "ignored", reason: "monto_no_coincide_con_el_plan" });
+    expect(activateBilling).not.toHaveBeenCalled();
+  });
+
+  it("SEGURIDAD: un plan a convenir nunca se activa con un pago, sea cual sea el monto", async () => {
+    // Enterprise no tiene precio fijo: la única vía para asignarlo es la consola.
+    stubTransaction({
+      id: "tx-enterprise",
+      status: "APPROVED",
+      amount_in_cents: 24_900_000,
+      reference: `planupgrade-${CLINIC}-enterprise-1700000000000`,
+    });
+
+    const out = await reconcilePlanPayment("tx-enterprise", CLINIC);
 
     expect(out).toEqual({ result: "ignored", reason: "monto_no_coincide_con_el_plan" });
     expect(activateBilling).not.toHaveBeenCalled();
@@ -89,7 +104,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-pendiente",
       status: "PENDING",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: `planupgrade-${CLINIC}-pro-1700000000000`,
     });
 
@@ -104,7 +119,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-1",
       status: "APPROVED",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: `planupgrade-${CLINIC}-pro-1700000000000`,
     });
 
@@ -118,7 +133,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-sin-token",
       status: "APPROVED",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: `planupgrade-${CLINIC}-pro-1700000000000`,
     });
 
@@ -134,7 +149,7 @@ describe("reconcilePlanPayment", () => {
     stubTransaction({
       id: "tx-x",
       status: "APPROVED",
-      amount_in_cents: 2_900_000,
+      amount_in_cents: 9_900_000,
       reference: "algo-de-otro-comercio",
     });
 

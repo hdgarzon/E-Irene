@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encrypt, decrypt } from "@/lib/crypto";
+import { assertEncryptionKey, encrypt, decrypt } from "@/lib/crypto";
+import { graceEndsAt } from "@/lib/billing/subscription-state";
 import { logger } from "@/lib/logger";
-import { PLANS, type Plan } from "@/lib/plans";
+import { PAID_PLANS, PLANS, type Plan } from "@/lib/plans";
 
 export type BillingStatus = "sin_configurar" | "activo" | "pendiente" | "vencido" | "suspendido";
 
@@ -74,19 +75,30 @@ export interface ClinicDueForCharge {
   /** Fin del período que se va a renovar. De él salen la clave y la renovación del cobro. */
   currentPeriodEnd: string;
   wompiPaymentSourceId: string | null;
+  /**
+   * Hay token de cobro pero no se pudo descifrar (clave rotada, dato corrupto):
+   * wompiPaymentSourceId es null y a la clínica no se le cobra.
+   */
+  paymentSourceUnreadable: boolean;
 }
 
 /**
  * Clínicas que necesitan ser cobradas: plan de pago, billing_status activo (o
  * vencido, para reprocesar), sin cancelación pedida, y current_period_end
  * vencido o a punto de vencer en los próximos 3 días.
+ *
+ * Un token que no descifra afecta solo a su clínica: vuelve marcada con
+ * paymentSourceUnreadable y las demás se listan igual. Sin ENCRYPTION_KEY no se
+ * descifra ninguno, y eso sí lanza.
  */
 export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
+  assertEncryptionKey();
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("clinics")
     .select("id, plan, current_period_end, wompi_payment_source_id_enc")
-    .in("plan", ["pro", "clinica", "enterprise"] as Plan[])
+    // Solo los planes con precio fijo: Free no se cobra y Enterprise se factura por contrato.
+    .in("plan", PAID_PLANS)
     .in("billing_status", ["activo", "vencido"])
     // Quien canceló conserva el plan hasta el fin del período, pero no se le
     // vuelve a cobrar: al vencer, end_canceled_subscriptions() lo pasa a Free.
@@ -103,13 +115,67 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
             id: r.id,
             plan: r.plan as Plan,
             currentPeriodEnd: r.current_period_end,
-            wompiPaymentSourceId: r.wompi_payment_source_id_enc
-              ? decrypt(r.wompi_payment_source_id_enc)
-              : null,
+            ...readPaymentSource(r.id, r.wompi_payment_source_id_enc),
           },
         ]
       : [],
   );
+}
+
+function readPaymentSource(
+  clinicId: string,
+  encrypted: string | null,
+): Pick<ClinicDueForCharge, "wompiPaymentSourceId" | "paymentSourceUnreadable"> {
+  if (!encrypted) return { wompiPaymentSourceId: null, paymentSourceUnreadable: false };
+  try {
+    return { wompiPaymentSourceId: decrypt(encrypted), paymentSourceUnreadable: false };
+  } catch (error) {
+    // El id y el error, nunca el token: ni cifrado ni descifrado.
+    logger.error("billing.payment_source_unreadable", {
+      clinicId,
+      error,
+      action:
+        "no se le cobra. Revisar ENCRYPTION_KEY; si el dato está corrupto, la clínica tiene que pagar desde Plan y facturación antes de que termine la gracia. NO se marca como morosa.",
+    });
+    return { wompiPaymentSourceId: null, paymentSourceUnreadable: true };
+  }
+}
+
+/**
+ * Deja constancia en audit_logs de que a la clínica no se le pudo cobrar porque
+ * su token de cobro no descifra. Una vez por período, porque el cron la reintenta
+ * a diario. Devuelve true si esta llamada dejó la constancia.
+ *
+ * No toca billing_status: igual que con una clínica sin token, el problema es
+ * nuestro y no un pago rechazado. La gracia corre igual (end_overdue_subscriptions)
+ * y, vencido el período, la app le muestra el aviso para pagar desde Plan y
+ * facturación; si ese pago tokeniza un medio, queda cifrado con la clave vigente.
+ */
+export async function recordUnreadablePaymentSource(clinic: ClinicDueForCharge): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: existing, error: readError } = await admin
+    .from("audit_logs")
+    .select("id")
+    .eq("clinic_id", clinic.id)
+    .eq("action", "subscription.payment_source_unreadable")
+    .eq("metadata->>period_end", clinic.currentPeriodEnd)
+    .limit(1);
+  if (readError) throw readError;
+  if (existing && existing.length > 0) return false;
+
+  const { error } = await admin.from("audit_logs").insert({
+    clinic_id: clinic.id,
+    action: "subscription.payment_source_unreadable",
+    entity_type: "clinic",
+    entity_id: clinic.id,
+    metadata: {
+      plan: clinic.plan,
+      period_end: clinic.currentPeriodEnd,
+      grace_ends_at: graceEndsAt(clinic.currentPeriodEnd),
+    },
+  });
+  if (error) throw error;
+  return true;
 }
 
 /**
@@ -395,5 +461,6 @@ export async function flagClinicForBillingReview(
 
 /** true si el plan requiere pago recurrente. */
 export function isPaidPlan(plan: Plan): boolean {
-  return PLANS[plan].priceInCents > 0;
+  // null = a convenir: se factura por contrato, no por la app.
+  return (PLANS[plan].priceInCents ?? 0) > 0;
 }

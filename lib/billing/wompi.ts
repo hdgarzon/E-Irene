@@ -92,11 +92,14 @@ export function verifyWompiChecksum(params: {
 // (Fase 2) y que Wompi nos devuelve tal cual en cada evento. Lo usamos para
 // saber a qué clínica pertenece la transacción.
 
-import type { Plan } from "@/lib/plans";
+import { PAID_PLANS, PLAN_ORDER, type Plan } from "@/lib/plans";
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 const REFERENCE_PREFIX = "planupgrade";
-const REFERENCE_RE =
-  /^planupgrade-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(free|pro|clinica|enterprise)-\d+$/i;
+// Los planes salen de lib/plans.ts. Con la lista escrita aquí a mano, un plan
+// nuevo se cobraba pero el webhook no reconocía su referencia y no lo activaba.
+const REFERENCE_RE = new RegExp(`^planupgrade-(${UUID})-(${PLAN_ORDER.join("|")})-\\d+$`, "i");
 
 export interface BillingReference {
   clinicId: string;
@@ -125,8 +128,11 @@ export function parseBillingReference(reference: string): BillingReference | nul
 // el intento en billing_scheduled_charges y sabe qué fin de período renovar.
 
 const RENEWAL_PREFIX = "renewal";
-const RENEWAL_RE =
-  /^renewal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(pro|clinica|enterprise)-(\d{4}-\d{2}-\d{2})-\d+$/i;
+// Solo se renuevan los planes con precio fijo: ni Free ni los planes a convenir.
+const RENEWAL_RE = new RegExp(
+  `^renewal-(${UUID})-(${PAID_PLANS.join("|")})-(\\d{4}-\\d{2}-\\d{2})-\\d+$`,
+  "i",
+);
 
 export interface RenewalReference {
   clinicId: string;

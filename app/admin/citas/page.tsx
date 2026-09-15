@@ -1,22 +1,42 @@
 import { listAllAppointments } from "@/lib/db/platform-console";
+import { describeListPage, readListParams } from "@/lib/admin-list";
 import { AdminAppointmentRow } from "@/components/admin-appointment-row";
+import { AdminPagination, AdminSearchForm } from "@/components/admin-list-controls";
 
-export default async function AdminCitasPage() {
-  const appointments = await listAllAppointments();
+const PATH = "/admin/citas";
+
+export default async function AdminCitasPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const appointments = await listAllAppointments(readListParams(await searchParams));
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold text-navy">Citas</h1>
-        <p className="text-sm text-muted-foreground">
-          Agenda de todas las clínicas — {appointments.length}{" "}
-          {appointments.length === 1 ? "cita" : "citas"}. Reagendar, cambiar estado o cancelar.
+        <p data-testid="list-summary" className="text-sm text-muted-foreground">
+          Agenda de todas las clínicas —{" "}
+          {describeListPage(appointments, { singular: "cita", plural: "citas" })}. Reagendar,
+          cambiar estado o cancelar.
         </p>
       </div>
 
+      <AdminSearchForm
+        action={PATH}
+        query={appointments.query}
+        label="Buscar citas por clínica"
+        placeholder="Buscar por clínica…"
+      />
+
       <div className="rounded-2xl border border-gray-line bg-card p-6">
-        {appointments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aún no hay citas registradas.</p>
+        {appointments.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {appointments.query
+              ? `Ninguna cita de una clínica que coincida con "${appointments.query}".`
+              : "Aún no hay citas registradas."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -29,7 +49,7 @@ export default async function AdminCitasPage() {
                 </tr>
               </thead>
               <tbody>
-                {appointments.map((a) => (
+                {appointments.items.map((a) => (
                   <AdminAppointmentRow key={a.id} appt={a} />
                 ))}
               </tbody>
@@ -37,6 +57,8 @@ export default async function AdminCitasPage() {
           </div>
         )}
       </div>
+
+      <AdminPagination pathname={PATH} list={appointments} />
     </div>
   );
 }

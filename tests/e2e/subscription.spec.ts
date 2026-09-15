@@ -41,7 +41,7 @@ test("suscripción: cancelar conserva el plan hasta el fin del período y se pue
 
   await page.goto("/settings/plan");
   const panel = page.locator("#suscripcion");
-  await expect(panel).toContainText("Plan Professional · se renueva el");
+  await expect(panel).toContainText("Plan Profesional · se renueva el");
   await expect(page.getByText("Consumo del ciclo")).toBeVisible();
   // A Free se llega cancelando, no con un cambio de plan instantáneo que
   // perdía el resto del período ya pagado.
@@ -57,7 +57,7 @@ test("suscripción: cancelar conserva el plan hasta el fin del período y se pue
   await dialog.getByRole("button", { name: "Sí, cancelar" }).click();
 
   await expect(panel).toContainText("Cancelaste la suscripción");
-  await expect(panel).toContainText("Conservas el plan Professional hasta el");
+  await expect(panel).toContainText("Conservas el plan Profesional hasta el");
   await expect(page.getByText(/Pasas a Free el/)).toBeVisible();
   if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/2-cancelada.png`, fullPage: true });
 
@@ -91,7 +91,7 @@ test("suscripción: una renovación sin cobrar avisa hasta cuándo dura la graci
 
   await page.goto("/dashboard");
   await expect(
-    page.getByText("No se pudo cobrar la renovación del plan Professional"),
+    page.getByText("No se pudo cobrar la renovación del plan Profesional"),
   ).toBeVisible();
   if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/5-aviso-dashboard.png` });
 
