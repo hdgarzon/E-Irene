@@ -16,6 +16,7 @@ import {
   clinicExists,
   findScheduledChargeForPeriod,
   getSubscriptionPeriod,
+  recordUnreadablePaymentSource,
   type ClinicDueForCharge,
 } from "@/lib/db/billing";
 import { buildRenewalReference, type RenewalReference } from "./wompi";
@@ -134,6 +135,8 @@ export interface ProcessRecurringChargesResult {
   pending: number;
   /** Clínicas en plan pago sin medio de pago tokenizado — requieren acción nuestra, no del cliente. */
   missingPaymentSource: number;
+  /** Clínicas con token de cobro que no descifra (clave rotada, dato corrupto) — tampoco se les cobra. */
+  unreadablePaymentSource: number;
 }
 
 const FAILURES_BEFORE_REVIEW = 3;
@@ -170,6 +173,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     skipped: 0,
     pending: 0,
     missingPaymentSource: 0,
+    unreadablePaymentSource: 0,
   };
 
   for (const clinic of dueClinics) {
@@ -177,6 +181,23 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     const amountInCents = PLANS[clinic.plan].priceInCents;
     if (amountInCents <= 0) {
       result.skipped++;
+      continue;
+    }
+
+    // Token de cobro que no descifra (clave rotada, dato corrupto): no hay con
+    // qué cobrar. Como la clínica sin token, es un problema nuestro y no un pago
+    // rechazado: no se reserva el período ni se la marca morosa. Queda en
+    // audit_logs para la plataforma y se sigue con las demás.
+    if (clinic.paymentSourceUnreadable) {
+      result.unreadablePaymentSource++;
+      try {
+        await recordUnreadablePaymentSource(clinic);
+      } catch (error) {
+        logger.error("billing.record_unreadable_payment_source_failed", {
+          clinicId: clinic.id,
+          error,
+        });
+      }
       continue;
     }
 
