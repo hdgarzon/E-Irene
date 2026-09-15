@@ -164,14 +164,49 @@ export async function listOpenRiskAlerts(limit = 50): Promise<RiskAlert[]> {
   return alerts;
 }
 
-/** El doctor (o admin) acusa recibo de la alerta — queda fuera de la cola abierta. */
-export async function acknowledgeRiskAlert(alertId: string, userId: string): Promise<void> {
+/**
+ * Resultado de un acuse de recibo. `not_allowed` junta "RLS no lo permite"
+ * (otra clínica, un rol sin criterio clínico) y "no existe": desde la sesión
+ * son indistinguibles, y en ningún caso hubo un acuse que auditar.
+ */
+export type AcknowledgeRiskAlertResult = "acknowledged" | "already_acknowledged" | "not_allowed";
+
+/**
+ * El doctor (o admin) acusa recibo de la alerta — queda fuera de la cola abierta.
+ *
+ * Un UPDATE que la política `risk_alerts_update` no deja pasar NO devuelve
+ * error: PostgREST responde 0 filas. Por eso se pide la fila actualizada y, si
+ * no vuelve ninguna, se relee para saber por qué.
+ *
+ * Solo acusa una alerta abierta: el filtro por `acknowledged_at is null` evita
+ * que un segundo acuse (doble clic, dos doctores) pise quién la atendió
+ * primero. Con dos acuses simultáneos, Postgres reevalúa el filtro tras el
+ * bloqueo de la fila, así que gana exactamente uno.
+ */
+export async function acknowledgeRiskAlert(
+  alertId: string,
+  userId: string,
+): Promise<AcknowledgeRiskAlertResult> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("risk_alerts")
     .update({ acknowledged_by: userId, acknowledged_at: new Date().toISOString() })
-    .eq("id", alertId);
+    .eq("id", alertId)
+    .is("acknowledged_at", null)
+    .select("id");
   if (error) throw error;
+  if (data.length > 0) return "acknowledged";
+
+  // La política de select deja leer las alertas de la propia clínica a
+  // cualquier rol (también a la secretaría): una alerta visible pero abierta
+  // es una denegación, no un acuse previo.
+  const { data: current, error: readError } = await supabase
+    .from("risk_alerts")
+    .select("acknowledged_at")
+    .eq("id", alertId)
+    .maybeSingle();
+  if (readError) throw readError;
+  return current?.acknowledged_at ? "already_acknowledged" : "not_allowed";
 }
 
 // ─────────────────────────────────────────────────────────────────────────
