@@ -79,7 +79,7 @@ type CreateRiskAlertInput =
  * que NO debe reenviar el correo.
  *
  * Usa el cliente service-role en las dos fuentes: la sesión no puede insertar
- * en `risk_alerts` (migraciones 0047 y 0049). La PHQ-9 corre desde el flujo de
+ * en `risk_alerts` (migraciones 0047 y 0055). La PHQ-9 corre desde el flujo de
  * link público, sin sesión de personal. La de análisis de IA corre con la
  * sesión de quien terminó o reintentó la consulta —cualquier rol—, pero la
  * alerta la registra el servidor. El llamador responde por los datos:

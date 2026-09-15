@@ -11,14 +11,14 @@ import "./helpers/supabase-env";
 
 /**
  * Lo que la sesión puede insertar en `risk_alerts`: nada (migraciones 0047 y
- * 0049).
+ * 0055).
  *
  * La política `risk_alerts_insert` (0023) solo exigía la clínica. Con su JWT,
  * cualquier miembro —también la secretaria— podía insertar la alerta de una
  * consulta antes que el análisis: ya acusada, de la fuente PHQ-9, con paciente
  * o doctor de otra clínica, o abierta e inventada. El análisis real chocaba
  * con el índice único y no avisaba al doctor. La 0047 acotó ese insert y la
- * 0049 lo retira: las alertas las registra el servidor (createRiskAlert con
+ * 0055 lo retira: las alertas las registra el servidor (createRiskAlert con
  * service-role).
  *
  * Cada intento se hace como lo haría alguien con su sesión: un POST directo a
@@ -205,7 +205,7 @@ async function sinPermiso(client: SupabaseClient, fila: Record<string, unknown>)
   expect(data).toBeNull();
 }
 
-d("risk_alerts: la sesión no inserta (0047 y 0049)", () => {
+d("risk_alerts: la sesión no inserta (0047 y 0055)", () => {
   let A: Clinica;
   let B: Clinica;
   let doctor: Miembro;
