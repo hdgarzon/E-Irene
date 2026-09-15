@@ -23,6 +23,14 @@ function requireKey(b64Key?: string): string {
   return k;
 }
 
+/**
+ * Lanza si la clave falta o no mide 32 bytes. Separa una clave mal configurada
+ * —que afecta a todos los datos— de un payload puntual que no descifra.
+ */
+export function assertEncryptionKey(b64Key?: string): void {
+  keyBuffer(requireKey(b64Key));
+}
+
 export function encrypt(plain: string, b64Key?: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", keyBuffer(requireKey(b64Key)), iv);

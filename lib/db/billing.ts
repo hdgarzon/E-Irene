@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encrypt, decrypt } from "@/lib/crypto";
+import { assertEncryptionKey, encrypt, decrypt } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
 import { PLANS, type Plan } from "@/lib/plans";
 
@@ -73,7 +73,14 @@ export interface ClinicDueForCharge {
   plan: Plan;
   /** Fin del período que se va a renovar. De él salen la clave y la renovación del cobro. */
   currentPeriodEnd: string;
+  /** null si la clínica no tiene token, o si el que tiene no se pudo descifrar. */
   wompiPaymentSourceId: string | null;
+  /**
+   * Hay token guardado pero no descifra con la ENCRYPTION_KEY vigente (clave
+   * rotada, dato dañado, fila escrita con otra clave). No se le puede cobrar,
+   * pero no es una clínica sin token: el token existe y hay que recuperarlo.
+   */
+  paymentSourceUnreadable?: true;
 }
 
 /**
@@ -93,23 +100,41 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
     .eq("cancel_at_period_end", false)
     .lte("current_period_end", new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString());
   if (error) throw error;
+  const rows = data ?? [];
+
+  // Una clave ausente o mal formada no es problema de una fila sino de todas:
+  // debe tumbar la corrida, no reportarse como N tokens ilegibles.
+  if (rows.some((r) => r.wompi_payment_source_id_enc)) assertEncryptionKey();
 
   // El filtro `lte` ya deja fuera los períodos null; el flatMap solo lo hace
   // explícito para el tipo.
-  return (data ?? []).flatMap((r) =>
-    r.current_period_end
-      ? [
-          {
-            id: r.id,
-            plan: r.plan as Plan,
-            currentPeriodEnd: r.current_period_end,
-            wompiPaymentSourceId: r.wompi_payment_source_id_enc
-              ? decrypt(r.wompi_payment_source_id_enc)
-              : null,
-          },
-        ]
-      : [],
-  );
+  return rows.flatMap((r) => {
+    if (!r.current_period_end) return [];
+    const clinic: ClinicDueForCharge = {
+      id: r.id,
+      plan: r.plan as Plan,
+      currentPeriodEnd: r.current_period_end,
+      wompiPaymentSourceId: null,
+    };
+    if (r.wompi_payment_source_id_enc) {
+      try {
+        clinic.wompiPaymentSourceId = decrypt(r.wompi_payment_source_id_enc);
+      } catch (error) {
+        // Un token que no descifra afecta solo a su clínica. Lanzar aquí dejaba
+        // sin cobrar ni renovar a todas las demás de la corrida. Se registra el
+        // id y el error de descifrado, nunca el token.
+        clinic.paymentSourceUnreadable = true;
+        logger.error("billing.payment_source_unreadable", {
+          clinicId: r.id,
+          plan: r.plan,
+          error,
+          action:
+            "el token de cobro guardado no descifra con la ENCRYPTION_KEY vigente (¿clave rotada o dato dañado?): no se le cobró ni se tocó su estado. Recuperarlo con la clave con que se cifró, o pedirle a la clínica que pague desde la app antes de que termine la gracia: al vencer, end_overdue_subscriptions la pasa a Free y borra el token.",
+        });
+      }
+    }
+    return [clinic];
+  });
 }
 
 /**

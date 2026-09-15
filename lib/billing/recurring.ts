@@ -134,6 +134,11 @@ export interface ProcessRecurringChargesResult {
   pending: number;
   /** Clínicas en plan pago sin medio de pago tokenizado — requieren acción nuestra, no del cliente. */
   missingPaymentSource: number;
+  /**
+   * Clínicas con token guardado que no descifra (clave rotada, dato dañado). No
+   * se cobran ni se marcan morosas; cada una queda en billing.payment_source_unreadable.
+   */
+  unreadablePaymentSource: number;
 }
 
 const FAILURES_BEFORE_REVIEW = 3;
@@ -170,6 +175,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     skipped: 0,
     pending: 0,
     missingPaymentSource: 0,
+    unreadablePaymentSource: 0,
   };
 
   for (const clinic of dueClinics) {
@@ -177,6 +183,15 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     const amountInCents = PLANS[clinic.plan].priceInCents;
     if (amountInCents <= 0) {
       result.skipped++;
+      continue;
+    }
+
+    // Tiene token pero no descifra: tampoco es un fallo de pago del cliente.
+    // getClinicsDueForCharge ya lo registró con el id de la clínica. Se aparta
+    // sin reservar el período, sin cobrar y sin marcarla como morosa, y la
+    // corrida sigue con las demás.
+    if (clinic.paymentSourceUnreadable) {
+      result.unreadablePaymentSource++;
       continue;
     }
 

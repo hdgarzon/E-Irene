@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import { randomUUID } from "node:crypto";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 import { addMonthsBogota, billingCycleBounds } from "@/lib/dates";
@@ -156,6 +156,64 @@ d("la cuota de transcripción corta por ciclo, no por mes calendario", () => {
     const { data, error: usageErr } = await A.client.rpc("get_transcription_usage");
     expect(usageErr).toBeNull();
     expect(data).toEqual({ used_seconds: 1200, sessions: 1 });
+  }, 30000);
+});
+
+d("cobro recurrente: un token que no descifra no frena a las demás clínicas", () => {
+  it("devuelve las demás clínicas vencidas y reporta la ilegible sin exponer el token", async () => {
+    const legible = await bootstrapClinic("Clínica Token Legible");
+    const ilegible = await bootstrapClinic("Clínica Token Ilegible");
+    const ours = [legible.clinicId, ilegible.clinicId];
+
+    const dueSoon = nowSeconds(1 * DAY);
+    const due = {
+      plan: "pro",
+      billing_status: "activo",
+      cancel_at_period_end: false,
+      current_period_end: dueSoon.toISOString(),
+      billing_cycle_anchor: addMonthsBogota(dueSoon, -1).toISOString(),
+    };
+    // Mismo formato que un token real, cifrado con otra clave: lo que deja una
+    // clave rotada o una fila escrita desde otro entorno.
+    const foreignToken = encrypt("ps-demo-otra-clave", randomBytes(32).toString("base64"));
+    await setClinic(legible.clinicId, { ...due, wompi_payment_source_id_enc: encrypt("ps-demo-legible") });
+    await setClinic(ilegible.clinicId, { ...due, wompi_payment_source_id_enc: foreignToken });
+
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // La base local es compartida y puede tener otras clínicas vencidas (hasta
+      // con tokens de otra clave): solo se mira lo que creó esta prueba.
+      const found = (await getClinicsDueForCharge()).filter((c) => ours.includes(c.id));
+      expect(found.find((c) => c.id === legible.clinicId)).toMatchObject({
+        wompiPaymentSourceId: "ps-demo-legible",
+      });
+      expect(found.find((c) => c.id === legible.clinicId)?.paymentSourceUnreadable).toBeUndefined();
+      expect(found.find((c) => c.id === ilegible.clinicId)).toMatchObject({
+        wompiPaymentSourceId: null,
+        paymentSourceUnreadable: true,
+      });
+
+      const reports = errors.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.includes("billing.payment_source_unreadable"));
+      const report = reports.filter((line) => line.includes(ilegible.clinicId));
+      expect(report).toHaveLength(1);
+      expect(reports.some((line) => line.includes(legible.clinicId))).toBe(false);
+      expect(report[0]).not.toContain("ps-demo-otra-clave");
+      for (const part of foreignToken.split(".")) expect(report[0]).not.toContain(part);
+    } finally {
+      errors.mockRestore();
+      // Sin esto la fila ilegible queda por cobrar en la base local y reaparece
+      // en cada corrida siguiente.
+      for (const id of ours) {
+        await setClinic(id, {
+          plan: "free",
+          billing_status: "sin_configurar",
+          current_period_end: null,
+          wompi_payment_source_id_enc: null,
+        });
+      }
+    }
   }, 30000);
 });
 

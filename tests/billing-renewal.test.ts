@@ -186,6 +186,36 @@ describe("processRecurringCharges (cron)", () => {
     expect(parseRenewalReference(body.reference)).toEqual(reference);
   });
 
+  it("un token que no descifra aparta solo a su clínica: no se cobra ni queda morosa, y las demás se cobran", async () => {
+    const unreadable = {
+      ...due,
+      id: "00000000-0000-4000-8000-000000000002",
+      wompiPaymentSourceId: null,
+      paymentSourceUnreadable: true as const,
+    };
+    db.getClinicsDueForCharge.mockResolvedValue([unreadable, due]);
+
+    const result = await processRecurringCharges();
+    expect(result).toMatchObject({
+      processed: 2,
+      succeeded: 1,
+      failed: 0,
+      unreadablePaymentSource: 1,
+      // No es una clínica sin token: el token existe y hay que recuperarlo.
+      missingPaymentSource: 0,
+    });
+
+    // Ni se reserva su período ni se le cobra ni se toca su estado.
+    expect(db.isStillDueForCharge).toHaveBeenCalledTimes(1);
+    expect(db.createScheduledCharge).toHaveBeenCalledTimes(1);
+    expect(db.createScheduledCharge).toHaveBeenCalledWith(expect.objectContaining({ clinicId: CLINIC }));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(db.markBillingFailed).not.toHaveBeenCalled();
+    expect(db.markScheduledChargeFailed).not.toHaveBeenCalled();
+    expect(db.renewBilling).toHaveBeenCalledTimes(1);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+  });
+
   it("si la clínica canceló o cambió de plan desde la consulta, no se cobra", async () => {
     db.isStillDueForCharge.mockResolvedValue(false);
     const result = await processRecurringCharges();

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { encrypt, decrypt } from "@/lib/crypto";
+import { describe, it, expect, vi } from "vitest";
+import { assertEncryptionKey, encrypt, decrypt } from "@/lib/crypto";
 
 const key = Buffer.from("a".repeat(32)).toString("base64"); // 32 bytes
 
@@ -22,6 +22,17 @@ describe("crypto (AES-256-GCM)", () => {
 
   it("rejects keys that are not 32 bytes", () => {
     expect(() => encrypt("x", Buffer.from("short").toString("base64"))).toThrow();
+  });
+
+  it("assertEncryptionKey throws for a missing or malformed key, not for a usable one", () => {
+    expect(() => assertEncryptionKey(key)).not.toThrow();
+    expect(() => assertEncryptionKey(Buffer.from("short").toString("base64"))).toThrow();
+    vi.stubEnv("ENCRYPTION_KEY", "");
+    try {
+      expect(() => assertEncryptionKey()).toThrow("ENCRYPTION_KEY no está configurada");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("handles unicode and empty strings", () => {
