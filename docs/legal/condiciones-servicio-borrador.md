@@ -3,8 +3,8 @@
 > **BORRADOR PRELIMINAR PARA REVISIÓN JURÍDICA — NO PUBLICAR**
 >
 > Documento que acepta quien contrata un plan pago de E-Irene, **en el momento de pagar**. Regula
-> solo la relación comercial: planes, precios, cobro, renovación, límites de uso, cambios de plan y
-> cancelación.
+> solo la relación comercial: planes, precios, cobro, renovación, límites de uso, adicionales, cambios
+> de plan y cancelación.
 >
 > No reemplaza a los documentos que ya se aceptan en la plataforma, y conviene leerlo junto con
 > ellos:
@@ -47,13 +47,13 @@ DÉCIMA) y buena parte de los deberes de información previa.]`
 
 **2.1** Los planes vigentes son:
 
-| Plan | Precio por ciclo mensual | Profesionales | Pacientes | Consultas por ciclo | Horas de transcripción por ciclo |
-|---|---|---|---|---|---|
-| Free | $0 | 1 | 5 | 5 | 2 |
-| Esencial | $59.000 | 1 | Ilimitados | 20 | 20 |
-| Profesional | $99.000 | 1 | Ilimitados | 30 | 30 |
-| Clínica | $249.000 | Hasta 5 | Ilimitados | 75 | 75 |
-| Enterprise | A convenir | Según contrato | Según contrato | Según contrato | Según contrato |
+| Plan | Precio por ciclo mensual | Profesionales | Pacientes | Consultas por ciclo | Horas de transcripción por ciclo | Videollamadas |
+|---|---|---|---|---|---|---|
+| Free | $0 | 1 | 5 | 5 | 2 | No incluye |
+| Esencial | $59.000 | 1 | Ilimitados | 20 | 20 | Por paquetes (6.7) |
+| Profesional | $99.000 | 1 | Ilimitados | 30 | 30 | Por paquetes (6.7) |
+| Clínica | $249.000 | Hasta 5 | Ilimitados | 75 | 75 | Por paquetes (6.7) |
+| Enterprise | A convenir | Según contrato | Según contrato | Según contrato | Según contrato | Incluidas |
 
 **2.2** Los precios están expresados en **pesos colombianos (COP)**.
 
@@ -64,8 +64,9 @@ plataforma cobra exactamente el valor de la tabla, sin sumar impuestos.]`
 WhatsApp, son las que se muestran en la sección **Plan y facturación** de la plataforma al momento
 de contratar.
 
-`[Ver ANEXO, puntos 3 y 4, antes de fijar la tabla de funcionalidades: hay diferencias entre lo que
-anuncia la página de planes y lo que la plataforma entrega.]`
+`[Ver ANEXO, punto 3, antes de fijar la tabla de funcionalidades: hay una diferencia entre lo que
+anuncia la página de planes y lo que la plataforma entrega. Las videollamadas quedan definidas en la
+cláusula SEXTA, numeral 6.7.]`
 
 **2.4** El plan **Enterprise** no se contrata desde la plataforma. Su precio, sus límites y sus
 condiciones se acuerdan por escrito con E-Irene, que lo asigna a la cuenta una vez firmado el
@@ -79,13 +80,19 @@ acuerdo. Lo que ese acuerdo disponga prevalece sobre estas condiciones.
 recibe ni almacena los datos completos del medio de pago: Wompi entrega un identificador (token),
 que E-Irene guarda cifrado y usa únicamente para cobrar las renovaciones del plan.
 
-**3.2** El plan se activa cuando Wompi confirma el pago como aprobado. Algunos medios, como PSE o
-Nequi, pueden tardar minutos en confirmarse; mientras tanto, el plan no está activo.
+**3.2** El plan, el cambio de plan o el adicional se activan cuando Wompi confirma el pago como
+aprobado. Algunos medios, como PSE o Nequi, pueden tardar minutos en confirmarse; mientras tanto, no
+están activos. Cada compra se paga con un enlace de pago que vence: a los treinta (30) minutos el de
+un cambio a un plan superior (cláusula SÉPTIMA, numeral 7.1) y a las veinticuatro (24) horas los
+demás. Un pago iniciado después del vencimiento no se aplica.
 
-**3.3** E-Irene solo activa el plan si el valor pagado coincide con el precio vigente del plan. Un
-pago por un valor distinto queda registrado, no activa el plan y se concilia con el Cliente.
+**3.3** E-Irene solo aplica un pago si coincide con lo que se ofreció al generar el enlace: el
+precio del plan, la diferencia calculada para subir de plan o el valor del adicional. Cada pago se
+aplica **una sola vez**, aunque la confirmación llegue repetida. Un pago que no se puede aplicar —por
+ejemplo, por un valor distinto, por un enlace vencido o porque la cuenta cambió desde que se generó
+el enlace— queda registrado con su motivo, no activa nada y se concilia con el Cliente.
 
-`[Definir el plazo y la forma de esa conciliación: devolución del pago o activación del plan.]`
+`[Definir el plazo y la forma de esa conciliación: devolución del pago o aplicación manual.]`
 
 **3.4** `[Comprobante y factura. Hoy la plataforma no envía una confirmación propia del pago: el
 Cliente ve el plan activo dentro de la plataforma. Definir (a) si se emite factura electrónica y
@@ -105,11 +112,12 @@ los meses siguientes vuelve al día original.
 empiezan en la fecha de creación de la cuenta.
 
 **4.3 Renovación automática.** Salvo que el Cliente cancele (cláusula OCTAVA), el plan se renueva
-automáticamente por un ciclo más, por el precio vigente del plan en la fecha de la renovación
-(cláusula NOVENA), con cargo al medio de pago registrado. E-Irene intenta el cobro desde tres (3)
-días antes del fin del ciclo y lo reintenta una vez al día mientras no se apruebe. La renovación
-extiende el plan exactamente un ciclo desde el fin del ciclo anterior, sin importar el día en que se
-apruebe el cobro.
+automáticamente por un ciclo más, por el precio vigente en la fecha de la renovación (cláusula
+NOVENA) del plan que corresponda: el actual o, si el Cliente programó bajar de plan, el inferior
+elegido (cláusula SÉPTIMA, numeral 7.2). El cobro se hace con cargo al medio de pago registrado.
+E-Irene intenta el cobro desde tres (3) días antes del fin del ciclo y lo reintenta una vez al día
+mientras no se apruebe. La renovación extiende el plan exactamente un ciclo desde el fin del ciclo
+anterior, sin importar el día en que se apruebe el cobro.
 
 **4.4 Sin permanencia mínima.** No hay permanencia mínima ni penalidad por cancelar.
 
@@ -132,7 +140,7 @@ contado desde el día del pago, y ese día pasa a ser el inicio de sus ciclos si
 **5.3** Si al terminar la gracia el pago no se ha completado, la cuenta **pasa al plan Free**.
 E-Irene no suspende la cuenta ni borra pacientes, historias clínicas, reportes u otros datos por
 falta de pago. El Cliente sigue accediendo a ellos con los límites del plan Free (cláusula SÉPTIMA,
-numeral 7.3).
+numeral 7.5).
 
 **5.4** Tras tres (3) intentos de cobro fallidos, la cuenta queda marcada para revisión manual de
 E-Irene.
@@ -142,7 +150,7 @@ correos sobre cobros fallidos: el aviso solo se ve dentro de ella.]`
 
 ---
 
-## SEXTA — Límites de uso
+## SEXTA — Límites de uso y adicionales
 
 **6.1** Cada plan incluye un número máximo de consultas y de horas de transcripción por ciclo,
 además de un número máximo de profesionales y de pacientes. Los límites de consultas y de horas se
@@ -164,28 +172,91 @@ y el del paciente.
 **6.4** Lo que no se usa en un ciclo **no se acumula** para los siguientes.
 
 **6.5** E-Irene **no cobra excedentes** de manera automática. Para ampliar la capacidad, el Cliente
-puede cambiar de plan (cláusula SÉPTIMA).
+puede cambiar de plan (cláusula SÉPTIMA) o comprar adicionales (numerales 6.6 y 6.7), siempre como
+compra expresa desde **Plan y facturación**.
 
-`[Si se lanzan paquetes adicionales, como una bolsa de horas o videollamadas sueltas, incorporarlos
-aquí, siempre como compra expresa del Cliente.]`
+**6.6 Bolsa de horas de transcripción.**
+
+- **(a)** En los planes Esencial, Profesional y Clínica, con un ciclo pagado vigente, el Cliente puede
+  comprar bolsas de **cinco (5) horas de transcripción por $25.000** cada una. Puede comprar varias.
+- **(b)** Las horas de la bolsa se suman al límite de horas del plan **solo en el ciclo en que se
+  aprueba el pago** y **vencen al terminar ese ciclo**. Lo que no se usa no se acumula. Si el pago se
+  aprueba cuando ya empezó el ciclo siguiente, las horas corresponden a ese ciclo.
+- **(c)** No se venden bolsas cuando faltan menos de veinticuatro (24) horas para el fin del ciclo.
+- **(d)** La bolsa suma horas de transcripción, no consultas: el límite de consultas del plan no
+  cambia.
+
+`[Definir si las horas de una bolsa que vencen sin usarse tienen alguna devolución (cláusula OCTAVA,
+numeral 8.5). Hoy no la tienen.]`
+
+**6.7 Videollamadas.**
+
+- **(a) Plan Free.** No incluye consultas por videollamada. Se pueden agendar citas con esa
+  modalidad, pero no iniciarlas.
+- **(b) Planes Esencial, Profesional y Clínica.** Las videollamadas se compran por paquetes de **una
+  (1), cinco (5) o diez (10) videollamadas, a $9.000 cada una** ($9.000, $45.000 y $90.000), con un
+  ciclo pagado vigente. Los paquetes **no vencen**.
+- **(c) Plan Enterprise.** Incluye las videollamadas en los términos de su acuerdo.
+- **(d) Cuándo se descuenta.** Para iniciar una consulta por videollamada hace falta un saldo
+  disponible de al menos una. Al iniciarla, la plataforma **reserva** una videollamada mientras la
+  consulta sigue en curso. Se **descuenta una sola vez por consulta y solo si el paciente se conecta**
+  durante la consulta, aunque se desconecte y vuelva a entrar. Si al cerrar la consulta no se puede
+  confirmar que el paciente se conectó, la reserva se libera y **no se descuenta**.
+- **(e)** El paciente no puede entrar a la videollamada antes de que el profesional inicie la
+  consulta. Agendar una cita por videollamada no descuenta saldo.
+- **(f)** E-Irene puede sumar videollamadas al saldo del Cliente como devolución o cortesía. Cada
+  ajuste queda registrado con su motivo.
+
+`[Definir: (i) qué pasa con el saldo de videollamadas si la cuenta pasa a Free (hoy se conserva, pero
+en Free no se puede usar); (ii) si los paquetes no usados tienen devolución al cancelar (cláusula
+OCTAVA, numeral 8.5); y (iii) si se prohíbe expresamente usar la sala de videollamada fuera de una
+consulta iniciada en la plataforma. Hoy una conexión del paciente posterior al cierre no descuenta
+saldo y queda registrada para revisión.]`
 
 ---
 
 ## SÉPTIMA — Cambio de plan
 
-**7.1 A otro plan pago, superior o inferior.** Se contrata pagando el nuevo plan desde **Plan y
-facturación**. El pago activa el nuevo plan de inmediato, por su precio completo, y **empieza un
-ciclo nuevo** desde ese día. El tiempo que quedaba del plan anterior **no se prorratea ni se
-devuelve**.
+**7.1 Subir a un plan pago superior con un ciclo pagado vigente** (Esencial → Profesional →
+Clínica).
 
-`[Decisión comercial y jurídica: hoy la plataforma no prorratea. Confirmar que es aceptable o
-definir un crédito proporcional. Tener en cuenta que bajar a un plan inferior pagándolo hace perder
-el resto del ciclo del plan superior.]`
+- **(a)** El Cliente paga desde **Plan y facturación** solo la **diferencia de precio proporcional al
+  tiempo que queda del ciclo en curso**: (precio del plan nuevo − precio del plan actual) × tiempo
+  que queda del ciclo ÷ duración del ciclo, redondeada hacia arriba al peso entero y con un cobro
+  mínimo de `[$1.500]`. La plataforma muestra el valor antes de pagar.
+- **(b)** El plan nuevo se activa en cuanto Wompi aprueba el pago, con sus límites desde ese momento.
+  Lo ya consumido en el ciclo se conserva y cuenta contra los límites nuevos.
+- **(c)** **La fecha de renovación no cambia.** En esa fecha se cobra el precio completo del plan
+  nuevo.
+- **(d)** Solo el administrador de la cuenta puede subir de plan, y no mientras haya una cancelación
+  pedida: primero debe reactivar la suscripción.
+- **(e)** Si había un cambio programado a un plan inferior (numeral 7.2), subir de plan lo anula. La
+  plataforma lo advierte antes de pagar.
+- **(f)** El pago no se aplica, y queda registrado para conciliación (cláusula TERCERA, numeral 3.3),
+  si el enlace venció o si antes de aprobarse: cambió el plan, el ciclo o el cambio programado; se
+  pidió la cancelación; la renovación quedó pendiente de pago; o hay un cobro de renovación en curso.
 
-**7.2 A Free.** Se hace cancelando la suscripción (cláusula OCTAVA). El Cliente conserva el plan
+`[Confirmar con Wompi el monto mínimo por transacción antes de fijar el cobro mínimo.]`
+
+**7.2 Bajar a un plan pago inferior con un ciclo pagado vigente.**
+
+- **(a)** Lo programa el administrador desde **Plan y facturación**. **No se cobra nada** en ese
+  momento y el Cliente **conserva el plan actual hasta el fin del ciclo pagado**.
+- **(b)** El cambio **rige desde la siguiente renovación**, que se cobra al precio del plan inferior.
+- **(c)** Hasta la renovación, el administrador puede anular el cambio programado ("Mantener plan") o
+  elegir otro plan inferior, salvo cuando ya hay un cobro de renovación en curso.
+- **(d)** No se puede programar mientras haya una cancelación pedida, y cancelar la suscripción anula
+  el cambio programado.
+
+**7.3 Sin ciclo pagado vigente.** Desde Free, o para salir del período de gracia (cláusula QUINTA),
+el Cliente paga el plan elegido **por su precio completo** y **empieza un ciclo nuevo** desde ese
+día. Un pago de plan completo no se aplica si la cuenta ya tiene un ciclo pagado vigente: queda
+registrado para conciliación (cláusula TERCERA, numeral 3.3).
+
+**7.4 A Free.** Se hace cancelando la suscripción (cláusula OCTAVA). El Cliente conserva el plan
 pago hasta el fin del ciclo ya pagado.
 
-**7.3 Límites menores.** Si al pasar a un plan con límites menores la cuenta ya supera alguno, por
+**7.5 Límites menores.** Si al pasar a un plan con límites menores la cuenta ya supera alguno, por
 ejemplo más pacientes o profesionales de los que admite el nuevo plan, **no se borra nada**: el
 Cliente conserva lo existente, pero no puede agregar más hasta volver a un plan que lo admita.
 
@@ -198,7 +269,8 @@ Cliente conserva lo existente, pero no puede agregar más hasta volver a un plan
 
 **8.2** Al cancelar, **no se vuelve a cobrar** y el Cliente **conserva el plan hasta el fin del
 ciclo ya pagado**; ese día la cuenta pasa a Free. Hasta esa fecha puede reactivar la suscripción
-desde la misma sección, y el cobro automático se retoma.
+desde la misma sección, y el cobro automático se retoma. Cancelar anula el cambio de plan que
+estuviera programado (cláusula SÉPTIMA, numeral 7.2).
 
 **8.3** Si el plan fue asignado por E-Irene sin un ciclo pagado, la cancelación lo termina de
 inmediato y la cuenta pasa a Free.
@@ -206,8 +278,10 @@ inmediato y la cuenta pasa a Free.
 **8.4** Cancelar no borra datos. Su conservación y eventual supresión se rigen por el Consentimiento
 del Profesional y por las obligaciones legales de conservación de la historia clínica.
 
-**8.5** `[Reembolsos. Hoy la plataforma no hace devoluciones por el tiempo no usado de un ciclo.
-Definir la política y su relación con el derecho de retracto (cláusula DÉCIMA).]`
+**8.5** `[Reembolsos. Hoy la plataforma no hace devoluciones por el tiempo no usado de un ciclo, ni
+por horas de bolsa o videollamadas no usadas. Los pagos que no se pudieron aplicar quedan registrados
+para conciliación (cláusula TERCERA, numeral 3.3). Definir la política y su relación con el derecho
+de retracto (cláusula DÉCIMA).]`
 
 ---
 
@@ -291,16 +365,24 @@ cuentas.]`
 3. **Análisis con IA en el plan Free.** La página de planes anuncia "Sin análisis con IA" para Free,
    pero la plataforma sí lo presta a las cuentas Free. Hay que alinear lo que se anuncia con lo que
    se entrega antes de fijar la tabla de funcionalidades.
-4. **Videollamada.** Hoy está disponible en todos los planes, incluido Free. Si se va a cobrar
-   aparte, estas condiciones deben decirlo antes de restringirla, respetando lo contratado por
-   quien ya pagó.
-5. **Prorrateo al cambiar de plan** (SÉPTIMA). Hoy no existe.
-6. **Reembolsos** (OCTAVA). Hoy no hay devoluciones.
+4. **Videollamada — decidido** (SEGUNDA y SEXTA, numeral 6.7). Free no la incluye; Esencial,
+   Profesional y Clínica la compran por paquetes que no vencen y se descuentan solo si el paciente se
+   conecta; Enterprise la incluye. Falta definir: cómo se informa a quien ya tenía citas por
+   videollamada agendadas, respetando lo contratado por quien ya pagó; qué pasa con el saldo al pasar
+   a Free; y si se prohíbe usar la sala fuera de una consulta.
+5. **Cambio de plan — decidido** (SÉPTIMA). Subir cobra la diferencia proporcional al tiempo que queda
+   del ciclo y no mueve la fecha de renovación; bajar se programa para la renovación, sin cobro en el
+   momento. Falta confirmar con Wompi el cobro mínimo.
+6. **Reembolsos** (OCTAVA). Hoy no hay devoluciones del tiempo no usado ni de adicionales no usados.
 7. **Aviso previo de cambios de precio** (NOVENA). No está implementado: cada renovación cobra el
    precio vigente en ese momento.
 8. **Comunicaciones al Cliente.** Confirmación de pago, cobro fallido, cancelación y cambios de
    precio. Hoy la plataforma no envía correos sobre ninguno de estos eventos; todos los avisos son
    dentro de ella.
-9. **Conciliación de pagos por un valor distinto** (TERCERA).
+9. **Conciliación de pagos que no se pudieron aplicar** (TERCERA). Hoy cada uno queda registrado con
+   su motivo; falta definir plazo y forma de devolución o aplicación.
 10. **Dónde y cómo se acepta** (ACEPTACIÓN), y qué pasa con quien ya tiene un plan pago cuando se
     publique la primera versión.
+11. **Adicionales** (SEXTA, numerales 6.6 y 6.7). Confirmar la redacción del vencimiento de la bolsa
+    al terminar el ciclo y del no vencimiento de los paquetes de videollamadas, y si alguno admite
+    devolución.

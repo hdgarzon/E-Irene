@@ -1,7 +1,7 @@
 # Memo para revisión legal — E-Irene
 
 **Fecha:** 6 de agosto de 2026
-**Actualizado:** 15 de septiembre de 2026 — se agrega el borrador de condiciones del servicio
+**Actualizado:** 15 de septiembre de 2026 — se agrega el borrador de condiciones del servicio, con cambios de plan, bolsa de horas y videollamadas
 **Para:** [NOMBRE DE LA ABOGADA]
 **Asunto:** Borradores preliminares — constitución societaria, cumplimiento en protección de datos y condiciones de la suscripción
 
@@ -56,7 +56,7 @@ valida, lo que apunta a encargo — pero es la decisión con más consecuencias 
 | `politica-tratamiento-datos-borrador.md` | Política de Tratamiento (Ley 1581/2012, Decreto 1074/2015) | Requiere datos del Responsable |
 | `aviso-privacidad-borrador.md` | Aviso de Privacidad (versión corta para la app) | Derivado de la política |
 | `consentimiento-profesional-borrador.md` | Términos de vinculación + acuerdo de encargo | Requiere definir límite de responsabilidad |
-| `condiciones-servicio-borrador.md` | Condiciones del servicio y de la suscripción: planes, cobro, renovación y cancelación. Se aceptan al pagar | Añadido en septiembre de 2026. Requiere las decisiones de su anexo |
+| `condiciones-servicio-borrador.md` | Condiciones del servicio y de la suscripción: planes, cobro, renovación, cambios de plan, adicionales (bolsa de horas y videollamadas) y cancelación. Se aceptan al pagar | Añadido en septiembre de 2026. Requiere las decisiones de su anexo |
 
 ## 4. Hallazgos técnicos que motivaron este trabajo
 
