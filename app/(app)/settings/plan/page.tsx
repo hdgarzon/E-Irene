@@ -8,14 +8,19 @@ import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import {
   PLANS,
   PLAN_ORDER,
+  TRANSCRIPTION_PACK,
+  effectiveTranscriptionLimitSeconds,
   formatCop,
   limitLabel,
-  transcriptionLimitSeconds,
+  transcriptionHoursLabel,
+  transcriptionLimitHours,
   transcriptionUsageLabel,
   type Plan,
 } from "@/lib/plans";
+import { transcriptionPackAvailability } from "@/lib/billing/transcription-pack";
 import { formatLongDate } from "@/lib/dates";
 import {
+  buyTranscriptionPackAction,
   initiatePlanUpgradeAction,
   schedulePlanDowngradeAction,
 } from "@/app/(app)/settings/actions";
@@ -27,7 +32,7 @@ import { UsageBar } from "@/components/usage-bar";
 import { SubscriptionPanel, type SubscriptionPanelState } from "@/components/subscription-panel";
 
 interface PlanPageProps {
-  searchParams: Promise<{ wompi?: string; id?: string; cambio?: string }>;
+  searchParams: Promise<{ wompi?: string; id?: string; cambio?: string; bolsa?: string }>;
 }
 
 /** Enterprise se acuerda por correo, con el mismo contacto de la página pública. */
@@ -54,6 +59,18 @@ const PLAN_CHANGE_NOTICES: Record<string, { tone: "ok" | "warn" | "error"; text:
   no_cotizable: {
     tone: "error",
     text: "No pudimos calcular la diferencia para cambiar de plan. Escríbenos y lo resolvemos.",
+  },
+};
+
+/** Resultado de intentar comprar horas adicionales (?bolsa=). */
+const PACK_NOTICES: Record<string, { tone: "ok" | "warn" | "error"; text: string }> = {
+  fin_de_ciclo: {
+    tone: "warn",
+    text: "Faltan menos de 24 horas para que termine el ciclo: las horas adicionales vencerían casi de inmediato. Podrás comprarlas en el ciclo nuevo.",
+  },
+  no_disponible: {
+    tone: "warn",
+    text: "Las horas adicionales se compran con un plan Esencial, Profesional o Clínica y la suscripción al día.",
   },
 };
 
@@ -106,7 +123,7 @@ function toPanelState(state: SubscriptionState): SubscriptionPanelState | null {
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const user = await requireRole(["admin", "doctor"]);
-  const { wompi, id: transactionId, cambio } = await searchParams;
+  const { wompi, id: transactionId, cambio, bolsa } = await searchParams;
 
   // Wompi devuelve al usuario con ?id=<transaction_id>. Se verifica el pago
   // contra la API de Wompi y se aplica si corresponde — red de seguridad para
@@ -131,19 +148,25 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   // paralelo.
   const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
   const limits = PLANS[overview.plan];
-  const limitSeconds = transcriptionLimitSeconds(overview.plan);
+  const limitSeconds = effectiveTranscriptionLimitSeconds(overview.plan, usage.extraSeconds);
   const quotaExhausted = limitSeconds !== null && usage.usedSeconds >= limitSeconds;
   const isAdmin = user.role === "admin";
   const cycleEndLabel = formatLongDate(overview.cycleEnd);
   const state = subscriptionState(overview.plan, overview.subscription);
   const panelState = toPanelState(state);
-  const notice = cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined;
+  const notice =
+    (cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined) ?? (bolsa ? PACK_NOTICES[bolsa] : undefined);
 
   // Con un período pagado vigente, cambiar entre planes pagos no vuelve a cobrar
   // un mes completo: subir cobra la diferencia y bajar se programa.
   const paidPeriodEnd =
     state.kind === "renewing" || state.kind === "canceling" ? state.periodEnd : null;
   const scheduledPlan = state.kind === "renewing" ? state.scheduledPlan : null;
+  const packAvailability = transcriptionPackAvailability({
+    plan: overview.plan,
+    hasPaidPeriod: paidPeriodEnd !== null,
+    cycleEnd: overview.cycleEnd,
+  });
 
   function features(plan: Plan) {
     const l = PLANS[plan];
@@ -268,7 +291,9 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               <span className="font-semibold text-navy">Pago confirmado.</span>{" "}
               {reconciled.kind === "upgrade"
                 ? `Ya tienes el plan ${PLANS[reconciled.plan].label}; tu fecha de renovación no cambia.`
-                : "Tu plan ya está activo."}
+                : reconciled.kind === "transcription_pack"
+                  ? `Se sumaron ${TRANSCRIPTION_PACK.hours} h de transcripción a este ciclo.`
+                  : "Tu plan ya está activo."}
             </p>
           </div>
         </div>
@@ -356,20 +381,51 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           />
           <UsageBar
             used={usage.usedSeconds / 3600}
-            max={limits.transcriptionHours}
+            max={transcriptionLimitHours(overview.plan, usage.extraSeconds)}
             label="Horas de transcripción"
-            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
+            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan, usage.extraSeconds)}
           />
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
           {usage.sessions} consulta{usage.sessions === 1 ? "" : "s"} con transcripción en este
           ciclo. Lo que no se usa no se acumula para el siguiente.
         </p>
+        {usage.extraSeconds > 0 && usage.extraValidUntil && (
+          <p className="mt-2 text-xs text-foreground/90">
+            Incluye {transcriptionHoursLabel(usage.extraSeconds)} h adicionales que vencen el{" "}
+            {formatLongDate(usage.extraValidUntil)}.
+          </p>
+        )}
         {quotaExhausted && (
           <p className="mt-2 text-xs text-destructive">
-            Cuota agotada: las nuevas consultas no se transcribirán hasta el {cycleEndLabel} o hasta
-            ampliar el plan.
+            Cuota agotada: las nuevas consultas no se transcribirán hasta el {cycleEndLabel}, hasta
+            ampliar el plan o hasta sumar horas adicionales.
           </p>
+        )}
+        {packAvailability !== "not_eligible" && (
+          <div
+            id="horas-adicionales"
+            className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-line pt-4"
+          >
+            <div className="min-w-0 text-xs text-muted-foreground">
+              <p className="font-medium text-navy">Horas adicionales</p>
+              <p>
+                {TRANSCRIPTION_PACK.hours} h por {formatCop(TRANSCRIPTION_PACK.priceInCents)}. Se
+                suman a este ciclo y vencen el {cycleEndLabel}. Puedes comprar varias.
+              </p>
+            </div>
+            {packAvailability === "available" ? (
+              <form action={buyTranscriptionPackAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  Comprar {TRANSCRIPTION_PACK.hours} h
+                </Button>
+              </form>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Disponible en el ciclo nuevo, desde el {cycleEndLabel}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

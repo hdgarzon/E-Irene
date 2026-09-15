@@ -141,9 +141,33 @@ export function transcriptionHoursLabel(seconds: number): string {
   return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 }).format(seconds / 3600);
 }
 
-/** Contador de consumo del ciclo: "1,5 h / 2 h" o "3,2 h / Ilimitado". */
-export function transcriptionUsageLabel(usedSeconds: number, plan: Plan): string {
+/**
+ * Bolsa de transcripción (migración 0057): horas que se suman al límite del plan
+ * hasta el fin del ciclo en que se compran. El precio se cobra de aquí; las horas
+ * que se otorgan salen de transcription_pack_seconds() en la base, y
+ * tests/transcription-packs.test.ts exige que coincidan.
+ */
+export const TRANSCRIPTION_PACK = { hours: 5, priceInCents: 2_500_000 } as const;
+
+/**
+ * Límite de transcripción del ciclo con las bolsas vigentes, en segundos; null =
+ * ilimitado. Es el límite que se muestra: el que se aplica lo resuelve
+ * begin_transcription_session con las mismas bolsas.
+ */
+export function effectiveTranscriptionLimitSeconds(plan: Plan, extraSeconds = 0): number | null {
+  const base = transcriptionLimitSeconds(plan);
+  return base === null ? null : base + extraSeconds;
+}
+
+/** Límite en horas para la barra de consumo, bolsas incluidas; Infinity = ilimitado. */
+export function transcriptionLimitHours(plan: Plan, extraSeconds = 0): number {
+  const limit = effectiveTranscriptionLimitSeconds(plan, extraSeconds);
+  return limit === null ? Infinity : limit / 3600;
+}
+
+/** Contador de consumo del ciclo: "1,5 h / 2 h", "3 h / 25 h" con bolsa, o "3,2 h / Ilimitado". */
+export function transcriptionUsageLabel(usedSeconds: number, plan: Plan, extraSeconds = 0): string {
   const used = transcriptionHoursLabel(usedSeconds);
-  const max = PLANS[plan].transcriptionHours;
-  return Number.isFinite(max) ? `${used} h / ${max} h` : `${used} h / Ilimitado`;
+  const limit = effectiveTranscriptionLimitSeconds(plan, extraSeconds);
+  return limit === null ? `${used} h / Ilimitado` : `${used} h / ${transcriptionHoursLabel(limit)} h`;
 }

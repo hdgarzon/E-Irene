@@ -73,6 +73,18 @@ export async function fulfillCheckoutPayment(
         p_payment_source_enc: paymentSourceEnc,
       });
       break;
+    case "transcription_pack":
+      if (!owner.checkoutId) {
+        throw new Error("Pago de bolsa de transcripción sin checkout registrado");
+      }
+      // El monto se compara con el del checkout; las horas y el vencimiento los fija la base.
+      response = await admin.rpc("grant_transcription_pack", {
+        p_clinic: owner.clinicId,
+        p_transaction_id: transaction.id,
+        p_checkout_id: owner.checkoutId,
+        p_amount: transaction.amount_in_cents,
+      });
+      break;
     default:
       // Todavía no hay forma de aplicar este tipo. Se lanza para que el pago no
       // se dé por procesado: queda en billing_events y Wompi lo reintenta.

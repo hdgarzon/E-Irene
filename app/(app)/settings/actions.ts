@@ -13,12 +13,17 @@ import {
   schedulePlanDowngrade,
 } from "@/lib/db/subscription";
 import { hasOpenRenewalCharge } from "@/lib/db/billing";
-import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
+import { canAddDoctor, limitLabel, PLANS, TRANSCRIPTION_PACK, type Plan } from "@/lib/plans";
 import { subscriptionState } from "@/lib/billing/subscription-state";
 import { isPaidPlanDowngrade, isPaidPlanUpgrade, quotePlanUpgrade } from "@/lib/billing/proration";
+import { transcriptionPackAvailability } from "@/lib/billing/transcription-pack";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
-import { createUpgradeCheckout, createWompiCheckout } from "@/lib/billing/wompi-checkout";
+import {
+  createTranscriptionPackCheckout,
+  createUpgradeCheckout,
+  createWompiCheckout,
+} from "@/lib/billing/wompi-checkout";
 import { appBaseUrl } from "@/lib/app-url";
 
 export type MemberState = {
@@ -213,6 +218,64 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   }
 
   if (quoteUnavailable) redirect("/settings/plan?cambio=no_cotizable");
+  if (!checkoutUrl) redirect("/settings/plan?wompi=error");
+  redirect(checkoutUrl);
+}
+
+/**
+ * Compra de una bolsa de horas de transcripción (migración 0057): suma horas al
+ * límite del plan hasta el fin del ciclo. Mismo camino de pago por link que un
+ * plan; la base la otorga una sola vez (grant_transcription_pack).
+ */
+export async function buyTranscriptionPackAction(): Promise<void> {
+  const user = await requireRole(["admin", "doctor"]);
+  const overview = await getClinicOverview();
+  const state = subscriptionState(overview.plan, overview.subscription);
+  const availability = transcriptionPackAvailability({
+    plan: overview.plan,
+    hasPaidPeriod: state.kind === "renewing" || state.kind === "canceling",
+    cycleEnd: overview.cycleEnd,
+  });
+  if (availability === "cycle_ending") redirect("/settings/plan?bolsa=fin_de_ciclo");
+  if (availability !== "available") redirect("/settings/plan?bolsa=no_disponible");
+
+  // Sin query params propios: ver initiatePlanUpgradeAction.
+  const redirectUrl = `${appBaseUrl()}/settings/plan`;
+
+  // redirect() lanza: va fuera del try (ver initiatePlanUpgradeAction).
+  let checkoutUrl: string | null = null;
+  try {
+    const checkout = await createTranscriptionPackCheckout({
+      clinicId: user.clinicId,
+      plan: overview.plan,
+      cycleEnd: overview.cycleEnd,
+      redirectUrl,
+      userEmail: user.email,
+    });
+    await logAudit({
+      clinicId: user.clinicId,
+      actorId: user.id,
+      action: "billing.transcription_pack_checkout_initiated",
+      entityType: "clinic",
+      entityId: user.clinicId,
+      metadata: {
+        plan: overview.plan,
+        hours: TRANSCRIPTION_PACK.hours,
+        amountInCents: TRANSCRIPTION_PACK.priceInCents,
+        cycleEnd: overview.cycleEnd,
+        reference: checkout.reference,
+        paymentLinkId: checkout.paymentLinkId,
+      },
+    });
+    checkoutUrl = checkout.checkoutUrl;
+  } catch (error) {
+    logger.error("billing.transcription_pack_checkout_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      error,
+    });
+  }
+
   if (!checkoutUrl) redirect("/settings/plan?wompi=error");
   redirect(checkoutUrl);
 }

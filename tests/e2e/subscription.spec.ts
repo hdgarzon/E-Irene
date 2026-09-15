@@ -112,6 +112,54 @@ test("cambio de plan: subir cobra la diferencia y bajar se programa para la reno
   await expect(esencial.getByRole("button", { name: "Programar cambio a Esencial" })).toBeVisible();
 });
 
+test("horas adicionales: se ofrecen con un plan pago y suman al límite del ciclo", async ({ page }) => {
+  const email = `bolsa_${Date.now()}@e-irene.test`;
+  await signUpAndActivate(page, { clinicName: "Clínica Bolsa", fullName: "Dra. Admin", email });
+
+  // Free no tiene horas adicionales.
+  await page.goto("/settings/plan");
+  await expect(page.getByText("Consumo del ciclo")).toBeVisible();
+  await expect(page.locator("#horas-adicionales")).toHaveCount(0);
+
+  const clinicId = await activatePaidPlan(email);
+  await page.goto("/settings/plan");
+  const offer = page.locator("#horas-adicionales");
+  await expect(offer).toContainText("5 h por $25.000");
+  await expect(offer.getByRole("button", { name: "Comprar 5 h" })).toBeVisible();
+
+  // El pago aprobado se simula con la misma función que llaman el webhook y la
+  // reconciliación; el checkout de Wompi no se recorre en e2e.
+  const { data: checkout, error: checkoutError } = await admin()
+    .from("billing_checkouts")
+    .insert({
+      wompi_payment_link_id: `test_e2e_${Date.now()}`,
+      clinic_id: clinicId,
+      plan: "pro",
+      amount_in_cents: 2_500_000,
+      reference: `transcriptionpack-${clinicId}-${Date.now()}`,
+      kind: "transcription_pack",
+      quantity: 1,
+    })
+    .select("id")
+    .single();
+  if (checkoutError) throw checkoutError;
+  const { error: grantError } = await admin().rpc("grant_transcription_pack", {
+    p_clinic: clinicId,
+    p_transaction_id: `tx-e2e-${Date.now()}`,
+    p_checkout_id: checkout.id,
+    p_amount: 2_500_000,
+  });
+  if (grantError) throw grantError;
+
+  await page.goto("/settings/plan");
+  await expect(page.getByText("0 h / 35 h")).toBeVisible();
+  await expect(page.getByText(/Incluye 5 h adicionales que vencen el/)).toBeVisible();
+  if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/9-horas-adicionales.png`, fullPage: true });
+
+  await page.goto("/settings");
+  await expect(page.getByText("0 h / 35 h")).toBeVisible();
+});
+
 test("suscripción: una renovación sin cobrar avisa hasta cuándo dura la gracia y ofrece pagar", async ({
   page,
 }) => {

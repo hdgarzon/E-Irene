@@ -1,6 +1,10 @@
-import { PLANS, type Plan } from "@/lib/plans";
+import { PLANS, TRANSCRIPTION_PACK, type Plan } from "@/lib/plans";
 import { logger } from "@/lib/logger";
-import { buildBillingReference, buildPlanChangeReference } from "./wompi";
+import {
+  buildBillingReference,
+  buildPlanChangeReference,
+  buildTranscriptionPackReference,
+} from "./wompi";
 import { recordCheckout, type CheckoutKind } from "@/lib/db/billing-checkouts";
 import type { UpgradeQuote } from "./proration";
 
@@ -19,6 +23,12 @@ const WOMPI_CHECKOUT_BASE = "https://checkout.wompi.co/l";
  * que no vence permitiría pagar mañana el monto de hoy.
  */
 export const UPGRADE_LINK_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Vigencia del link de un adicional (bolsa de transcripción). No es una cotización,
+ * pero un link abierto sin fecha permitiría pagar meses después al precio de hoy.
+ */
+export const ADDON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface WompiCheckoutInput {
   clinicId: string;
@@ -236,6 +246,41 @@ export async function createUpgradeCheckout(input: {
       to_plan: quote.toPlan,
       period_end: quote.periodEnd,
       cycle_start: quote.cycleStart,
+      quoted_at: now.toISOString(),
+    },
+  });
+}
+
+/**
+ * Checkout de una bolsa de transcripción (migración 0057). Las horas vencen con el
+ * ciclo vigente cuando se aprueba el pago; `cycleEnd` queda en el registro como
+ * constancia de lo que se ofreció. La base la otorga una sola vez
+ * (grant_transcription_pack).
+ */
+export async function createTranscriptionPackCheckout(input: {
+  clinicId: string;
+  plan: Plan;
+  cycleEnd: string;
+  redirectUrl: string;
+  userEmail?: string;
+  now?: Date;
+}): Promise<WompiCheckoutResult> {
+  const now = input.now ?? new Date();
+  return createPaymentLink({
+    clinicId: input.clinicId,
+    kind: "transcription_pack",
+    plan: input.plan,
+    amountInCents: TRANSCRIPTION_PACK.priceInCents,
+    name: `${TRANSCRIPTION_PACK.hours} h de transcripción · E-Irene`,
+    description: `${TRANSCRIPTION_PACK.hours} horas adicionales de transcripción hasta el fin del ciclo actual`,
+    reference: buildTranscriptionPackReference(input.clinicId),
+    redirectUrl: input.redirectUrl,
+    userEmail: input.userEmail,
+    expiresAt: new Date(now.getTime() + ADDON_LINK_TTL_MS),
+    quantity: 1,
+    details: {
+      hours: TRANSCRIPTION_PACK.hours,
+      cycle_end: input.cycleEnd,
       quoted_at: now.toISOString(),
     },
   });

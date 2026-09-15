@@ -126,6 +126,11 @@ export function buildPlanChangeReference(clinicId: string, plan: Plan): string {
   return `planchange-${clinicId}-${plan}-${Date.now()}`;
 }
 
+/** Referencia de una bolsa de transcripción: igual que el upgrade, solo se aplica por su checkout. */
+export function buildTranscriptionPackReference(clinicId: string): string {
+  return `transcriptionpack-${clinicId}-${Date.now()}`;
+}
+
 // ── Referencia de los cobros recurrentes ────────────────────────────────────
 //
 // Los cobros recurrentes son transacciones directas con el token guardado, y en
