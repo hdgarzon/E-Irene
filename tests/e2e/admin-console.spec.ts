@@ -47,34 +47,51 @@ test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI
   await expect(page.getByRole("heading", { name: "Resumen de la plataforma" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Uso de plataforma" })).toBeVisible();
 
-  // Clínicas: la clínica y su doctora en el mapa (dentro de su propia tarjeta,
-  // para no depender de datos de otras clínicas en la BD local).
+  // Las listas de la consola se paginan en la BD, y la BD local acumula
+  // clínicas y cuentas de otras corridas: la entidad recién creada no tiene por
+  // qué caer en la primera página. Se busca, como lo haría el admin.
+
+  // Clínicas: sin búsqueda, el encabezado dice el total y qué se muestra.
   await page.goto("/admin/clinicas");
+  await expect(page.getByTestId("list-summary")).toContainText(/clínicas? en total · mostrando 1–/);
+  await page.getByRole("searchbox", { name: "Buscar clínica" }).fill(clinicName);
+  await page.getByRole("button", { name: "Buscar" }).click();
+  await expect(page).toHaveURL(/\/admin\/clinicas\?q=/);
+  await expect(page.getByTestId("list-summary")).toContainText(
+    new RegExp(`^1 de \\d+ clínicas? coincide con "${clinicName}"`),
+  );
+  // La clínica y su doctora en el mapa, dentro de su propia tarjeta.
   const card = page.locator('[data-testid="clinic-card"]', { hasText: clinicName });
   await expect(card).toBeVisible();
   await expect(card.getByText(doctorName)).toBeVisible();
 
-  // Doctores: editar el nombre. Las filas de personal son <li> (no <tr>); se
-  // acota a la fila del doctor de esta clínica (nombre único por corrida). El
-  // input de edición solo existe en la fila que está en modo edición, así que
-  // se puede localizar sin ambigüedad tras hacer clic en "Editar".
+  // Doctores: buscar y editar el nombre. Las filas de personal son <li> (no
+  // <tr>); se acota a la fila del doctor de esta clínica (nombre único por
+  // corrida). El input de edición solo existe en la fila que está en modo
+  // edición, así que se puede localizar sin ambigüedad tras hacer clic en
+  // "Editar". El nombre editado contiene el buscado: sigue en el resultado.
   await page.goto("/admin/doctores");
-  await expect(page.getByText(doctorName)).toBeVisible();
-  await page.locator("li", { hasText: doctorName }).getByRole("button", { name: /editar/i }).click();
+  await page.getByRole("searchbox", { name: "Buscar profesional" }).fill(doctorName);
+  await page.getByRole("button", { name: "Buscar" }).click();
+  // El encabezado repite el texto buscado: las aserciones se acotan a la fila.
+  await expect(page.getByTestId("list-summary")).toContainText(/^1 de \d+ cuentas? de profesional/);
+  const staffRow = page.locator("li", { hasText: doctorName });
+  await expect(staffRow).toHaveCount(1);
+  await staffRow.getByRole("button", { name: /editar/i }).click();
   await page.locator('input[name="fullName"]').fill(`${doctorName} Editada`);
   await page.getByRole("button", { name: /guardar/i }).click();
-  await expect(page.getByText(`${doctorName} Editada`)).toBeVisible();
+  await expect(page.locator("li", { hasText: `${doctorName} Editada` })).toBeVisible();
 
   // La sección /admin/pacientes ya NO existe: el super-admin no gestiona
   // pacientes (cumplimiento Habeas Data). No debe haber enlace en la nav.
   await expect(page.getByRole("link", { name: "Pacientes" })).toHaveCount(0);
 
   // Citas: la cita aparece y se puede cambiar de estado, PERO sin exponer el
-  // nombre del paciente (PHI). Se identifica por la fila de la cita, no por el
-  // paciente.
-  await page.goto("/admin/citas");
-  const apptRow = page.locator("tbody tr").first();
-  await expect(apptRow).toBeVisible();
+  // nombre del paciente (PHI). Se busca por clínica y se identifica por la fila
+  // de la cita, no por el paciente.
+  await page.goto(`/admin/citas?q=${encodeURIComponent(clinicName)}`);
+  const apptRow = page.locator("tbody tr", { hasText: clinicName });
+  await expect(apptRow).toHaveCount(1);
   await expect(page.getByText("Paciente Console")).toHaveCount(0);
   await apptRow.locator("select").selectOption("completed");
   await expect(apptRow.locator("select")).toHaveValue("completed");

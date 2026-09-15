@@ -1,8 +1,5 @@
 import { Building2, Users, Mic, FileText, CalendarDays, BrainCircuit, Radio, Send } from "lucide-react";
-import {
-  getPlatformClinicOverview,
-  getPlatformAppointmentStatus,
-} from "@/lib/db/platform-admin";
+import { getPlatformTotals, getPlatformAppointmentStatus } from "@/lib/db/platform-admin";
 
 const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
   scheduled: "Agendadas",
@@ -40,22 +37,12 @@ function StatCard({
 }
 
 export default async function AdminResumenPage() {
-  const [clinics, appointmentStatus] = await Promise.all([
-    getPlatformClinicOverview(),
+  // Totales contados en la BD en una sola fila (migración 0047): sumar una fila
+  // por clínica los cortaba en 1000 clínicas sin aviso.
+  const [totals, appointmentStatus] = await Promise.all([
+    getPlatformTotals(),
     getPlatformAppointmentStatus(),
   ]);
-
-  const total = (key: keyof (typeof clinics)[number]) =>
-    clinics.reduce((s, c) => s + (c[key] as number), 0);
-
-  const totals = {
-    clinics: clinics.length,
-    patients: total("patientCount"),
-    reports: total("reportCount"),
-    consultations: total("consultationCount"),
-    appointments: total("appointmentCount"),
-    notifications: total("notificationsSent"),
-  };
 
   return (
     <div className="space-y-8">
@@ -79,7 +66,7 @@ export default async function AdminResumenPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <StatCard icon={BrainCircuit} label="Análisis de IA (OpenAI)" value={totals.reports} accent="bg-brand/15 text-brand" delay={0} />
           <StatCard icon={Radio} label="Transcripciones (Deepgram)" value={totals.consultations} accent="bg-coral/15 text-destructive" delay={60} />
-          <StatCard icon={Send} label="Notificaciones enviadas" value={totals.notifications} accent="bg-mint/20 text-[#04342a]" delay={120} />
+          <StatCard icon={Send} label="Notificaciones enviadas" value={totals.notificationsSent} accent="bg-mint/20 text-[#04342a]" delay={120} />
         </div>
       </section>
 

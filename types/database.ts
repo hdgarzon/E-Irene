@@ -1608,6 +1608,25 @@ export type Database = {
           suspended_at: string
         }[]
       }
+      get_platform_clinic_stats: {
+        Args: { p_clinic_ids: string[] }
+        Returns: {
+          clinic_id: string
+          patient_count: number
+          transcription_seconds_cycle: number
+        }[]
+      }
+      get_platform_totals: {
+        Args: never
+        Returns: {
+          appointment_count: number
+          clinic_count: number
+          consultation_count: number
+          notifications_sent: number
+          patient_count: number
+          report_count: number
+        }[]
+      }
       get_platform_transcription_usage: {
         Args: never
         Returns: {
