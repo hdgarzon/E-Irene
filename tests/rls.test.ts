@@ -19,6 +19,14 @@ const d = hasSupabase ? describe : describe.skip;
 // aprobación del admin de plataforma.
 const dv = hasSupabase && SERVICE ? describe : describe.skip;
 
+// Las aserciones negativas comprueban el CÓDIGO, no solo que hubo error.
+// `expect(error).not.toBeNull()` pasa también con errores que no son una
+// decisión de la base: un 502 del gateway local (su cuerpo no trae `code`), un
+// fetch rechazado (code "") o una columna mal escrita (PGRST204). Creeríamos
+// tener un control que no existe.
+const RLS_VIOLATION = "42501"; // política de fila
+const RAISE_EXCEPTION = "P0001"; // raise del trigger
+
 function anon(): SupabaseClient {
   return createClient(URL!, ANON!, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -103,7 +111,7 @@ d("aislamiento multi-tenant (RLS)", () => {
     const { error } = await B.client
       .from("patients")
       .insert({ clinic_id: A.clinicId, full_name_enc: encrypt("Intruso") });
-    expect(error).not.toBeNull(); // RLS bloquea
+    expect(error?.code).toBe(RLS_VIOLATION);
   });
 
   // Las políticas UPDATE de 0001_init.sql solo declaran USING, sin WITH CHECK
@@ -123,7 +131,7 @@ d("aislamiento multi-tenant (RLS)", () => {
       .from("patients")
       .update({ clinic_id: B.clinicId })
       .eq("id", patient!.id);
-    expect(error).not.toBeNull(); // RLS bloquea
+    expect(error?.code).toBe(RLS_VIOLATION);
 
     // Y el paciente sigue siendo de A.
     const { data: stillA } = await service()
@@ -154,11 +162,14 @@ d("aislamiento multi-tenant (RLS)", () => {
       .single();
     expect(reportErr).toBeNull();
 
+    // Lo rechaza el trigger de la 0048 antes que la política: corre BEFORE
+    // UPDATE, antes del CHECK de RLS, y la consulta del reporte sigue siendo de A.
     const { error } = await A.client
       .from("reports")
       .update({ clinic_id: B.clinicId })
       .eq("id", report!.id);
-    expect(error).not.toBeNull(); // RLS bloquea
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(/reports\.consultation_id tiene que apuntar a un registro de la misma clínica/);
 
     const { data: stillA } = await service()
       .from("reports")
@@ -184,12 +195,6 @@ d("aislamiento multi-tenant (RLS)", () => {
  */
 dv("verificación profesional (RLS)", () => {
   let doc: { client: SupabaseClient; clinicId: string; userId: string };
-
-  // Las aserciones negativas comprueban el CÓDIGO, no solo que hubo error: sin
-  // esto, un fallo por una columna mal escrita haría pasar la prueba y
-  // creeríamos tener un control que no existe.
-  const RLS_VIOLATION = "42501"; // política de fila
-  const RAISE_EXCEPTION = "P0001"; // raise del trigger
 
   beforeAll(async () => {
     // Sin aprobar: es el estado en que nace toda cuenta nueva.
@@ -349,6 +354,12 @@ dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
   // funciones SECURITY DEFINER de plataforma y de cancelación.
   let A: { client: SupabaseClient; clinicId: string; userId: string };
 
+  // No lo corta una política: la 0041 le quitó a authenticated el UPDATE sobre
+  // clinics. Postgres responde con el mismo 42501 que una política de fila, así
+  // que el mensaje es lo que confirma que fue el grant.
+  const PERMISSION_DENIED = "42501";
+  const NO_UPDATE_GRANT = /permission denied for table clinics/;
+
   beforeAll(async () => {
     A = await bootstrapClinic("Clínica Facturación");
   }, 30000);
@@ -368,7 +379,8 @@ dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
       .from("clinics")
       .update({ plan: "enterprise" })
       .eq("id", A.clinicId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(PERMISSION_DENIED);
+    expect(error?.message).toMatch(NO_UPDATE_GRANT);
     expect((await clinicRow()).plan).toBe("free");
   });
 
@@ -382,7 +394,8 @@ dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
     ];
     for (const patch of patches) {
       const { error } = await A.client.from("clinics").update(patch).eq("id", A.clinicId);
-      expect(error, JSON.stringify(patch)).not.toBeNull();
+      expect(error?.code, JSON.stringify(patch)).toBe(PERMISSION_DENIED);
+      expect(error?.message, JSON.stringify(patch)).toMatch(NO_UPDATE_GRANT);
     }
     const row = await clinicRow();
     expect(row.billing_status).toBe("sin_configurar");
@@ -400,7 +413,8 @@ dv("facturación: la clínica no puede reescribir su propio plan (RLS)", () => {
       .from("clinics")
       .update({ suspended_at: null })
       .eq("id", A.clinicId);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe(PERMISSION_DENIED);
+    expect(error?.message).toMatch(NO_UPDATE_GRANT);
     expect((await clinicRow()).suspended_at).not.toBeNull();
   });
 });
@@ -496,8 +510,6 @@ dv("perfiles: lo que la sesión no puede escribir (0044)", () => {
  * UPDATE.
  */
 dv("referencias entre clínicas: la sesión no enlaza registros de otra clínica (0048)", () => {
-  const RAISE_EXCEPTION = "P0001";
-
   type Clinica = { client: SupabaseClient; clinicId: string; userId: string };
   type Registros = {
     patient: string;
