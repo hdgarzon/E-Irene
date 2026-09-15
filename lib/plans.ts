@@ -38,7 +38,7 @@ function definePlan(plan: Omit<PlanLimits, "price">): PlanLimits {
 
 // Escala vigente desde 2026-09, en pesos colombianos. Los códigos internos son
 // los del enum clinic_plan: `pro` es Profesional, `clinica` es Clínica y
-// `esencial` se agregó en la migración 0049. En los planes pagos la bolsa de
+// `esencial` se agregó en la migración 0053. En los planes pagos la bolsa de
 // horas es consultas × 1 h, de modo que "20 consultas de hasta una hora" es a
 // la vez la promesa comercial y el límite que se aplica.
 export const PLANS: Record<Plan, PlanLimits> = {
