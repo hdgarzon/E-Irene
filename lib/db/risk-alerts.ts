@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import type { RiskAlertCategory } from "@/lib/risk-flags";
 import { listDoctorsPublic, type DoctorContact } from "@/lib/db/clinic";
 import { isPhq9SelfHarmRisk, type AssessmentType } from "@/lib/psychometrics";
+import { isPhq9SelfHarmPayload } from "@/lib/db/assessments";
 import { getPatientForLink } from "@/lib/db/patients";
 import { getEmailProvider } from "@/lib/email/providers";
 import { buildPhq9RiskAlertEmail } from "@/lib/email/templates";
@@ -28,7 +29,19 @@ export interface RiskAlert {
   date: string;
   /** Solo presente cuando `source === "session_analysis"`. */
   consultationId: string | null;
-  categories: RiskAlertCategory[];
+  /**
+   * `null` si no se pudo descifrar (p. ej. tras rotar ENCRYPTION_KEY sin
+   * migrar datos antiguos). La alerta se lista igual: sigue abierta y sigue
+   * siendo sobre un paciente concreto.
+   */
+  categories: RiskAlertCategory[] | null;
+}
+
+/** Una página de la cola abierta de una fuente, con el total real de esa fuente. */
+export interface RiskAlertQueue {
+  alerts: RiskAlert[];
+  /** Alertas abiertas de la fuente en la clínica, no solo las que trae `alerts`. */
+  total: number;
 }
 
 type CreateRiskAlertInput =
@@ -46,6 +59,12 @@ type CreateRiskAlertInput =
       /** `null` si se notificó a todo el personal admin/doctor (sin una cita próxima que dé un destinatario único). */
       doctorId: string | null;
       categories: RiskAlertCategory[];
+      /**
+       * Cuándo reportó el paciente el riesgo. Solo lo pasa la conciliación,
+       * que registra alertas tiempo después del envío: sin esto aparecerían en
+       * la cola como si fueran de hoy. Por omisión, ahora.
+       */
+      createdAt?: string;
     };
 
 /**
@@ -81,6 +100,7 @@ export async function createRiskAlert(
       patient_id: input.patientId,
       doctor_id: input.doctorId,
       categories_enc: encrypt(JSON.stringify(input.categories)),
+      ...(input.source === "phq9_self_report" && input.createdAt ? { created_at: input.createdAt } : {}),
     })
     .select("id")
     .single();
@@ -113,35 +133,41 @@ interface RiskAlertRow {
 }
 
 /**
- * Alertas de riesgo abiertas (sin acuse de recibo) de la clínica del
- * usuario, más recientes primero — de ambas fuentes. Apoyo a la detección
- * temprana — NUNCA un diagnóstico. Si una fila no descifra (p. ej. tras
- * rotar ENCRYPTION_KEY sin migrar datos antiguos), se omite en vez de
- * romper toda la lista.
+ * Alertas de riesgo abiertas (sin acuse de recibo) de una fuente, más
+ * recientes primero, junto con el total de abiertas de esa fuente: quien
+ * muestra solo unas pocas tiene que poder decir cuántas faltan. Apoyo a la
+ * detección temprana — NUNCA un diagnóstico.
+ *
+ * Una fila que no descifra (p. ej. tras rotar ENCRYPTION_KEY sin migrar datos
+ * antiguos) no se omite: se devuelve con `categories: null`. Omitirla dejaría
+ * una alerta abierta que nadie ve pero que el total sí cuenta.
  */
-export async function listOpenRiskAlerts(limit = 50): Promise<RiskAlert[]> {
+export async function listOpenRiskAlerts(
+  source: RiskAlertSource,
+  limit: number,
+): Promise<RiskAlertQueue> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("risk_alerts")
     .select(
       "id, source, consultation_id, patient_id, categories_enc, created_at, " +
         "patients!risk_alerts_patient_id_fkey(full_name_enc), " +
         "consultations!risk_alerts_consultation_id_fkey(started_at)",
+      { count: "exact" },
     )
+    .eq("source", source)
     .is("acknowledged_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
 
   const rows = data as unknown as RiskAlertRow[];
-  const alerts: RiskAlert[] = [];
-  for (const r of rows) {
-    let categories: RiskAlertCategory[];
+  const alerts = rows.map((r): RiskAlert => {
+    let categories: RiskAlertCategory[] | null = null;
     try {
       categories = JSON.parse(decrypt(r.categories_enc)) as RiskAlertCategory[];
     } catch (error) {
       logger.warn("risk_alert.decrypt_failed", { alertId: r.id, error });
-      continue;
     }
     let patientName = "(nombre no disponible)";
     if (r.patients?.full_name_enc) {
@@ -151,7 +177,7 @@ export async function listOpenRiskAlerts(limit = 50): Promise<RiskAlert[]> {
         // se mantiene el placeholder
       }
     }
-    alerts.push({
+    return {
       id: r.id,
       source: r.source,
       consultationId: r.consultation_id,
@@ -159,9 +185,9 @@ export async function listOpenRiskAlerts(limit = 50): Promise<RiskAlert[]> {
       patientName,
       date: r.consultations?.started_at ?? r.created_at,
       categories,
-    });
-  }
-  return alerts;
+    };
+  });
+  return { alerts, total: count ?? alerts.length };
 }
 
 /** El doctor (o admin) acusa recibo de la alerta — queda fuera de la cola abierta. */
@@ -177,6 +203,11 @@ export async function acknowledgeRiskAlert(alertId: string, userId: string): Pro
 // ─────────────────────────────────────────────────────────────────────────
 // Fuente: PHQ-9 autorreportado vía link público
 // ─────────────────────────────────────────────────────────────────────────
+
+/** Categoría fija de esta fuente: la única señal que se evalúa es el ítem 9. */
+const PHQ9_SELF_HARM_CATEGORIES: RiskAlertCategory[] = [
+  { key: "self_harm", level: "alto", evidence: "Ítem de autolesión del PHQ-9 con respuesta positiva." },
+];
 
 /**
  * Doctor de la cita futura más próxima del paciente (no cancelada). Usa el
@@ -213,12 +244,45 @@ async function getClinicNamePublic(clinicId: string): Promise<string> {
 }
 
 /**
+ * Marca un PHQ-9 vía link como evaluado (migración 0045). Llamar solo cuando
+ * la alerta, si correspondía, ya quedó registrada: la marca es lo que saca al
+ * PHQ-9 de la conciliación.
+ */
+async function markRiskEvaluated(assessmentId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("psychometric_assessments")
+    .update({ risk_evaluated_at: new Date().toISOString() })
+    .eq("id", assessmentId)
+    .is("risk_evaluated_at", null);
+  if (error) throw error;
+}
+
+/** `markRiskEvaluated` sin lanzar: si falla, el PHQ-9 solo queda pendiente y la conciliación lo vuelve a evaluar. */
+async function markRiskEvaluatedQuietly(ctx: {
+  clinicId: string;
+  patientId: string;
+  assessmentId: string;
+}): Promise<void> {
+  try {
+    await markRiskEvaluated(ctx.assessmentId);
+  } catch (error) {
+    logger.warn("risk_alert.mark_evaluated_failed", { ...ctx, error });
+  }
+}
+
+/**
  * Si la escala indica riesgo (autolesión en el PHQ-9), registra la alerta
  * (fuente "phq9_self_report", ver `createRiskAlert`) y avisa por correo al
  * doctor de la próxima cita del paciente (o, si no hay ninguna, a todo el
  * personal admin/doctor de la clínica). Nunca lanza excepción — un fallo de
  * resolución o envío se loguea, pero no debe afectar al caller (la escala
  * ya quedó guardada).
+ *
+ * La alerta se registra ANTES de resolver destinatarios o armar el correo: la
+ * cola del dashboard no puede depender de que haya a quién avisar ni de que
+ * esas consultas respondan. Si el registro mismo falla, el PHQ-9 queda sin
+ * marca de evaluado y lo recoge `reconcilePendingPhq9RiskAlerts`.
  */
 export async function alertOnRiskyAssessment(params: {
   clinicId: string;
@@ -227,14 +291,55 @@ export async function alertOnRiskyAssessment(params: {
   type: AssessmentType;
   answers: number[];
 }): Promise<void> {
-  if (!isPhq9SelfHarmRisk(params.type, params.answers)) return;
+  if (params.type !== "phq9") return;
+  const logContext = {
+    clinicId: params.clinicId,
+    patientId: params.patientId,
+    assessmentId: params.assessmentId,
+  };
+
+  if (!isPhq9SelfHarmRisk(params.type, params.answers)) {
+    await markRiskEvaluatedQuietly(logContext);
+    return;
+  }
+
+  // En paralelo, pero ninguna condiciona el registro de la alerta. Si falla la
+  // búsqueda del doctor de la próxima cita, se avisa a todo el personal
+  // clínico, igual que cuando no hay cita.
+  const [nextDoctorLookup, patientLookup, clinicNameLookup] = await Promise.allSettled([
+    getNextAppointmentDoctor(params.patientId),
+    getPatientForLink(params.patientId),
+    getClinicNamePublic(params.clinicId),
+  ]);
+  if (nextDoctorLookup.status === "rejected") {
+    logger.warn("risk_alert.next_doctor_failed", { ...logContext, error: nextDoctorLookup.reason });
+  }
+  const nextDoctor = nextDoctorLookup.status === "fulfilled" ? nextDoctorLookup.value : null;
+
+  let isNew = true;
+  try {
+    ({ isNew } = await createRiskAlert(params.clinicId, {
+      source: "phq9_self_report",
+      assessmentId: params.assessmentId,
+      patientId: params.patientId,
+      doctorId: nextDoctor?.id ?? null,
+      categories: PHQ9_SELF_HARM_CATEGORIES,
+    }));
+    await markRiskEvaluatedQuietly(logContext);
+  } catch (error) {
+    // Sin la fila no hay nada que acusar todavía, pero el correo sale igual:
+    // es el único aviso inmediato. La conciliación registra la alerta después,
+    // sin reenviar el correo.
+    logger.error("risk_alert.persist_failed", { ...logContext, error });
+  }
+  // Igual que la fuente de análisis de IA: solo se avisa por correo la
+  // primera vez — un reintento (p. ej. el paciente reenvía el mismo link)
+  // no debe reenviar el aviso al doctor.
+  if (!isNew) return;
 
   try {
-    const [nextDoctor, patient, clinicName] = await Promise.all([
-      getNextAppointmentDoctor(params.patientId),
-      getPatientForLink(params.patientId),
-      getClinicNamePublic(params.clinicId),
-    ]);
+    if (patientLookup.status === "rejected") throw patientLookup.reason;
+    if (clinicNameLookup.status === "rejected") throw clinicNameLookup.reason;
     const recipients = nextDoctor ? [nextDoctor] : await listDoctorsPublic(params.clinicId);
 
     if (recipients.length === 0) {
@@ -247,21 +352,8 @@ export async function alertOnRiskyAssessment(params: {
       return;
     }
 
-    const { isNew } = await createRiskAlert(params.clinicId, {
-      source: "phq9_self_report",
-      assessmentId: params.assessmentId,
-      patientId: params.patientId,
-      doctorId: nextDoctor?.id ?? null,
-      categories: [
-        { key: "self_harm", level: "alto", evidence: "Ítem de autolesión del PHQ-9 con respuesta positiva." },
-      ],
-    });
-    // Igual que la fuente de análisis de IA: solo se avisa por correo la
-    // primera vez — un reintento (p. ej. el paciente reenvía el mismo link)
-    // no debe reenviar el aviso al doctor.
-    if (!isNew) return;
-
-    const patientName = patient?.fullName ?? "(nombre no disponible)";
+    const patientName = patientLookup.value?.fullName ?? "(nombre no disponible)";
+    const clinicName = clinicNameLookup.value;
     const patientUrl = `${appBaseUrl()}/patients/${params.patientId}`;
 
     const notifyDoctor = async (doctor: DoctorContact): Promise<void> => {
@@ -331,14 +423,105 @@ export async function alertOnRiskyAssessment(params: {
       metadata: { recipientCount: recipients.length },
     });
   } catch (error) {
-    // Resolución de destinatario (query a appointments/patients) o registro
-    // de la alerta falló — no debe bloquear el guardado de la escala, que
-    // ya ocurrió.
-    logger.error("risk_alert.resolution_failed", {
-      clinicId: params.clinicId,
-      patientId: params.patientId,
-      assessmentId: params.assessmentId,
-      error,
-    });
+    // Resolución de destinatarios o de los datos del correo (query a
+    // patients/clinics/users) falló. La alerta ya quedó registrada, o
+    // pendiente de conciliación: esto no debe bloquear el guardado de la
+    // escala, que ya ocurrió.
+    logger.error("risk_alert.resolution_failed", { ...logContext, error });
+  }
+}
+
+export interface Phq9ReconcileResult {
+  /** PHQ-9 revisados y marcados en esta pasada, con o sin riesgo. */
+  evaluated: number;
+  /** Alertas que esta pasada registró en `risk_alerts`. */
+  created: number;
+  /** PHQ-9 que siguen pendientes: no se pudieron leer o falló el registro. */
+  failed: number;
+}
+
+/** Por debajo del máximo de filas por respuesta de PostgREST. */
+const RECONCILE_PAGE_SIZE = 200;
+
+/**
+ * Registra en `risk_alerts` la alerta de cada PHQ-9 de riesgo vía link que
+ * todavía no esté evaluado (migración 0045), y marca como evaluados los que
+ * no tienen riesgo. Es el backfill de lo anterior a 0026 y la red de
+ * seguridad de `alertOnRiskyAssessment` cuando no llegó a registrar la alerta.
+ *
+ * Idempotente: una segunda pasada no crea nada (índice único por
+ * `assessment_id`) y nunca reabre una alerta ya acusada — `createRiskAlert`
+ * no toca la fila existente.
+ *
+ * No envía correos: lo que concilia es histórico (su aviso salió cuando el
+ * paciente envió el PHQ-9) o una alerta cuyo correo ya se intentó en ese envío.
+ *
+ * Service-role porque escribe la marca, que `authenticated` no puede tocar;
+ * siempre acotado a `clinicId`, que el llamador toma de la sesión. Un PHQ-9
+ * que no se puede leer se loguea y queda pendiente: nunca se da por "sin
+ * riesgo".
+ */
+export async function reconcilePendingPhq9RiskAlerts(clinicId: string): Promise<Phq9ReconcileResult> {
+  const admin = createAdminClient();
+  const result: Phq9ReconcileResult = { evaluated: 0, created: 0, failed: 0 };
+  let afterId: string | null = null;
+
+  for (;;) {
+    let query = admin
+      .from("psychometric_assessments")
+      .select("id, patient_id, type, payload_enc, administered_at")
+      .eq("clinic_id", clinicId)
+      .eq("type", "phq9")
+      .not("link_id", "is", null)
+      .is("risk_evaluated_at", null);
+    // Cursor por id: los PHQ-9 que no se pueden evaluar siguen pendientes, y
+    // sin cursor la misma página volvería una y otra vez.
+    if (afterId) query = query.gt("id", afterId);
+    const { data, error } = await query.order("id", { ascending: true }).limit(RECONCILE_PAGE_SIZE);
+    if (error) throw error;
+
+    for (const row of data) {
+      const ctx = { clinicId, patientId: row.patient_id, assessmentId: row.id };
+
+      let risky: boolean;
+      try {
+        risky = isPhq9SelfHarmPayload(row.type as AssessmentType, row.payload_enc);
+      } catch (error) {
+        result.failed++;
+        logger.error("risk_alert.reconcile_unreadable", { ...ctx, error });
+        continue;
+      }
+
+      try {
+        if (risky) {
+          const alert = await createRiskAlert(clinicId, {
+            source: "phq9_self_report",
+            assessmentId: row.id,
+            patientId: row.patient_id,
+            doctorId: null,
+            categories: PHQ9_SELF_HARM_CATEGORIES,
+            createdAt: row.administered_at,
+          });
+          if (alert.isNew) {
+            result.created++;
+            await logAuditPublic({
+              clinicId,
+              action: "assessment.risk_alert_reconciled",
+              entityType: "psychometric_assessment",
+              entityId: row.id,
+              metadata: { alertId: alert.id },
+            });
+          }
+        }
+        await markRiskEvaluated(row.id);
+        result.evaluated++;
+      } catch (error) {
+        result.failed++;
+        logger.error("risk_alert.reconcile_failed", { ...ctx, error });
+      }
+    }
+
+    if (data.length < RECONCILE_PAGE_SIZE) return result;
+    afterId = data[data.length - 1].id;
   }
 }

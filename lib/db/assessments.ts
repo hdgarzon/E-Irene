@@ -104,67 +104,19 @@ export async function getAssessmentByLinkToken(token: string): Promise<Assessmen
   return mapRow(assessments[0]);
 }
 
-export interface Phq9RiskAlert {
-  assessmentId: string;
-  patientId: string;
-  patientName: string;
-  date: string;
-}
-
-/** Lógica pura de filtrado — extraída para poder testear sin base de datos. */
-export function isPhq9RiskPayload(type: AssessmentType, payloadEnc: string): boolean {
-  try {
-    const result = JSON.parse(decrypt(payloadEnc)) as AssessmentResult;
-    return isPhq9SelfHarmRisk(type, result.answers);
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Alertas de riesgo por PHQ-9 autorreportado vía link público. Recalcula el
- * riesgo al leer (sin columna de estado persistida), igual que el patrón de
- * `listOpenRiskAlerts` para reportes de IA. Omite filas con descifrado
- * fallido sin romper toda la lista.
+ * ¿El PHQ-9 cifrado marca autolesión? Lógica pura, testeable sin base de datos.
+ *
+ * Lanza si el payload no se puede leer (p. ej. tras rotar ENCRYPTION_KEY): un
+ * PHQ-9 ilegible no es un PHQ-9 sin riesgo, y quien llama tiene que poder
+ * distinguirlos para no descartar una alerta en silencio.
  */
-export async function listPhq9RiskAlerts(limit = 50): Promise<Phq9RiskAlert[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("psychometric_assessments")
-    .select(
-      "id, patient_id, type, payload_enc, administered_at, " +
-        "patients!psychometric_assessments_patient_id_fkey(full_name_enc)",
-    )
-    .eq("type", "phq9")
-    .not("link_id", "is", null)
-    .order("administered_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-
-  const rows = data as unknown as (AssessmentRow & {
-    patients: { full_name_enc: string } | null;
-  })[];
-  const alerts: Phq9RiskAlert[] = [];
-  for (const r of rows) {
-    const isRisk = isPhq9RiskPayload(r.type, r.payload_enc);
-    if (!isRisk) continue;
-
-    let patientName = "(nombre no disponible)";
-    if (r.patients?.full_name_enc) {
-      try {
-        patientName = decrypt(r.patients.full_name_enc);
-      } catch {
-        // se mantiene el placeholder
-      }
-    }
-    alerts.push({
-      assessmentId: r.id,
-      patientId: r.patient_id,
-      patientName,
-      date: r.administered_at,
-    });
+export function isPhq9SelfHarmPayload(type: AssessmentType, payloadEnc: string): boolean {
+  const result = JSON.parse(decrypt(payloadEnc)) as AssessmentResult;
+  if (!Array.isArray(result.answers)) {
+    throw new Error("Payload de escala sin respuestas");
   }
-  return alerts;
+  return isPhq9SelfHarmRisk(type, result.answers);
 }
 
 /** Historial de escalas del paciente, cronológico (más antigua primero). */

@@ -923,6 +923,7 @@ export type Database = {
           link_id: string | null
           patient_id: string
           payload_enc: string
+          risk_evaluated_at: string | null
           type: string
         }
         Insert: {
@@ -934,6 +935,7 @@ export type Database = {
           link_id?: string | null
           patient_id: string
           payload_enc: string
+          risk_evaluated_at?: string | null
           type: string
         }
         Update: {
@@ -945,6 +947,7 @@ export type Database = {
           link_id?: string | null
           patient_id?: string
           payload_enc?: string
+          risk_evaluated_at?: string | null
           type?: string
         }
         Relationships: [

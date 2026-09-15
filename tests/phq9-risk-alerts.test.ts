@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { encrypt } from "@/lib/crypto";
-import { isPhq9RiskPayload } from "@/lib/db/assessments";
+import { isPhq9SelfHarmPayload } from "@/lib/db/assessments";
 
 const key = Buffer.from("a".repeat(32)).toString("base64");
 
@@ -15,25 +15,31 @@ function encResult(answers: number[]) {
   );
 }
 
-describe("isPhq9RiskPayload", () => {
+describe("isPhq9SelfHarmPayload", () => {
   beforeEach(() => {
     process.env.ENCRYPTION_KEY = key;
   });
 
   it("returns true when PHQ-9 self-harm item is > 0", () => {
-    expect(isPhq9RiskPayload("phq9", encResult([0, 0, 0, 0, 0, 0, 0, 0, 1]))).toBe(true);
-    expect(isPhq9RiskPayload("phq9", encResult([0, 0, 0, 0, 0, 0, 0, 0, 3]))).toBe(true);
+    expect(isPhq9SelfHarmPayload("phq9", encResult([0, 0, 0, 0, 0, 0, 0, 0, 1]))).toBe(true);
+    expect(isPhq9SelfHarmPayload("phq9", encResult([0, 0, 0, 0, 0, 0, 0, 0, 3]))).toBe(true);
   });
 
   it("returns false when PHQ-9 self-harm item is 0", () => {
-    expect(isPhq9RiskPayload("phq9", encResult([3, 3, 3, 3, 3, 3, 3, 3, 0]))).toBe(false);
+    expect(isPhq9SelfHarmPayload("phq9", encResult([3, 3, 3, 3, 3, 3, 3, 3, 0]))).toBe(false);
   });
 
   it("returns false for GAD-7 regardless of answers", () => {
-    expect(isPhq9RiskPayload("gad7", encResult([3, 3, 3, 3, 3, 3, 3]))).toBe(false);
+    expect(isPhq9SelfHarmPayload("gad7", encResult([3, 3, 3, 3, 3, 3, 3]))).toBe(false);
   });
 
-  it("returns false for corrupted payload", () => {
-    expect(isPhq9RiskPayload("phq9", "not-valid-ciphertext")).toBe(false);
+  // Antes devolvía false: un PHQ-9 ilegible pasaba por "sin riesgo" y su
+  // alerta desaparecía sin rastro.
+  it("throws for a corrupted payload instead of reporting no risk", () => {
+    expect(() => isPhq9SelfHarmPayload("phq9", "not-valid-ciphertext")).toThrow();
+  });
+
+  it("throws when the payload decrypts but has no answers", () => {
+    expect(() => isPhq9SelfHarmPayload("phq9", encrypt(JSON.stringify({ totalScore: 3 }), key))).toThrow();
   });
 });
