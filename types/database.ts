@@ -1785,6 +1785,7 @@ export type Database = {
           p_checkout_id: string
           p_clinic: string
           p_payment_source_enc?: string
+          p_transaction_created_at?: string
           p_transaction_id: string
         }
         Returns: Json
@@ -1851,6 +1852,7 @@ export type Database = {
           p_expected_amount?: number
           p_payment_source_enc?: string
           p_plan: Database["public"]["Enums"]["clinic_plan"]
+          p_transaction_created_at?: string
           p_transaction_id: string
         }
         Returns: Json
@@ -1938,6 +1940,7 @@ export type Database = {
         }
         Returns: Json
       }
+      has_open_renewal_charge: { Args: { p_clinic: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       mark_subscription_payment_failed: {
         Args: { p_clinic: string; p_reason: string }

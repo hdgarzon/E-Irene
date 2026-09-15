@@ -24,8 +24,6 @@ Los puntos 1-3 y 10-12 ya están en producción (migraciones 0041 y 0042).
 | Consumo de video | Para iniciar hace falta saldo de al menos 1. Se descuenta una sola vez por consulta y **solo si el paciente se conectó**. |
 | Quién compra adicionales | Solo planes pagos con período vigente (Esencial, Profesional, Clínica). Enterprise tiene video y horas por contrato. |
 
-Fuente de precios de adicionales: `docs/costos-vs-planes-2026-09.md` y `docs/modelo-precios-e-irene.xlsx`.
-
 ## Lo que hay hoy y condiciona el diseño
 
 - **Compra de plan.** `initiatePlanUpgradeAction` crea un payment link por el precio completo (`billing_checkouts`). El webhook o la reconciliación al volver (`?id=`) llaman a `activate_subscription`, que **re-ancla el ciclo a now()**: reinicia la cuota y cobra precio completo aunque se cambie a mitad de ciclo.
@@ -34,7 +32,6 @@ Fuente de precios de adicionales: `docs/costos-vs-planes-2026-09.md` y `docs/mod
 - **Renovación.** `processRecurringCharges` cobra `PLANS[clinics.plan]`; `renew_subscription_period` nunca cambia el plan; `isStillDueForCharge` y `settleRenewalPayment` exigen el mismo plan que se cobró.
 - **Cuota de transcripción.** La decide un solo lugar: `begin_transcription_session` (0039), que recibe el límite del plan desde TypeScript como `p_limit_seconds`. La interfaz lee `PLANS[plan].transcriptionHours` en cuatro sitios.
 - **Video.** No hay flag de video por plan. El servidor **no sabe cuándo se conecta el paciente**: después de renderizar `/join/[token]` todo pasa en el navegador. No hay webhook de Daily.
-- **Producción.** Video está simulado (faltan `DAILY_API_KEY` y `NEXT_PUBLIC_SITE_URL`). El token de tarjeta de Wompi y el checksum del webhook siguen sin confirmarse con pagos reales.
 
 ## 1. Base común: compras por link con cumplimiento idempotente
 
@@ -55,7 +52,7 @@ Si algo falla, no queda nada escrito y el reintento del webhook vuelve a intenta
 
 **Enrutamiento.** Webhook y reconciliación resuelven el checkout como hoy y despachan por `kind`. El monto se valida contra `amount_in_cents` del checkout (lo que se cotizó) y contra las reglas del tipo. Un `kind` desconocido se registra y se deja para revisión; nunca se trata como plan.
 
-**Compras de plan (Free → pago).** Pasan por el mismo cumplimiento idempotente (`kind = 'plan'`) y siguen llamando a `activate_subscription`. Así se corrige el hueco de reintento también para ellas.
+**Compras de plan (Free → pago).** Pasan por el mismo cumplimiento idempotente (`kind = 'plan'`) y siguen llamando a `activate_subscription`. Se validan contra el monto del link, que vence en 24 horas, y se rechazan si la clínica ya tiene un período pagado vigente: activarla otra vez cobraría dos veces el mismo mes. Así se corrige el hueco de reintento también para ellas.
 
 **Expiración.** Los links nuevos llevan `expires_at` (Wompi lo acepta en ISO 8601 UTC): 30 minutos para el upgrade, porque es una cotización; 24 horas para bolsas y packs. Un pago que llega con la cotización vencida o el estado cambiado se registra como `rejected` y la clínica queda marcada para revisión y reembolso manual, con aviso visible. No se aplica en silencio ni se descarta en silencio.
 
@@ -75,11 +72,19 @@ Se redondea hacia arriba a pesos enteros. Si queda por debajo del mínimo que ac
 
 **Cotización.** `initiatePlanChangeAction(plan)` calcula el monto en el servidor y crea el checkout `kind = 'upgrade'` con `details = { from_plan, to_plan, period_end, cycle_start, quoted_at }`. La pantalla muestra, antes de ir a Wompi: "Pagas $X hoy por lo que queda del ciclo. Desde el dd/mm pagarás $Y al mes."
 
-**Aplicación — `apply_plan_upgrade(clinic, tx, amount, details)`.** Rechaza si el plan actual no es `from_plan`, si `current_period_end` cambió, si la suscripción terminó, o si el monto no coincide. Si pasa:
+**Quién.** Con un período vigente, solo el admin de la clínica sube de plan, y no con una cancelación pedida: primero se reactiva la suscripción. La pantalla y la acción usan la misma regla (`lib/billing/plan-change.ts`).
+
+**Aplicación — `apply_plan_upgrade`.** Solo aplica el estado que se cotizó. Rechaza, y deja para reembolso, si:
+
+- el monto no es el cotizado, o el link venció antes de crearse la transacción;
+- cambiaron el plan, el fin del período o el downgrade programado;
+- el período terminó, la renovación está sin pagar o hay una cancelación pedida;
+- hay un cobro de renovación en curso, que ya fijó el plan del ciclo siguiente al precio anterior.
+
+Si pasa:
 
 - `plan = to_plan`; ancla y fin de período **no se tocan**.
-- Si había una cancelación pedida, se revierte: pagar un plan mayor es la decisión contraria. Queda en `audit_logs`.
-- Si había un downgrade programado, se anula.
+- Si había un downgrade programado, se anula: la pantalla lo avisa antes de pagar y la cotización lo registra.
 - Si el pago trae `payment_source_id`, reemplaza el token guardado; si no, se conserva.
 - `audit_logs`: `subscription.upgraded` con planes, monto y fin de período.
 
@@ -89,13 +94,13 @@ La cuota sigue contando desde el mismo inicio de ciclo, así que lo consumido se
 
 **Datos.** `clinics.scheduled_plan clinic_plan` y `clinics.scheduled_plan_requested_at timestamptz`.
 
-**Programar y anular.** `schedule_plan_downgrade(p_plan)` y `cancel_scheduled_plan_change()`, `SECURITY DEFINER`, para `authenticated` con rol admin de la clínica (igual que la cancelación). Solo hacia un plan pago menor, con suscripción pagada vigente y sin cancelación pedida. Bajar a Free sigue siendo cancelar.
+**Programar y anular.** `schedule_plan_downgrade(p_plan)` y `cancel_scheduled_plan_change()`, `SECURITY DEFINER`, para `authenticated` con rol admin de la clínica (igual que la cancelación). Solo hacia un plan pago menor, con suscripción pagada vigente y sin cancelación pedida. Bajar a Free sigue siendo cancelar. No se programa ni se anula con un cobro de renovación en curso: ese cobro ya fijó el plan.
 
 **Aplicación en la renovación.**
 
 - `getClinicsDueForCharge` lee también `scheduled_plan`. El plan a cobrar es `coalesce(scheduled_plan, plan)`: con él se calculan el monto, la referencia y la fila de `billing_scheduled_charges`.
 - `isStillDueForCharge` compara los dos campos.
-- Nueva sobrecarga `renew_subscription_period(clinic, charged_period_end, charged_plan)`: además de avanzar el período, pone `plan = charged_plan` y limpia `scheduled_plan`. Rechaza (devuelve null y deja constancia) si `charged_plan` ya no es el plan esperado. La versión de dos argumentos se conserva para la ventana de despliegue; hasta que exista código nuevo nadie puede programar un downgrade.
+- Nueva sobrecarga `renew_subscription_period(clinic, charged_period_end, charged_plan)`: además de avanzar el período, pone `plan = charged_plan` —el ciclo que se renueva es el que se pagó— y limpia `scheduled_plan` si coincide. Si el plan cobrado no es el vigente ni el programado, lo aplica igual y deja constancia para revisión. La versión de dos argumentos se conserva para la ventana de despliegue; hasta que exista código nuevo nadie puede programar un downgrade.
 - `end_subscription` limpia `scheduled_plan`. Si la renovación falla, el camino de gracia y fin de suscripción no cambia.
 - `platform_set_clinic_plan` también la limpia.
 
@@ -213,7 +218,7 @@ Tres PRs, en orden. Cada uno se despliega solo y es aditivo. Las migraciones se 
 ## 10. Prerrequisitos y confirmaciones
 
 - **Wompi:** monto mínimo por transacción en COP; si un pago por link devuelve `payment_source_id` reutilizable; validar el checksum del webhook con un evento real. Se prueba en sandbox antes de producción.
-- **Daily en producción:** `DAILY_API_KEY`, `NEXT_PUBLIC_SITE_URL` y el webhook creado con `POST /v1/webhooks` (`url` = `/api/webhooks/daily`, `eventTypes` = `["participant.joined"]`, `hmac`). El PR 3 trae un script que lo crea con la clave del entorno, pero lo corre quien tenga la clave. Sin esto el video sigue simulado y el gate no se puede usar en producción.
+- **Daily en producción:** `DAILY_API_KEY`, `NEXT_PUBLIC_SITE_URL` y el webhook creado con `POST /v1/webhooks` (`url` = `/api/webhooks/daily`, `eventTypes` = `["participant.joined"]`, `hmac`). El PR 3 trae un script que lo crea con la clave del entorno, pero lo corre quien tenga la clave. Sin esta configuración las videollamadas no se pueden usar.
 - **Términos y Condiciones.** La redacción debe decir:
   - el prorrateo;
   - que la fecha de renovación no cambia;

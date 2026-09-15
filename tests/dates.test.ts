@@ -7,6 +7,7 @@ import {
   formatLongDate,
   formatTime,
   groupByDay,
+  toWompiUtcTimestamp,
 } from "@/lib/dates";
 
 describe("dates (zona Bogotá UTC-5)", () => {
@@ -99,5 +100,13 @@ describe("ciclo de facturación (anclado, hora de Bogotá)", () => {
   it("formatLongDate muestra la fecha de Bogotá sin día de la semana", () => {
     // 02:00 UTC del 19-oct son las 21:00 del 18-oct en Bogotá.
     expect(formatLongDate("2026-10-19T02:00:00Z")).toBe("18 de octubre de 2026");
+  });
+});
+
+describe("expires_at de los links de Wompi", () => {
+  it("es el instante en UTC, sin zona ni milisegundos", () => {
+    expect(toWompiUtcTimestamp(new Date("2026-09-15T15:30:45.678Z"))).toBe("2026-09-15T15:30:45");
+    // No se convierte a Bogotá: 02:00 UTC sigue siendo 02:00.
+    expect(toWompiUtcTimestamp(new Date("2026-09-16T02:00:00Z"))).toBe("2026-09-16T02:00:00");
   });
 });
