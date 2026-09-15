@@ -24,5 +24,8 @@ export default defineConfig({
     globals: true,
     // Antes de cualquier archivo: el Supabase local tiene que ser el de e-irene.
     globalSetup: ["./tests/helpers/global-setup.ts"],
+    // En cada archivo: un 502 del gateway del Supabase local se reenvía en vez
+    // de llegarle a la prueba como un error sin código.
+    setupFiles: ["./tests/helpers/supabase-fetch-setup.ts"],
   },
 });
