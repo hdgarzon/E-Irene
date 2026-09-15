@@ -11,7 +11,11 @@ import { UsageBar } from "@/components/usage-bar";
 /** Qué pasa con el plan y cuándo, en una línea. */
 function planStatusLine(overview: ClinicOverview): string {
   const state = subscriptionState(overview.plan, overview.subscription);
-  if (state.kind === "renewing") return `Se renueva el ${formatLongDate(state.periodEnd)}.`;
+  if (state.kind === "renewing") {
+    return state.scheduledPlan
+      ? `Se renueva el ${formatLongDate(state.periodEnd)} con el plan ${PLANS[state.scheduledPlan].label}.`
+      : `Se renueva el ${formatLongDate(state.periodEnd)}.`;
+  }
   if (state.kind === "canceling") {
     return `Suscripción cancelada: pasas a Free el ${formatLongDate(state.periodEnd)}.`;
   }

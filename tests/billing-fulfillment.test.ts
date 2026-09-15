@@ -1,0 +1,141 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Qué función de la base aplica cada compra y con qué datos. Las reglas (monto,
+// cotización, una sola vez por transacción) viven en la base: plan-changes.test.ts.
+
+const rpc = vi.fn();
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({ rpc: (...a: unknown[]) => rpc(...a) }),
+}));
+vi.mock("@/lib/crypto", () => ({ encrypt: (value: string) => `enc(${value})` }));
+
+const { fulfillCheckoutPayment } = await import("@/lib/billing/fulfillment");
+const { logger } = await import("@/lib/logger");
+const { PLANS } = await import("@/lib/plans");
+
+const CLINIC = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
+const CHECKOUT = "0b7c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3";
+
+function owner(overrides: Record<string, unknown> = {}) {
+  return {
+    checkoutId: CHECKOUT,
+    clinicId: CLINIC,
+    plan: "pro" as const,
+    kind: "plan" as const,
+    amountInCents: 9_900_000,
+    quantity: null,
+    details: {},
+    ...overrides,
+  } as Parameters<typeof fulfillCheckoutPayment>[0];
+}
+
+const tx = { id: "tx-demo-1", amount_in_cents: 9_900_000, payment_source_id: 55 };
+
+beforeEach(() => {
+  rpc.mockReset().mockResolvedValue({
+    data: { outcome: "applied", plan: "pro", already_processed: false },
+    error: null,
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("fulfillCheckoutPayment", () => {
+  it("la compra de un plan se valida contra el precio vigente de lib/plans.ts", async () => {
+    const result = await fulfillCheckoutPayment(owner(), tx);
+
+    expect(result).toEqual({ outcome: "applied", kind: "plan", plan: "pro", alreadyProcessed: false });
+    expect(rpc).toHaveBeenCalledWith("fulfill_plan_purchase", {
+      p_clinic: CLINIC,
+      p_transaction_id: "tx-demo-1",
+      p_checkout_id: CHECKOUT,
+      p_plan: "pro",
+      p_amount: 9_900_000,
+      p_expected_amount: PLANS.pro.priceInCents,
+      // El token del medio de pago nunca viaja en claro.
+      p_payment_source_enc: "enc(55)",
+    });
+  });
+
+  it("un plan a convenir llega sin precio esperado: la base lo rechaza", async () => {
+    await fulfillCheckoutPayment(owner({ plan: "enterprise", checkoutId: null }), {
+      id: "tx-demo-2",
+      amount_in_cents: 1,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "fulfill_plan_purchase",
+      expect.objectContaining({ p_expected_amount: undefined, p_checkout_id: undefined }),
+    );
+  });
+
+  it("un upgrade se aplica contra su checkout, que guarda la cotización", async () => {
+    rpc.mockResolvedValue({
+      data: { outcome: "applied", plan: "clinica", already_processed: false },
+      error: null,
+    });
+
+    const result = await fulfillCheckoutPayment(owner({ kind: "upgrade", plan: "clinica" }), {
+      id: "tx-demo-3",
+      amount_in_cents: 5_000_000,
+    });
+
+    expect(result).toEqual({
+      outcome: "applied",
+      kind: "upgrade",
+      plan: "clinica",
+      alreadyProcessed: false,
+    });
+    expect(rpc).toHaveBeenCalledWith("apply_plan_upgrade", {
+      p_clinic: CLINIC,
+      p_transaction_id: "tx-demo-3",
+      p_checkout_id: CHECKOUT,
+      p_amount: 5_000_000,
+      p_payment_source_enc: undefined,
+    });
+  });
+
+  it("un upgrade sin checkout registrado no se aplica: no hay cotización que comprobar", async () => {
+    await expect(
+      fulfillCheckoutPayment(owner({ kind: "upgrade", checkoutId: null }), tx),
+    ).rejects.toThrow("sin checkout");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("un tipo de compra sin cumplimiento lanza en vez de darse por procesado", async () => {
+    await expect(fulfillCheckoutPayment(owner({ kind: "video_pack" }), tx)).rejects.toThrow(
+      "sin cumplimiento",
+    );
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("un error de la base se propaga: el webhook responde 500 y Wompi reintenta", async () => {
+    rpc.mockResolvedValue({ data: null, error: new Error("canceling statement due to timeout") });
+    await expect(fulfillCheckoutPayment(owner(), tx)).rejects.toThrow("timeout");
+  });
+
+  it("un pago rechazado se reporta una vez, no en cada reintento", async () => {
+    const errors = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    rpc.mockResolvedValue({
+      data: { outcome: "rejected", reason: "monto_no_coincide_con_el_plan", already_processed: false },
+      error: null,
+    });
+    await expect(fulfillCheckoutPayment(owner(), tx)).resolves.toEqual({
+      outcome: "rejected",
+      kind: "plan",
+      reason: "monto_no_coincide_con_el_plan",
+      alreadyProcessed: false,
+    });
+
+    rpc.mockResolvedValue({
+      data: { outcome: "rejected", reason: "monto_no_coincide_con_el_plan", already_processed: true },
+      error: null,
+    });
+    await fulfillCheckoutPayment(owner(), tx);
+
+    const reports = errors.mock.calls.filter(([event]) => event === "billing.payment_rejected");
+    expect(reports).toHaveLength(1);
+  });
+});

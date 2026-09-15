@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { CalendarClock, CircleAlert, CreditCard, RotateCcw } from "lucide-react";
 import {
+  cancelScheduledPlanChangeAction,
   cancelSubscriptionAction,
   revertCancellationAction,
   type SubscriptionState,
@@ -25,8 +26,15 @@ import {
  * de corte que vale es la de Colombia.
  */
 export type SubscriptionPanelState =
-  /** Período pagado vigente que se va a renovar. */
-  | { kind: "renewing"; periodEnd: string }
+  /**
+   * Período pagado vigente que se va a renovar. `scheduledChange` es el plan menor
+   * que rige desde la renovación, si se programó un downgrade.
+   */
+  | {
+      kind: "renewing";
+      periodEnd: string;
+      scheduledChange: { planLabel: string; price: string } | null;
+    }
   /** Cancelación pedida: conserva el plan hasta periodEnd. */
   | { kind: "canceling"; periodEnd: string }
   /** Renovación sin cobrar: conserva el plan hasta graceEndsOn (lib/billing/subscription-state.ts). */
@@ -47,7 +55,7 @@ export function SubscriptionPanel({
   state: SubscriptionPanelState;
   /** Qué incluye Free, para que quien cancela sepa a qué pasa. */
   freeLimits: string;
-  /** Solo el admin de la clínica cancela o reactiva. */
+  /** Solo el admin de la clínica cancela, reactiva o cambia el plan programado. */
   canManage: boolean;
   /** Checkout del plan actual: la salida de la gracia. */
   payAction: () => Promise<void>;
@@ -60,6 +68,10 @@ export function SubscriptionPanel({
     revertCancellationAction,
     initialState,
   );
+  const [keepState, keepAction, keepPending] = useActionState(
+    cancelScheduledPlanChangeAction,
+    initialState,
+  );
 
   // Cancelar conserva el plan hasta el fin del período solo si ese período
   // sigue vigente; si ya venció (o nunca hubo uno), termina de inmediato.
@@ -67,6 +79,7 @@ export function SubscriptionPanel({
     state.kind === "renewing" || (state.kind === "overdue" && !state.periodEnded)
       ? state.periodEnd
       : null;
+  const scheduledChange = state.kind === "renewing" ? state.scheduledChange : null;
 
   return (
     <section
@@ -85,10 +98,18 @@ export function SubscriptionPanel({
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="font-heading font-semibold text-navy">Suscripción</h2>
-          {state.kind === "renewing" && (
+          {state.kind === "renewing" && !scheduledChange && (
             <p className="text-sm text-foreground/90">
               Plan {planLabel} · se renueva el {state.periodEnd}. Puedes cancelar cuando quieras y
               conservas el plan hasta esa fecha.
+            </p>
+          )}
+          {state.kind === "renewing" && scheduledChange && (
+            <p className="text-sm text-foreground/90">
+              Conservas el plan {planLabel} hasta el {state.periodEnd}. Ese día pasas al plan{" "}
+              {scheduledChange.planLabel} y la renovación cobra {scheduledChange.price}. Si tienes
+              más pacientes o profesionales de los que permite, se conservan, pero no podrás agregar
+              más.
             </p>
           )}
           {state.kind === "canceling" && (
@@ -113,7 +134,8 @@ export function SubscriptionPanel({
           )}
           {!canManage && (
             <p className="text-xs text-muted-foreground">
-              Solo el administrador de la clínica puede cancelar o reactivar la suscripción.
+              Solo el administrador de la clínica puede cancelar, reactivar o programar cambios de
+              la suscripción.
             </p>
           )}
         </div>
@@ -141,6 +163,16 @@ export function SubscriptionPanel({
         </form>
       )}
 
+      {canManage && scheduledChange && (
+        <form action={keepAction} className="mt-4 flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="outline" size="sm" disabled={keepPending}>
+            <RotateCcw className="size-3.5" />
+            {keepPending ? "Guardando…" : `Mantener plan ${planLabel}`}
+          </Button>
+          {keepState.error && <p className="text-xs text-destructive">{keepState.error}</p>}
+        </form>
+      )}
+
       {canManage && state.kind !== "canceling" && (
         <div className="mt-4">
           <Dialog>
@@ -162,6 +194,9 @@ export function SubscriptionPanel({
                   volver a un plan pago.
                 </li>
                 <li>No se borra nada: tus pacientes, historias clínicas y reportes siguen disponibles.</li>
+                {scheduledChange && (
+                  <li>Se anula el cambio programado al plan {scheduledChange.planLabel}.</li>
+                )}
                 {keepsUntil && <li>Puedes reactivarla antes del {keepsUntil}.</li>}
               </ul>
               {cancelState.error && (

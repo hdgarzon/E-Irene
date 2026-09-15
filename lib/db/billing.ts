@@ -45,33 +45,17 @@ export async function recordBillingEvent(input: {
   throw error;
 }
 
-/**
- * Pago aprobado de un plan (checkout): empieza una suscripción. El ciclo se
- * ancla al momento del pago y el período pagado termina un ciclo después
- * (activate_subscription, migración 0041).
- *
- * NO es idempotente —reinicia el ciclo—: solo debe llamarse cuando
- * recordBillingEvent confirmó que el evento es nuevo. Los cobros recurrentes
- * nunca pasan por aquí; usan renewBilling.
- */
-export async function activateBilling(
-  clinicId: string,
-  plan: Plan,
-  paymentSourceId: string | null,
-): Promise<void> {
-  const admin = createAdminClient();
-  const { data: periodEnd, error } = await admin.rpc("activate_subscription", {
-    p_clinic: clinicId,
-    p_plan: plan,
-    p_payment_source_enc: paymentSourceId ? encrypt(paymentSourceId) : undefined,
-  });
-  if (error) throw error;
-  logger.info("billing.activated", { clinicId, plan, periodEnd });
-}
-
 export interface ClinicDueForCharge {
   id: string;
+  /** Plan vigente. */
   plan: Plan;
+  /** Downgrade programado para esta renovación (migración 0056), o null. */
+  scheduledPlan: Plan | null;
+  /**
+   * Plan que se cobra y se renueva: el programado si lo hay, si no el vigente. De
+   * él salen el monto, la referencia y el plan que aplica renew_subscription_period.
+   */
+  chargePlan: Plan;
   /** Fin del período que se va a renovar. De él salen la clave y la renovación del cobro. */
   currentPeriodEnd: string;
   wompiPaymentSourceId: string | null;
@@ -96,7 +80,7 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("clinics")
-    .select("id, plan, current_period_end, wompi_payment_source_id_enc")
+    .select("id, plan, scheduled_plan, current_period_end, wompi_payment_source_id_enc")
     // Solo los planes con precio fijo: Free no se cobra y Enterprise se factura por contrato.
     .in("plan", PAID_PLANS)
     .in("billing_status", ["activo", "vencido"])
@@ -114,6 +98,8 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
           {
             id: r.id,
             plan: r.plan as Plan,
+            scheduledPlan: (r.scheduled_plan as Plan | null) ?? null,
+            chargePlan: ((r.scheduled_plan as Plan | null) ?? r.plan) as Plan,
             currentPeriodEnd: r.current_period_end,
             ...readPaymentSource(r.id, r.wompi_payment_source_id_enc),
           },
@@ -187,7 +173,7 @@ export async function isStillDueForCharge(clinic: ClinicDueForCharge): Promise<b
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("clinics")
-    .select("plan, billing_status, current_period_end, cancel_at_period_end")
+    .select("plan, scheduled_plan, billing_status, current_period_end, cancel_at_period_end")
     .eq("id", clinic.id)
     .maybeSingle();
   if (error) throw error;
@@ -195,6 +181,8 @@ export async function isStillDueForCharge(clinic: ClinicDueForCharge): Promise<b
   return (
     !data.cancel_at_period_end &&
     data.plan === clinic.plan &&
+    // Programar o anular un downgrade cambia el monto que corresponde cobrar.
+    (data.scheduled_plan ?? null) === clinic.scheduledPlan &&
     (data.billing_status === "activo" || data.billing_status === "vencido") &&
     new Date(data.current_period_end).getTime() === new Date(clinic.currentPeriodEnd).getTime()
   );
@@ -372,7 +360,8 @@ export async function findScheduledChargeForPeriod(
 
 /**
  * Cobro recurrente aprobado: el período pagado avanza exactamente un ciclo
- * desde `chargedPeriodEnd` (renew_subscription_period, migración 0041).
+ * desde `chargedPeriodEnd` y queda el plan que se cobró —el downgrade programado,
+ * si lo había— (renew_subscription_period, migraciones 0041 y 0056).
  *
  * Idempotente: si ese período ya se había renovado —el cron y el webhook del
  * mismo cobro llegan los dos— no cambia nada y devuelve null.
@@ -380,19 +369,39 @@ export async function findScheduledChargeForPeriod(
 export async function renewBilling(
   clinicId: string,
   chargedPeriodEnd: string,
+  chargedPlan: Plan,
 ): Promise<string | null> {
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("renew_subscription_period", {
     p_clinic: clinicId,
     p_charged_period_end: chargedPeriodEnd,
+    p_charged_plan: chargedPlan,
   });
   if (error) throw error;
   if (data) {
-    logger.info("billing.renewed", { clinicId, chargedPeriodEnd, periodEnd: data });
+    logger.info("billing.renewed", { clinicId, chargedPeriodEnd, chargedPlan, periodEnd: data });
   } else {
-    logger.info("billing.renewal_already_applied", { clinicId, chargedPeriodEnd });
+    logger.info("billing.renewal_already_applied", { clinicId, chargedPeriodEnd, chargedPlan });
   }
   return data ?? null;
+}
+
+/**
+ * true si la clínica tiene un cobro recurrente todavía sin desenlace (PSE o
+ * Nequi pendientes, o una petición a Wompi sin respuesta). Mientras tanto no se
+ * cotiza un upgrade: el cobro en curso es del plan actual y su aprobación
+ * llegaría después de subir de plan.
+ */
+export async function hasOpenRenewalCharge(clinicId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("billing_scheduled_charges")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .in("status", ["pending", "processing"])
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }
 
 /**

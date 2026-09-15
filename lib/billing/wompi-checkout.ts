@@ -1,7 +1,8 @@
 import { PLANS, type Plan } from "@/lib/plans";
 import { logger } from "@/lib/logger";
-import { buildBillingReference } from "./wompi";
-import { recordCheckout } from "@/lib/db/billing-checkouts";
+import { buildBillingReference, buildPlanChangeReference } from "./wompi";
+import { recordCheckout, type CheckoutKind } from "@/lib/db/billing-checkouts";
+import type { UpgradeQuote } from "./proration";
 
 const WOMPI_BASE = {
   sandbox: "https://sandbox.wompi.co/v1",
@@ -11,6 +12,13 @@ const WOMPI_BASE = {
 /** Checkout público de Wompi. Único para sandbox y producción: el modo lo
  *  determina el prefijo del id del payment link (`test_` = pruebas). */
 const WOMPI_CHECKOUT_BASE = "https://checkout.wompi.co/l";
+
+/**
+ * Vigencia del link de un upgrade. Es una cotización: la diferencia baja con
+ * cada minuto que pasa y deja de valer si cambia el plan o el período. Un link
+ * que no vence permitiría pagar mañana el monto de hoy.
+ */
+export const UPGRADE_LINK_TTL_MS = 30 * 60 * 1000;
 
 export interface WompiCheckoutInput {
   clinicId: string;
@@ -37,43 +45,51 @@ function getPrivateKey(): string {
   return key;
 }
 
+/** `expires_at` como lo documenta Wompi: ISO 8601 en UTC, sin zona ("2040-12-10T14:30:00"). */
+export function wompiExpiresAt(date: Date): string {
+  return date.toISOString().slice(0, 19);
+}
+
+interface PaymentLinkInput {
+  clinicId: string;
+  kind: CheckoutKind;
+  plan: Plan;
+  amountInCents: number;
+  name: string;
+  description: string;
+  reference: string;
+  redirectUrl: string;
+  userEmail?: string;
+  expiresAt?: Date;
+  details?: Record<string, unknown>;
+  quantity?: number | null;
+}
+
 /**
- * Inicia un checkout de "mejorar plan" en Wompi creando un Payment Link. El
- * usuario es redirigido a la URL del link para completar el pago. Wompi
- * notifica el resultado vía webhook (transaction.updated) y guardamos el
- * payment_source_id para el cobro recurrente.
+ * Crea un Payment Link de Wompi y registra a qué compra corresponde.
  *
  * ⚠️ Wompi no permite crear transacciones directas con redirect_url sin un
  * token de tarjeta previamente tokenizado. El Payment Link es la forma
  * correcta de obtener un checkout redirect sin widget frontend.
  */
-export async function createWompiCheckout(input: WompiCheckoutInput): Promise<WompiCheckoutResult> {
-  const reference = buildBillingReference(input.clinicId, input.plan);
-  const amountInCents = PLANS[input.plan].priceInCents;
-
-  if (amountInCents === null) {
-    throw new Error(`El plan ${input.plan} es a convenir y no se cobra por Wompi`);
-  }
-  if (amountInCents <= 0) {
-    throw new Error(`El plan ${input.plan} no requiere pago`);
-  }
-
+async function createPaymentLink(input: PaymentLinkInput): Promise<WompiCheckoutResult> {
   const body = {
-    name: `Plan ${PLANS[input.plan].label} · E-Irene`,
-    description: `Suscripción mensual al plan ${PLANS[input.plan].label}`,
+    name: input.name,
+    description: input.description,
     // Requeridos por Wompi (POST /v1/payment_links devuelve 422
     // INPUT_VALIDATION_ERROR sin ellos, confirmado contra la respuesta real
     // en producción — no son opcionales pese a lo que dice la doc pública).
-    // single_use=true: un link = un cobro, no queremos que el mismo link de
-    // "mejorar a Pro" sirva para pagar dos veces. collect_shipping=false:
-    // E-Irene es un servicio, no hay nada que enviar.
+    // single_use=true: un link = un cobro, el mismo link no sirve para pagar
+    // dos veces. collect_shipping=false: E-Irene es un servicio, no hay nada
+    // que enviar.
     single_use: true,
     collect_shipping: false,
-    amount_in_cents: amountInCents,
+    amount_in_cents: input.amountInCents,
     currency: "COP",
-    reference,
+    reference: input.reference,
     redirect_url: input.redirectUrl,
     customer_email: input.userEmail ?? undefined,
+    ...(input.expiresAt ? { expires_at: wompiExpiresAt(input.expiresAt) } : {}),
   };
 
   const res = await fetch(`${getBaseUrl()}/payment_links`, {
@@ -96,6 +112,7 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   if (!res.ok) {
     logger.error("wompi.checkout_failed", {
       clinicId: input.clinicId,
+      kind: input.kind,
       plan: input.plan,
       status: res.status,
       response: responseText.slice(0, 500),
@@ -116,6 +133,7 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   if (!paymentLinkId) {
     logger.error("wompi.checkout_unexpected_response", {
       clinicId: input.clinicId,
+      kind: input.kind,
       plan: input.plan,
       response: responseText.slice(0, 500),
     });
@@ -130,23 +148,95 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
   const checkoutUrl = `${WOMPI_CHECKOUT_BASE}/${paymentLinkId}`;
 
   // Se persiste ANTES de devolver la URL: es el único vínculo entre el pago y
-  // la clínica. Wompi descarta nuestra `reference` en los pagos por payment
-  // link y devuelve una propia, así que sin este registro un pago aprobado
-  // llega sin forma de saber a quién pertenece (ver migración 0031).
+  // la clínica, y lo único que dice qué se compró. Wompi descarta nuestra
+  // `reference` en los pagos por payment link y devuelve una propia (ver
+  // migraciones 0031 y 0056).
   await recordCheckout({
     paymentLinkId,
     clinicId: input.clinicId,
     plan: input.plan,
-    amountInCents,
-    reference,
+    amountInCents: input.amountInCents,
+    reference: input.reference,
+    kind: input.kind,
+    quantity: input.quantity ?? null,
+    details: input.details,
+    expiresAt: input.expiresAt?.toISOString() ?? null,
   });
 
   logger.info("wompi.checkout_created", {
     clinicId: input.clinicId,
+    kind: input.kind,
     plan: input.plan,
     paymentLinkId,
-    reference,
+    reference: input.reference,
   });
 
-  return { paymentLinkId, reference, checkoutUrl, status };
+  return { paymentLinkId, reference: input.reference, checkoutUrl, status };
+}
+
+/**
+ * Checkout para comprar un plan por su precio completo: suscripción nueva, que
+ * empieza un ciclo en el momento del pago. Wompi notifica el resultado vía
+ * webhook (transaction.updated) y se guarda el payment_source_id para el cobro
+ * recurrente.
+ */
+export async function createWompiCheckout(input: WompiCheckoutInput): Promise<WompiCheckoutResult> {
+  const amountInCents = PLANS[input.plan].priceInCents;
+
+  if (amountInCents === null) {
+    throw new Error(`El plan ${input.plan} es a convenir y no se cobra por Wompi`);
+  }
+  if (amountInCents <= 0) {
+    throw new Error(`El plan ${input.plan} no requiere pago`);
+  }
+
+  return createPaymentLink({
+    clinicId: input.clinicId,
+    kind: "plan",
+    plan: input.plan,
+    amountInCents,
+    name: `Plan ${PLANS[input.plan].label} · E-Irene`,
+    description: `Suscripción mensual al plan ${PLANS[input.plan].label}`,
+    reference: buildBillingReference(input.clinicId, input.plan),
+    redirectUrl: input.redirectUrl,
+    userEmail: input.userEmail,
+  });
+}
+
+/**
+ * Checkout de la diferencia prorrateada de un upgrade (lib/billing/proration.ts).
+ * El link vence en UPGRADE_LINK_TTL_MS y guarda la cotización, que el
+ * cumplimiento vuelve a comprobar antes de subir el plan (apply_plan_upgrade).
+ */
+export async function createUpgradeCheckout(input: {
+  clinicId: string;
+  quote: UpgradeQuote;
+  redirectUrl: string;
+  userEmail?: string;
+  now?: Date;
+}): Promise<WompiCheckoutResult> {
+  const { quote } = input;
+  const now = input.now ?? new Date();
+  const fromLabel = PLANS[quote.fromPlan].label;
+  const toLabel = PLANS[quote.toPlan].label;
+
+  return createPaymentLink({
+    clinicId: input.clinicId,
+    kind: "upgrade",
+    plan: quote.toPlan,
+    amountInCents: quote.amountInCents,
+    name: `Cambio al plan ${toLabel} · E-Irene`,
+    description: `Diferencia del plan ${fromLabel} al plan ${toLabel} por lo que queda del ciclo actual`,
+    reference: buildPlanChangeReference(input.clinicId, quote.toPlan),
+    redirectUrl: input.redirectUrl,
+    userEmail: input.userEmail,
+    expiresAt: new Date(now.getTime() + UPGRADE_LINK_TTL_MS),
+    details: {
+      from_plan: quote.fromPlan,
+      to_plan: quote.toPlan,
+      period_end: quote.periodEnd,
+      cycle_start: quote.cycleStart,
+      quoted_at: now.toISOString(),
+    },
+  });
 }

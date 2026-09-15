@@ -16,6 +16,8 @@ export interface ClinicSubscription {
   currentPeriodEnd: string | null;
   /** Cancelación pedida: conserva el plan hasta currentPeriodEnd y no se renueva. */
   cancelAtPeriodEnd: boolean;
+  /** Downgrade programado: plan pago menor que rige desde la renovación (migración 0056). */
+  scheduledPlan: Plan | null;
 }
 
 export interface ClinicOverview {
@@ -28,6 +30,8 @@ export interface ClinicOverview {
   /** Ciclo vigente [cycleStart, cycleEnd). Las cuotas se reinician en cycleEnd. */
   cycleStart: string;
   cycleEnd: string;
+  /** Ancla del ciclo: de ella se cuentan los ciclos y se prorratea un upgrade. */
+  billingCycleAnchor: string;
   subscription: ClinicSubscription;
 }
 
@@ -46,7 +50,9 @@ export async function getClinicOverview(): Promise<ClinicOverview> {
 
   const { data: clinic, error } = await supabase
     .from("clinics")
-    .select("plan, billing_cycle_anchor, billing_status, current_period_end, cancel_at_period_end")
+    .select(
+      "plan, billing_cycle_anchor, billing_status, current_period_end, cancel_at_period_end, scheduled_plan",
+    )
     .eq("id", user.clinicId)
     .single();
   if (error) throw error;
@@ -72,10 +78,12 @@ export async function getClinicOverview(): Promise<ClinicOverview> {
     consultationsThisCycle: consultations.count ?? 0,
     cycleStart: cycle.start.toISOString(),
     cycleEnd: cycle.end.toISOString(),
+    billingCycleAnchor: clinic.billing_cycle_anchor,
     subscription: {
       status: clinic.billing_status as BillingStatus,
       currentPeriodEnd: clinic.current_period_end,
       cancelAtPeriodEnd: clinic.cancel_at_period_end,
+      scheduledPlan: (clinic.scheduled_plan as Plan | null) ?? null,
     },
   };
 }
@@ -93,7 +101,7 @@ export async function getClinicSubscription(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clinics")
-    .select("plan, billing_status, current_period_end, cancel_at_period_end")
+    .select("plan, billing_status, current_period_end, cancel_at_period_end, scheduled_plan")
     .eq("id", user.clinicId)
     .single();
   if (error) throw error;
@@ -103,6 +111,7 @@ export async function getClinicSubscription(): Promise<{
       status: data.billing_status as BillingStatus,
       currentPeriodEnd: data.current_period_end,
       cancelAtPeriodEnd: data.cancel_at_period_end,
+      scheduledPlan: (data.scheduled_plan as Plan | null) ?? null,
     },
   };
 }

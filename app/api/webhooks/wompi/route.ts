@@ -6,9 +6,9 @@ import {
   type WompiEventPayload,
 } from "@/lib/billing/wompi";
 import { settleRenewalPayment } from "@/lib/billing/recurring";
-import { recordBillingEvent, activateBilling, clinicExists } from "@/lib/db/billing";
+import { fulfillCheckoutPayment } from "@/lib/billing/fulfillment";
+import { recordBillingEvent, clinicExists } from "@/lib/db/billing";
 import { resolveTransactionOwner } from "@/lib/db/billing-checkouts";
-import { PLANS } from "@/lib/plans";
 import { logger } from "@/lib/logger";
 
 /**
@@ -17,10 +17,8 @@ import { logger } from "@/lib/logger";
  * invocar una Server Action (necesita una URL pública estable con su propio
  * contrato de verificación de firma).
  *
- * Fase 1 del roadmap de facturación: solo procesa `transaction.updated`.
- * El checkout que genera estas transacciones (Fase 2) todavía no existe —
- * este endpoint puede recibir tráfico real desde ya (probarlo con el
- * Dashboard sandbox de Wompi) aunque nada en la app dispare pagos todavía.
+ * Solo procesa `transaction.updated`: cobros recurrentes (renovaciones) y pagos
+ * por link (compra de un plan, upgrade prorrateado).
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const secret = process.env.WOMPI_EVENTS_SECRET;
@@ -109,10 +107,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     logger.warn("wompi_webhook.unknown_reference", { reference: transaction.reference });
     return NextResponse.json({ ok: true, skipped: true });
   }
-  const { clinicId, plan } = owner;
 
-  const { isNew } = await recordBillingEvent({
-    clinicId,
+  await recordBillingEvent({
+    clinicId: owner.clinicId,
     wompiTransactionId: transaction.id,
     wompiEvent: payload.event,
     status: transaction.status,
@@ -120,30 +117,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     rawPayload: payload,
   });
 
-  if (isNew && transaction.status === "APPROVED") {
-    // Defensa en profundidad: el plan a activar viene de `reference`, que la
-    // generamos nosotros y llega firmada — pero activar un plan sin comprobar
-    // que lo pagado corresponde a su precio deja el sistema a merced de un
-    // solo error (un payment link creado con el monto equivocado, un cambio
-    // de precio a mitad de un checkout ya abierto). El monto es el único dato
-    // que refleja lo que la clínica realmente pagó, así que se compara.
-    const expected = PLANS[plan].priceInCents;
-    if (transaction.amount_in_cents !== expected) {
-      logger.error("wompi_webhook.amount_mismatch", {
-        clinicId,
-        plan,
-        expected,
-        received: transaction.amount_in_cents,
-        transactionId: transaction.id,
-        action: "NO se activó el plan; el pago quedó registrado en billing_events. Conciliar manualmente.",
-      });
-      // 200 a propósito: el evento se procesó y quedó registrado; reintentarlo
-      // no cambiaría nada. Lo que no se hace es activar el plan.
-      return NextResponse.json({ ok: true, planActivated: false });
-    }
-
-    await activateBilling(clinicId, plan, transaction.payment_source_id ?? null);
+  if (transaction.status !== "APPROVED") {
+    return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ ok: true });
+  // Se intenta en cada entrega del evento aprobado, no solo en la primera: el
+  // cumplimiento es idempotente por transacción (billing_fulfillments), y si
+  // falla lanza sin aplicar nada, así que el 500 hace que Wompi lo reintente.
+  // Antes se activaba solo si el evento era nuevo y un fallo dejaba el pago sin
+  // aplicar para siempre. Un pago que no corresponde (monto distinto del precio o
+  // de lo cotizado) queda `rejected` en la base para reembolsarlo: 200, porque
+  // reintentarlo no cambiaría nada.
+  const fulfillment = await fulfillCheckoutPayment(owner, transaction);
+  return NextResponse.json({
+    ok: true,
+    outcome: fulfillment.outcome,
+    planActivated: fulfillment.outcome === "applied",
+  });
 }

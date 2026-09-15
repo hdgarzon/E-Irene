@@ -7,14 +7,18 @@ import { requireRole } from "@/lib/auth";
 import { addMember } from "@/lib/db/team";
 import { getClinicOverview } from "@/lib/db/clinic";
 import {
+  cancelScheduledPlanChange,
   requestSubscriptionCancellation,
   revertSubscriptionCancellation,
+  schedulePlanDowngrade,
 } from "@/lib/db/subscription";
+import { hasOpenRenewalCharge } from "@/lib/db/billing";
 import { canAddDoctor, limitLabel, PLANS, type Plan } from "@/lib/plans";
 import { subscriptionState } from "@/lib/billing/subscription-state";
+import { isPaidPlanDowngrade, isPaidPlanUpgrade, quotePlanUpgrade } from "@/lib/billing/proration";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
-import { createWompiCheckout } from "@/lib/billing/wompi-checkout";
+import { createUpgradeCheckout, createWompiCheckout } from "@/lib/billing/wompi-checkout";
 import { appBaseUrl } from "@/lib/app-url";
 
 export type MemberState = {
@@ -86,10 +90,10 @@ export async function addMemberAction(
 export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   const user = await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
+  const state = subscriptionState(overview.plan, overview.subscription);
   // Volver a pagar el plan actual solo tiene sentido si su renovación no se pudo
   // cobrar: es la salida de la gracia (lib/billing/subscription-state.ts).
-  const overdue = subscriptionState(overview.plan, overview.subscription).kind === "overdue";
-  if (overview.plan === plan && !overdue) {
+  if (overview.plan === plan && state.kind !== "overdue") {
     redirect("/settings/plan");
   }
 
@@ -107,6 +111,24 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
     redirect("/settings/plan#suscripcion");
   }
 
+  // Con un período pagado vigente, cambiar entre planes pagos no vuelve a cobrar
+  // un mes completo ni mueve la fecha de renovación: subir cobra la diferencia
+  // por lo que queda del ciclo y bajar se programa para la renovación
+  // (schedulePlanDowngradeAction). Comprar el plan completo reiniciaba el ciclo y
+  // se perdía lo ya pagado.
+  const paidPeriodEnd =
+    state.kind === "renewing" || state.kind === "canceling" ? state.periodEnd : null;
+  if (paidPeriodEnd && isPaidPlanDowngrade(overview.plan, plan)) {
+    redirect("/settings/plan");
+  }
+  const prorated = paidPeriodEnd !== null && isPaidPlanUpgrade(overview.plan, plan);
+
+  // Un cobro de renovación sin desenlace (PSE, Nequi) es del plan actual: si se
+  // aprueba después de subir de plan, la renovación no sabría qué aplicar.
+  if (prorated && (await hasOpenRenewalCharge(user.clinicId))) {
+    redirect("/settings/plan?cambio=renovacion_en_curso");
+  }
+
   // Sin query params propios: Wompi agrega `?id=<transaction_id>` al volver, y
   // ese id es lo que permite reconciliar el pago aunque el webhook no llegue
   // (ver lib/billing/reconcile.ts). Mandar una URL que ya trae "?" arriesga
@@ -120,36 +142,140 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   // ?wompi=error. Ver docs de Next.js (redirect): "redirect should be called
   // outside the try block when using try/catch statements".
   let checkoutUrl: string | null = null;
+  let quoteUnavailable = false;
   try {
-    const checkout = await createWompiCheckout({
-      clinicId: user.clinicId,
-      plan,
-      redirectUrl,
-      userEmail: user.email,
-    });
-    await logAudit({
-      clinicId: user.clinicId,
-      actorId: user.id,
-      action: "billing.checkout_initiated",
-      entityType: "clinic",
-      entityId: user.clinicId,
-      metadata: { plan, reference: checkout.reference, paymentLinkId: checkout.paymentLinkId },
-    });
-    checkoutUrl = checkout.checkoutUrl;
+    if (prorated) {
+      const quote = quotePlanUpgrade({
+        fromPlan: overview.plan,
+        toPlan: plan,
+        anchor: overview.billingCycleAnchor,
+        periodEnd: paidPeriodEnd,
+      });
+      if (!quote) {
+        // El período no coincide con un ciclo del ancla: no se cotiza a ciegas.
+        quoteUnavailable = true;
+        logger.error("billing.upgrade_quote_unavailable", {
+          clinicId: user.clinicId,
+          fromPlan: overview.plan,
+          toPlan: plan,
+          anchor: overview.billingCycleAnchor,
+          periodEnd: paidPeriodEnd,
+        });
+      } else {
+        const checkout = await createUpgradeCheckout({
+          clinicId: user.clinicId,
+          quote,
+          redirectUrl,
+          userEmail: user.email,
+        });
+        await logAudit({
+          clinicId: user.clinicId,
+          actorId: user.id,
+          action: "billing.upgrade_checkout_initiated",
+          entityType: "clinic",
+          entityId: user.clinicId,
+          metadata: {
+            fromPlan: quote.fromPlan,
+            toPlan: quote.toPlan,
+            amountInCents: quote.amountInCents,
+            periodEnd: quote.periodEnd,
+            reference: checkout.reference,
+            paymentLinkId: checkout.paymentLinkId,
+          },
+        });
+        checkoutUrl = checkout.checkoutUrl;
+      }
+    } else {
+      const checkout = await createWompiCheckout({
+        clinicId: user.clinicId,
+        plan,
+        redirectUrl,
+        userEmail: user.email,
+      });
+      await logAudit({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        action: "billing.checkout_initiated",
+        entityType: "clinic",
+        entityId: user.clinicId,
+        metadata: { plan, reference: checkout.reference, paymentLinkId: checkout.paymentLinkId },
+      });
+      checkoutUrl = checkout.checkoutUrl;
+    }
   } catch (error) {
     logger.error("billing.checkout_initiate_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      plan,
+      prorated,
+      error,
+    });
+  }
+
+  if (quoteUnavailable) redirect("/settings/plan?cambio=no_cotizable");
+  if (!checkoutUrl) redirect("/settings/plan?wompi=error");
+  redirect(checkoutUrl);
+}
+
+/**
+ * Programa bajar a un plan pago menor desde la próxima renovación: sin cobro hoy
+ * y conservando el plan actual hasta el fin del período. Solo el admin; la función
+ * de la base lo exige igual y deja la constancia en audit_logs.
+ */
+export async function schedulePlanDowngradeAction(plan: Plan): Promise<void> {
+  const user = await requireRole(["admin"]);
+  let notice = "no_programado";
+  try {
+    const result = await schedulePlanDowngrade(plan);
+    logger.info("subscription.downgrade_requested", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      plan,
+      status: result.status,
+      effectiveAt: result.effectiveAt,
+    });
+    if (result.status === "scheduled" || result.status === "already_scheduled") {
+      notice = "programado";
+    } else if (result.status === "canceling") {
+      notice = "cancelacion_pendiente";
+    }
+  } catch (error) {
+    logger.error("subscription.downgrade_failed", {
       clinicId: user.clinicId,
       actorId: user.id,
       plan,
       error,
     });
   }
-
-  if (!checkoutUrl) redirect("/settings/plan?wompi=error");
-  redirect(checkoutUrl);
+  revalidatePath("/settings/plan");
+  revalidatePath("/settings");
+  redirect(`/settings/plan?cambio=${notice}`);
 }
 
 export type SubscriptionState = { ok?: boolean; error?: string };
+
+/** Anula el downgrade programado: la renovación vuelve a cobrar el plan actual. */
+export async function cancelScheduledPlanChangeAction(): Promise<SubscriptionState> {
+  const user = await requireRole(["admin"]);
+  try {
+    const status = await cancelScheduledPlanChange();
+    logger.info("subscription.downgrade_cancel_requested", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      status,
+    });
+  } catch (error) {
+    logger.error("subscription.downgrade_cancel_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      error,
+    });
+    return { error: "No se pudo anular el cambio de plan. Intenta de nuevo o escríbenos." };
+  }
+  revalidatePath("/settings/plan");
+  revalidatePath("/settings");
+  return { ok: true };
+}
 
 /**
  * Cancela la suscripción al final del período pagado (o de inmediato si no hay

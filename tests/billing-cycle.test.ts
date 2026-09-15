@@ -473,6 +473,8 @@ d("cobro recurrente: un token de cobro ilegible no impide listar a las demás cl
     const clinic = {
       id: ilegible,
       plan: "pro" as const,
+      scheduledPlan: null,
+      chargePlan: "pro" as const,
       currentPeriodEnd: row.current_period_end as string,
       wompiPaymentSourceId: null,
       paymentSourceUnreadable: true,

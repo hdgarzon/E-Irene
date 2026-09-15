@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { PLANS } from "@/lib/plans";
 
 // Cobros recurrentes: el cron y el webhook resuelven la renovación del MISMO
 // cobro y ninguno de los dos puede reiniciar el ciclo ni renovarlo dos veces.
@@ -83,7 +84,7 @@ describe("settleRenewalPayment (webhook de cobros recurrentes)", () => {
     await expect(settle()).resolves.toEqual({ result: "renewed", periodEnd: NEXT_PERIOD_END });
     expect(db.markScheduledChargeSuccess).toHaveBeenCalledWith("charge-1", "tx-renewal-1");
     // El fin de período del intento registrado, no la fecha en que llega el webhook.
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
   });
 
   it("si el cron ya renovó ese período, el webhook no lo renueva otra vez", async () => {
@@ -106,7 +107,7 @@ describe("settleRenewalPayment (webhook de cobros recurrentes)", () => {
     // por isNew dejaría ese cobro sin renovar para siempre.
     db.recordBillingEvent.mockResolvedValue({ isNew: false });
     await settle();
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
   });
 
   it("un cobro rechazado queda registrado y no renueva", async () => {
@@ -136,7 +137,21 @@ describe("settleRenewalPayment (webhook de cobros recurrentes)", () => {
     db.findScheduledChargeForPeriod.mockResolvedValue(charge({ status: "failed" }));
     await expect(settle()).resolves.toEqual({ result: "renewed", periodEnd: NEXT_PERIOD_END });
     expect(db.markScheduledChargeSuccess).not.toHaveBeenCalled();
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
+  });
+
+  it("renueva con el plan del cobro registrado: un downgrade programado se aplica ahí", async () => {
+    const amount = PLANS.esencial.priceInCents!;
+    db.findScheduledChargeForPeriod.mockResolvedValue(charge({ plan: "esencial", amountInCents: amount }));
+    await expect(
+      settleRenewalPayment({
+        transaction: transaction("APPROVED", amount),
+        reference: { ...reference, plan: "esencial" },
+        wompiEvent: "transaction.updated",
+        rawPayload: {},
+      }),
+    ).resolves.toEqual({ result: "renewed", periodEnd: NEXT_PERIOD_END });
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "esencial");
   });
 
   it("no registra nada de una clínica inexistente", async () => {
@@ -150,6 +165,8 @@ describe("processRecurringCharges (cron)", () => {
   const due = {
     id: CLINIC,
     plan: "pro" as const,
+    scheduledPlan: null,
+    chargePlan: "pro" as const,
     currentPeriodEnd: PERIOD_END,
     wompiPaymentSourceId: "ps-123",
     paymentSourceUnreadable: false,
@@ -180,13 +197,31 @@ describe("processRecurringCharges (cron)", () => {
   it("un cobro aprobado renueva desde el fin del período cobrado y lleva referencia de renovación", async () => {
     const result = await processRecurringCharges();
     expect(result.succeeded).toBe(1);
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
 
     const body = JSON.parse(
       (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string,
     );
     // Con referencia de compra, el webhook de este mismo cobro reiniciaría el ciclo.
     expect(parseRenewalReference(body.reference)).toEqual(reference);
+  });
+
+  it("con un downgrade programado cobra el plan menor y renueva con ese plan", async () => {
+    db.getClinicsDueForCharge.mockResolvedValue([
+      { ...due, scheduledPlan: "esencial" as const, chargePlan: "esencial" as const },
+    ]);
+    const result = await processRecurringCharges();
+    expect(result.succeeded).toBe(1);
+
+    const body = JSON.parse(
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string,
+    );
+    expect(body.amount_in_cents).toBe(PLANS.esencial.priceInCents);
+    expect(parseRenewalReference(body.reference)).toEqual({ ...reference, plan: "esencial" });
+    expect(db.createScheduledCharge).toHaveBeenCalledWith(
+      expect.objectContaining({ clinicId: CLINIC, plan: "esencial" }),
+    );
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "esencial");
   });
 
   it("si la clínica canceló o cambió de plan desde la consulta, no se cobra", async () => {
@@ -201,6 +236,8 @@ describe("processRecurringCharges (cron)", () => {
     const unreadable = {
       id: OTHER_CLINIC,
       plan: "pro" as const,
+      scheduledPlan: null,
+      chargePlan: "pro" as const,
       currentPeriodEnd: PERIOD_END,
       wompiPaymentSourceId: null,
       paymentSourceUnreadable: true,
@@ -224,7 +261,7 @@ describe("processRecurringCharges (cron)", () => {
     expect(body.payment_source_id).toBe("ps-123");
     expect(db.markScheduledChargeSuccess).toHaveBeenCalledTimes(1);
     expect(db.renewBilling).toHaveBeenCalledTimes(1);
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
 
     // Un token ilegible es un problema nuestro, no un pago rechazado: no se la marca morosa.
     expect(db.markScheduledChargeFailed).not.toHaveBeenCalled();
@@ -242,7 +279,7 @@ describe("processRecurringCharges (cron)", () => {
 
     expect(result).toMatchObject({ succeeded: 1, unreadablePaymentSource: 1 });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+    expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
   });
 
   describe("una petición a Wompi que no termina no frena la corrida ni libera el período", () => {
@@ -285,7 +322,7 @@ describe("processRecurringCharges (cron)", () => {
           // La segunda clínica se cobra y se renueva igual.
           expect(fetch).toHaveBeenCalledTimes(2);
           expect(db.renewBilling).toHaveBeenCalledTimes(1);
-          expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END);
+          expect(db.renewBilling).toHaveBeenCalledWith(CLINIC, PERIOD_END, "pro");
 
           // La primera sí reservó su período, y la reserva no se toca: Wompi pudo
           // crear la transacción. Marcarla fallida liberaría el período para un

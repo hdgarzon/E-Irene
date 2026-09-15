@@ -73,12 +73,13 @@ export async function chargeClinic(
 
   // Referencia de renovación, no de compra: el webhook la distingue y solo
   // avanza el período en vez de reiniciar el ciclo (ver lib/billing/wompi.ts).
+  // Se cobra el plan de la renovación: el downgrade programado, si lo hay.
   const reference = buildRenewalReference(
     clinic.id,
-    clinic.plan,
+    clinic.chargePlan,
     periodKeyFor(clinic.currentPeriodEnd),
   );
-  const amountInCents = PLANS[clinic.plan].priceInCents;
+  const amountInCents = PLANS[clinic.chargePlan].priceInCents;
   // getClinicsDueForCharge ya deja fuera los planes sin precio fijo; esto evita
   // mandarle a Wompi un monto vacío si alguien llama directo.
   if (amountInCents === null || amountInCents <= 0) {
@@ -133,7 +134,7 @@ export async function chargeClinic(
     const reason = data?.error?.reason ?? responseText.slice(0, 200);
     logger.error("wompi.recurring_charge_failed", {
       clinicId: clinic.id,
-      plan: clinic.plan,
+      plan: clinic.chargePlan,
       status: res.status,
       reason,
     });
@@ -212,7 +213,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
 
   for (const clinic of dueClinics) {
     result.processed++;
-    const amountInCents = PLANS[clinic.plan].priceInCents;
+    const amountInCents = PLANS[clinic.chargePlan].priceInCents;
     if (amountInCents === null || amountInCents <= 0) {
       result.skipped++;
       continue;
@@ -275,7 +276,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     try {
       chargeId = await createScheduledCharge({
         clinicId: clinic.id,
-        plan: clinic.plan,
+        plan: clinic.chargePlan,
         amountInCents,
         dueAt,
         periodKey,
@@ -346,7 +347,7 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
         // Renueva el período que se cobró, no "desde hoy": el cron cobra hasta
         // 3 días antes del vencimiento y contar desde la fecha del cobro le
         // quitaba esos días al cliente en cada renovación.
-        await renewBilling(clinic.id, clinic.currentPeriodEnd);
+        await renewBilling(clinic.id, clinic.currentPeriodEnd, clinic.chargePlan);
         result.succeeded++;
       } catch (error) {
         logger.error("billing.renew_after_charge_failed", {
@@ -495,7 +496,7 @@ export async function settleRenewalPayment(input: {
     });
   }
 
-  const periodEnd = await renewBilling(reference.clinicId, charge.dueAt);
+  const periodEnd = await renewBilling(reference.clinicId, charge.dueAt, charge.plan);
   if (periodEnd) return { result: "renewed", periodEnd };
 
   // No se renovó: o ese período ya se había renovado —lo normal, el cron y el
