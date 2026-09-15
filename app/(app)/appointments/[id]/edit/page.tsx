@@ -6,6 +6,7 @@ import { listPatients } from "@/lib/db/patients";
 import { listDoctors } from "@/lib/db/clinic";
 import { updateAppointmentAction } from "@/app/(app)/appointments/actions";
 import { AppointmentForm } from "@/components/appointment-form";
+import { getVideoSchedulingNotice } from "@/lib/billing/video-access";
 import { toInputDateTime } from "@/lib/dates";
 
 export default async function EditAppointmentPage({
@@ -14,10 +15,11 @@ export default async function EditAppointmentPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [appt, patients, doctors] = await Promise.all([
+  const [appt, patients, doctors, videoNotice] = await Promise.all([
     getAppointment(id),
     listPatients(),
     listDoctors(),
+    getVideoSchedulingNotice(),
   ]);
   if (!appt) notFound();
 
@@ -52,6 +54,7 @@ export default async function EditAppointmentPage({
             modality: appt.modality,
           }}
           submitLabel="Guardar cambios"
+          videoNotice={videoNotice}
         />
       </div>
     </div>

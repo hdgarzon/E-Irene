@@ -8,6 +8,7 @@ import { PLANS, PLAN_ORDER, transcriptionHoursLabel, type Plan } from "@/lib/pla
 import { formatLongDate } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AdminVideoCredits } from "@/components/admin-video-credits";
 
 const PLAN_OPTIONS: Plan[] = PLAN_ORDER;
 
@@ -45,6 +46,7 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
               {clinic.patientCount} paciente{clinic.patientCount === 1 ? "" : "s"} ·{" "}
               {transcriptionHoursLabel(clinic.transcriptionSecondsCycle)} h transcritas en el ciclo
             </p>
+            <AdminVideoCredits clinicId={clinic.clinicId} balance={clinic.videoCredits} />
           </div>
         </div>
 

@@ -16,6 +16,12 @@ export interface PlanLimits {
   consultationsPerMonth: number;
   ai: boolean;
   whatsapp: boolean;
+  /**
+   * Videollamadas (migración 0058): "none" no las tiene; "addon" las compra por packs y
+   * cada consulta por video descuenta una si el paciente se conecta; "included" las
+   * tiene sin descuento.
+   */
+  video: "none" | "addon" | "included";
 }
 
 /** Centavos de COP → "$59.000". */
@@ -51,6 +57,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: 5,
     ai: false,
     whatsapp: false,
+    video: "none",
   }),
   esencial: definePlan({
     label: "Esencial",
@@ -61,6 +68,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: 20,
     ai: true,
     whatsapp: false,
+    video: "addon",
   }),
   pro: definePlan({
     label: "Profesional",
@@ -71,6 +79,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: 30,
     ai: true,
     whatsapp: false,
+    video: "addon",
   }),
   clinica: definePlan({
     label: "Clínica",
@@ -81,6 +90,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: 75,
     ai: true,
     whatsapp: true,
+    video: "addon",
   }),
   // Sin topes en la app: los fija el contrato con el que se asigna.
   enterprise: definePlan({
@@ -92,6 +102,7 @@ export const PLANS: Record<Plan, PlanLimits> = {
     consultationsPerMonth: Infinity,
     ai: true,
     whatsapp: true,
+    video: "included",
   }),
 };
 
@@ -153,6 +164,24 @@ export function transcriptionHoursLabel(seconds: number): string {
  * tests/transcription-packs.test.ts exige que coincidan.
  */
 export const TRANSCRIPTION_PACK = { hours: 5, priceInCents: 2_500_000 } as const;
+
+/**
+ * Precio de una videollamada adicional (migración 0058). Espejo de
+ * video_call_price_cents() en la base, que valida el monto de cada pack.
+ */
+export const VIDEO_CALL_PRICE_IN_CENTS = 900_000;
+
+/** Packs de videollamadas que se venden. No vencen. */
+export const VIDEO_PACK_SIZES = [1, 5, 10] as const;
+export type VideoPackSize = (typeof VIDEO_PACK_SIZES)[number];
+
+export function isVideoPackSize(quantity: number): quantity is VideoPackSize {
+  return (VIDEO_PACK_SIZES as readonly number[]).includes(quantity);
+}
+
+export function videoPackPriceInCents(quantity: VideoPackSize): number {
+  return quantity * VIDEO_CALL_PRICE_IN_CENTS;
+}
 
 /**
  * Límite de transcripción del ciclo con las bolsas vigentes, en segundos; null =

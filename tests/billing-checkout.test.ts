@@ -8,7 +8,8 @@ vi.mock("@/lib/db/billing-checkouts", () => ({
   recordCheckout: (...a: unknown[]) => recordCheckout(...a),
 }));
 
-const { createWompiCheckout, createUpgradeCheckout, createTranscriptionPackCheckout } = await import(
+const { createWompiCheckout, createUpgradeCheckout, createTranscriptionPackCheckout, createVideoPackCheckout } =
+  await import(
   "@/lib/billing/wompi-checkout"
 );
 const { parseBillingReference } = await import("@/lib/billing/wompi");
@@ -337,6 +338,52 @@ describe("createTranscriptionPackCheckout", () => {
         expiresAt: "2026-09-16T15:00:00.000Z",
         details: expect.objectContaining({ hours: 5, cycle_end: "2026-10-01T05:00:00.000Z" }),
       }),
+    );
+  });
+});
+
+describe("createVideoPackCheckout", () => {
+  const CLINIC = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
+
+  beforeEach(() => {
+    process.env.WOMPI_PRIVATE_KEY = "test_private_key";
+    process.env.WOMPI_ENVIRONMENT = "sandbox";
+    recordCheckout.mockReset().mockResolvedValue(undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { id: "test_video123", active: true } }),
+      })) as unknown as typeof fetch,
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [1, 900_000],
+    [5, 4_500_000],
+    [10, 9_000_000],
+  ] as const)("un pack de %i cobra %i centavos con un link de 24 horas", async (quantity, amount) => {
+    const now = new Date("2026-09-15T15:00:00Z");
+    const result = await createVideoPackCheckout({
+      clinicId: CLINIC,
+      plan: "esencial",
+      quantity,
+      redirectUrl: "https://e-irene.co/settings/plan",
+      now,
+    });
+
+    const body = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(body.amount_in_cents).toBe(amount);
+    expect(body.expires_at).toBe("2026-09-16T15:00:00");
+    expect(result.reference).toMatch(new RegExp(`^videopack-${CLINIC}-${quantity}-\\d+$`));
+    expect(parseBillingReference(result.reference)).toBeNull();
+    expect(recordCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "video_pack", quantity, amountInCents: amount, plan: "esencial" }),
     );
   });
 });

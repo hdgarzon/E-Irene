@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppointmentFormState } from "@/app/(app)/appointments/actions";
 import type { DoctorOption } from "@/lib/db/clinic";
@@ -37,16 +37,20 @@ export function AppointmentForm({
   doctors,
   defaults,
   submitLabel,
+  videoNotice,
 }: {
   action: Action;
   patients: PatientOption[];
   doctors: DoctorOption[];
   defaults?: Defaults;
   submitLabel: string;
+  /** Saldo o falta de videollamadas del plan, al elegir video (lib/billing/video-access.ts). */
+  videoNotice?: string | null;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<AppointmentFormState, FormData>(action, {});
   const d = defaults ?? {};
+  const [modality, setModality] = useState<"in_person" | "video">(d.modality ?? "in_person");
 
   return (
     <form action={formAction} className="space-y-5">
@@ -89,12 +93,16 @@ export function AppointmentForm({
         <select
           id="modality"
           name="modality"
-          defaultValue={d.modality ?? "in_person"}
+          value={modality}
+          onChange={(e) => setModality(e.target.value as "in_person" | "video")}
           className={selectClass}
         >
           <option value="in_person">Presencial</option>
           <option value="video">Video</option>
         </select>
+        {modality === "video" && videoNotice && (
+          <p className="text-xs text-muted-foreground">{videoNotice}</p>
+        )}
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">

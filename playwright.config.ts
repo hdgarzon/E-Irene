@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_DAILY_WEBHOOK_HMAC } from "./tests/e2e/helpers/daily";
 
 // Carga .env.local en process.env del test runner (no del webServer, que ya
 // lo hace Next.js por su cuenta) — algunos specs necesitan SUPABASE_SERVICE_ROLE_KEY
@@ -39,6 +40,8 @@ export default defineConfig({
       TRANSCRIPTION_PROVIDER: "mock",
       VIDEO_PROVIDER: "mock",
       RATE_LIMITING_DISABLED: "true",
+      // Secreto ficticio: la suite firma eventos de Daily contra la ruta real.
+      DAILY_WEBHOOK_HMAC: E2E_DAILY_WEBHOOK_HMAC,
     },
     // Sin esto, Playwright silencia la salida del dev server salvo que
     // falle el arranque — errores de Server Actions en runtime (console.error

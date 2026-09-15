@@ -250,6 +250,8 @@ export interface ClinicMapEntry {
   patientCount: number;
   /** Segundos de transcripción consumidos en el ciclo vigente de la clínica (0039, 0041). */
   transcriptionSecondsCycle: number;
+  /** Saldo de videollamadas (migración 0058). */
+  videoCredits: number;
 }
 
 interface ClinicRow {
@@ -288,6 +290,19 @@ async function getClinicStats(
   );
 }
 
+/** Saldo de videollamadas de las clínicas pedidas (get_platform_video_credits, migración 0058). */
+async function getClinicVideoCredits(
+  supabase: ServerClient,
+  clinicIds: string[],
+): Promise<Map<string, number>> {
+  if (clinicIds.length === 0) return new Map();
+  const { data, error } = await supabase.rpc("get_platform_video_credits", {
+    p_clinic_ids: clinicIds,
+  });
+  if (error) throw error;
+  return new Map((data ?? []).map((r) => [r.clinic_id, Number(r.balance)]));
+}
+
 /**
  * Clínicas con sus profesionales, conteo de pacientes y consumo de
  * transcripción del ciclo vigente (el "mapa"), lo más reciente primero y con
@@ -318,10 +333,11 @@ export async function getClinicMap(params: ListParams): Promise<ListPage<ClinicM
     map: (row: ClinicRow) => row,
   });
 
-  const stats = await getClinicStats(
-    supabase,
-    list.items.map((c) => c.id),
-  );
+  const clinicIds = list.items.map((c) => c.id);
+  const [stats, videoCredits] = await Promise.all([
+    getClinicStats(supabase, clinicIds),
+    getClinicVideoCredits(supabase, clinicIds),
+  ]);
 
   return {
     ...list,
@@ -340,6 +356,7 @@ export async function getClinicMap(params: ListParams): Promise<ListPage<ClinicM
       })),
       patientCount: stats.get(c.id)?.patientCount ?? 0,
       transcriptionSecondsCycle: stats.get(c.id)?.transcriptionSecondsCycle ?? 0,
+      videoCredits: videoCredits.get(c.id) ?? 0,
     })),
   };
 }

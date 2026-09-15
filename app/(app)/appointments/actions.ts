@@ -15,6 +15,12 @@ import {
 } from "@/lib/db/appointments";
 import { getActiveConsent } from "@/lib/db/consents";
 import { startConsultation, getInProgressConsultationByAppointment } from "@/lib/db/consultations";
+import {
+  attachVideoReservation,
+  releaseVideoReservation,
+  reserveVideoCall,
+} from "@/lib/db/video-credits";
+import { VIDEO_GATE_MESSAGES } from "@/lib/billing/video-access";
 import { getPatient } from "@/lib/db/patients";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { recordNotification, statusForDeliveryMode } from "@/lib/db/notifications";
@@ -309,13 +315,49 @@ export async function startVideoConsultationAction(
         };
       }
 
-      await ensureVideoRoom(appointmentId);
-      const consultationId = await startConsultation(user.clinicId, {
-        patientId: appt.patientId,
-        doctorId: appt.doctorId,
-        consentId: consent!.id,
-        appointmentId,
-      });
+      // Videollamadas por plan (migración 0058): Free no tiene; con video como
+      // adicional hace falta saldo, y la reserva se toma antes de crear la consulta
+      // para que dos inicios a la vez con saldo 1 no pasen los dos.
+      const videoMode = PLANS[overview.plan].video;
+      if (videoMode === "none") {
+        return { ok: false, message: VIDEO_GATE_MESSAGES.plan(PLANS[overview.plan].label) };
+      }
+      let reservationId: string | null = null;
+      if (videoMode === "addon") {
+        const reservation = await reserveVideoCall(appointmentId);
+        if (reservation.status !== "reserved") {
+          return { ok: false, message: VIDEO_GATE_MESSAGES.credits };
+        }
+        reservationId = reservation.reservationId;
+      }
+
+      let consultationId: string;
+      try {
+        await ensureVideoRoom(appointmentId);
+        consultationId = await startConsultation(user.clinicId, {
+          patientId: appt.patientId,
+          doctorId: appt.doctorId,
+          consentId: consent!.id,
+          appointmentId,
+        });
+        if (reservationId && !(await attachVideoReservation(reservationId, consultationId))) {
+          throw new Error("No se pudo enlazar la reserva de videollamada con la consulta");
+        }
+      } catch (error) {
+        // Un inicio que falla no retiene saldo. Si la consulta alcanzó a crearse, la
+        // página en vivo vuelve a reservar al abrirla.
+        if (reservationId) {
+          await releaseVideoReservation(reservationId, "fallo_al_iniciar").catch((releaseError: unknown) =>
+            logger.error("video.reservation_release_failed", {
+              clinicId: user.clinicId,
+              appointmentId,
+              reservationId,
+              error: releaseError,
+            }),
+          );
+        }
+        throw error;
+      }
       await logAudit({
         clinicId: user.clinicId,
         actorId: user.id,

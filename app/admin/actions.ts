@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { setClinicPlan, setClinicSuspended } from "@/lib/db/platform-admin";
+import { adjustVideoCredits, setClinicPlan, setClinicSuspended } from "@/lib/db/platform-admin";
 import {
   updateStaff,
   deleteStaff,
@@ -108,5 +108,30 @@ export async function setPlanConfigAction(
     return { error: "No se pudo guardar el plan." };
   }
   revalidatePath("/admin/planes");
+  return { ok: true };
+}
+
+// ------------------------------ Videollamadas ------------------------------
+
+/** Ajuste del saldo de videollamadas de una clínica: reembolso o cortesía, con motivo. */
+export async function adjustVideoCreditsAction(
+  clinicId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requirePlatformAdmin();
+  const delta = Number(formData.get("delta"));
+  const note = String(formData.get("note") ?? "").trim();
+  if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 100) {
+    return { error: "El ajuste debe ser un entero entre -100 y 100, distinto de 0." };
+  }
+  if (note.length < 5) return { error: "Escribe el motivo del ajuste." };
+  try {
+    await adjustVideoCredits(clinicId, delta, note);
+  } catch (error) {
+    logger.error("admin.video_credits_adjust_failed", { actorId: admin.id, clinicId, delta, error });
+    return { error: "No se pudo ajustar el saldo. Revisa que no quede negativo." };
+  }
+  revalidatePath("/admin/clinicas");
   return { ok: true };
 }

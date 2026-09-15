@@ -9,18 +9,23 @@ import {
   PLANS,
   PLAN_ORDER,
   TRANSCRIPTION_PACK,
+  VIDEO_PACK_SIZES,
   effectiveTranscriptionLimitSeconds,
   formatCop,
   limitLabel,
   transcriptionHoursLabel,
   transcriptionLimitHours,
   transcriptionUsageLabel,
+  videoPackPriceInCents,
   type Plan,
 } from "@/lib/plans";
 import { transcriptionPackAvailability } from "@/lib/billing/transcription-pack";
+import { videoPackAvailability } from "@/lib/billing/video-access";
+import { getVideoCredits } from "@/lib/db/video-credits";
 import { formatLongDate } from "@/lib/dates";
 import {
   buyTranscriptionPackAction,
+  buyVideoPackAction,
   initiatePlanUpgradeAction,
   schedulePlanDowngradeAction,
 } from "@/app/(app)/settings/actions";
@@ -32,7 +37,13 @@ import { UsageBar } from "@/components/usage-bar";
 import { SubscriptionPanel, type SubscriptionPanelState } from "@/components/subscription-panel";
 
 interface PlanPageProps {
-  searchParams: Promise<{ wompi?: string; id?: string; cambio?: string; bolsa?: string }>;
+  searchParams: Promise<{
+    wompi?: string;
+    id?: string;
+    cambio?: string;
+    bolsa?: string;
+    video?: string;
+  }>;
 }
 
 /** Enterprise se acuerda por correo, con el mismo contacto de la página pública. */
@@ -71,6 +82,14 @@ const PACK_NOTICES: Record<string, { tone: "ok" | "warn" | "error"; text: string
   no_disponible: {
     tone: "warn",
     text: "Las horas adicionales se compran con un plan Esencial, Profesional o Clínica y la suscripción al día.",
+  },
+};
+
+/** Resultado de intentar comprar un pack de videollamadas (?video=). */
+const VIDEO_NOTICES: Record<string, { tone: "ok" | "warn" | "error"; text: string }> = {
+  no_disponible: {
+    tone: "warn",
+    text: "Los packs de videollamadas se compran con un plan Esencial, Profesional o Clínica y la suscripción al día.",
   },
 };
 
@@ -123,7 +142,7 @@ function toPanelState(state: SubscriptionState): SubscriptionPanelState | null {
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const user = await requireRole(["admin", "doctor"]);
-  const { wompi, id: transactionId, cambio, bolsa } = await searchParams;
+  const { wompi, id: transactionId, cambio, bolsa, video } = await searchParams;
 
   // Wompi devuelve al usuario con ?id=<transaction_id>. Se verifica el pago
   // contra la API de Wompi y se aplica si corresponde — red de seguridad para
@@ -146,7 +165,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   // Después de reconciliar, para que el plan mostrado ya refleje la activación.
   // El consumo de transcripción no depende de la reconciliación: se pide en
   // paralelo.
-  const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
+  const [overview, usage, videoCredits] = await Promise.all([
+    getClinicOverview(),
+    getTranscriptionUsage(),
+    getVideoCredits(),
+  ]);
   const limits = PLANS[overview.plan];
   const limitSeconds = effectiveTranscriptionLimitSeconds(overview.plan, usage.extraSeconds);
   const quotaExhausted = limitSeconds !== null && usage.usedSeconds >= limitSeconds;
@@ -155,19 +178,32 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const state = subscriptionState(overview.plan, overview.subscription);
   const panelState = toPanelState(state);
   const notice =
-    (cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined) ?? (bolsa ? PACK_NOTICES[bolsa] : undefined);
+    (cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined) ??
+    (bolsa ? PACK_NOTICES[bolsa] : undefined) ??
+    (video ? VIDEO_NOTICES[video] : undefined);
 
   const packAvailability = transcriptionPackAvailability({
     plan: overview.plan,
     hasPaidPeriod: subscriptionPaidPeriodEnd(state) !== null,
     cycleEnd: overview.cycleEnd,
   });
+  const videoMode = limits.video;
+  const videoPacks = videoPackAvailability({
+    plan: overview.plan,
+    hasPaidPeriod: subscriptionPaidPeriodEnd(state) !== null,
+  });
+  const videoAvailable = Math.max(0, videoCredits.available);
 
   function features(plan: Plan) {
     const l = PLANS[plan];
     const extras = [
       l.ai ? "Análisis con IA" : "Sin análisis con IA",
       l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
+      l.video === "included"
+        ? "Videollamadas incluidas"
+        : l.video === "addon"
+          ? "Videollamadas como adicional"
+          : "Sin videollamadas",
     ];
     // Un plan a convenir no tiene topes en la app: los fija su contrato.
     if (l.priceInCents === null) {
@@ -279,7 +315,9 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                 ? `Ya tienes el plan ${PLANS[reconciled.plan].label}; tu fecha de renovación no cambia.`
                 : reconciled.kind === "transcription_pack"
                   ? `Se sumaron ${TRANSCRIPTION_PACK.hours} h de transcripción a este ciclo.`
-                  : "Tu plan ya está activo."}
+                  : reconciled.kind === "video_pack"
+                    ? "Se sumaron las videollamadas a tu saldo."
+                    : "Tu plan ya está activo."}
             </p>
           </div>
         </div>
@@ -414,6 +452,54 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           </div>
         )}
       </div>
+
+      <section id="videollamadas" className="rounded-2xl border border-gray-line bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-heading font-semibold text-navy">Videollamadas</h2>
+          {videoMode === "addon" && (
+            <span className="text-sm font-medium text-navy">
+              {videoAvailable} disponible{videoAvailable === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+        {videoMode === "included" && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Tu plan incluye las consultas por video.
+          </p>
+        )}
+        {videoMode === "none" && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            El plan {limits.label} no incluye videollamadas. Con Esencial, Profesional o Clínica
+            puedes comprar packs.
+          </p>
+        )}
+        {videoMode === "addon" && (
+          <>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Cada consulta por video descuenta una solo si el paciente se conecta. Los packs no
+              vencen.
+              {videoCredits.held > 0 &&
+                ` ${videoCredits.held} reservada${videoCredits.held === 1 ? "" : "s"} en consultas en curso.`}
+            </p>
+            {videoPacks === "available" ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {VIDEO_PACK_SIZES.map((size) => (
+                  <form key={size} action={buyVideoPackAction.bind(null, size)}>
+                    <Button type="submit" variant="outline" size="sm">
+                      {size === 1 ? "1 videollamada" : `${size} videollamadas`} ·{" "}
+                      {formatCop(videoPackPriceInCents(size))}
+                    </Button>
+                  </form>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Los packs se compran con la suscripción al día.
+              </p>
+            )}
+          </>
+        )}
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {PLAN_ORDER.map((plan) => {

@@ -1,9 +1,64 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { signUpAndActivate } from "./helpers/signup";
+import { E2E_DAILY_WEBHOOK_HMAC } from "./helpers/daily";
+import { computeDailySignature } from "@/lib/video/daily-webhook";
+import { patientVideoUserId } from "@/lib/video/participant-id";
 
 const SUPABASE_URL = "http://127.0.0.1:54321";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+function service() {
+  return createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+}
+
+async function clinicIdFor(email: string): Promise<string> {
+  const { data, error } = await service().from("users").select("clinic_id").eq("email", email).single();
+  if (error) throw error;
+  return data.clinic_id as string;
+}
+
+/**
+ * Suma videollamadas al saldo como lo hace un pago aprobado: la misma función que
+ * llaman el webhook de Wompi y la reconciliación (grant_video_pack, migración 0058).
+ */
+async function grantVideoCredits(clinicId: string, quantity: 1 | 5 | 10): Promise<void> {
+  const amount = quantity * 900_000;
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const { data: checkout, error } = await service()
+    .from("billing_checkouts")
+    .insert({
+      wompi_payment_link_id: `test_e2e_video_${stamp}`,
+      clinic_id: clinicId,
+      plan: "pro",
+      amount_in_cents: amount,
+      reference: `videopack-${clinicId}-${quantity}-${Date.now()}`,
+      kind: "video_pack",
+      quantity,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  const { data, error: grantError } = await service().rpc("grant_video_pack", {
+    p_clinic: clinicId,
+    p_transaction_id: `tx-e2e-video-${stamp}`,
+    p_checkout_id: checkout.id,
+    p_amount: amount,
+  });
+  if (grantError) throw grantError;
+  if ((data as { outcome: string }).outcome !== "applied") {
+    throw new Error(`grant_video_pack no aplicó el pack: ${JSON.stringify(data)}`);
+  }
+}
+
+/** Plan Profesional con saldo de videollamadas: desde 0058, Free no inicia video. */
+async function enableVideoCalls(email: string, quantity: 1 | 5 | 10): Promise<string> {
+  const clinicId = await clinicIdFor(email);
+  const { error } = await service().rpc("activate_subscription", { p_clinic: clinicId, p_plan: "pro" });
+  if (error) throw error;
+  await grantVideoCredits(clinicId, quantity);
+  return clinicId;
+}
 
 /** "YYYY-MM-DDTHH:mm" de AHORA en hora Bogotá, para <input type="datetime-local">
  *  (misma conversión que lib/dates.ts#toInputDateTime, pero desde Date.now()
@@ -43,6 +98,7 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
 
   const email = `tele_${Date.now()}@e-irene.test`;
   await signUpAndActivate(page, { clinicName: "Clínica Tele", fullName: "Dra. Tele", email });
+  await enableVideoCalls(email, 1);
 
   await page.goto("/patients/new");
   await page.fill("#fullName", "Paciente Tele");
@@ -92,6 +148,7 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
 
   const email = `telejoin_${Date.now()}@e-irene.test`;
   await signUpAndActivate(page, { clinicName: "Clínica Join", fullName: "Dra. Join", email });
+  await enableVideoCalls(email, 1);
 
   await page.goto("/patients/new");
   await page.fill("#fullName", "Paciente Join");
@@ -157,12 +214,114 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
   // de estado vive en la agenda, no en la consulta en vivo donde quedó `page`
   // tras "iniciar videollamada".
   await page.goto("/appointments");
-  await page.getByRole("button", { name: /Agendada/ }).click();
-  await page.getByRole("menuitem", { name: "Cancelada" }).click();
+  // Viniendo de la consulta en vivo, /appointments puede tardar en hidratar y el
+  // primer clic cae en un botón todavía sin manejador: se repite hasta que abre.
+  const cancelada = page.getByRole("menuitem", { name: "Cancelada" });
+  await expect(async () => {
+    await page.getByRole("button", { name: /Agendada/ }).click();
+    await expect(cancelada).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+  await cancelada.click();
   await expect(page.getByRole("button", { name: /Cancelada/ })).toBeVisible();
 
   await patientPage.goto(`/join/${token}`);
   await expect(patientPage.getByRole("heading", { name: "Enlace no válido" })).toBeVisible();
 
   await patientContext.close();
+});
+
+test("videollamadas: iniciar exige saldo y se descuenta cuando el paciente se conecta", async ({ page }) => {
+  test.setTimeout(90_000);
+
+  const email = `video_${Date.now()}@e-irene.test`;
+  await signUpAndActivate(page, { clinicName: "Clínica Video", fullName: "Dra. Video", email });
+
+  await page.goto("/patients/new");
+  await page.fill("#fullName", "Paciente Video");
+  await page.getByRole("button", { name: /crear paciente/i }).click();
+  await expect(page.getByRole("heading", { name: "Paciente Video" })).toBeVisible();
+  await page.getByRole("link", { name: /capturar consentimiento/i }).click();
+  await signConsent(page);
+  await page.check('input[name="accepted"]');
+  await page.getByRole("button", { name: /firmar consentimiento/i }).click();
+  await expect(page.getByText("Firmado", { exact: true })).toBeVisible();
+
+  await page.goto("/appointments/new");
+  await page.selectOption("#patientId", { label: "Paciente Video" });
+  await page.selectOption("#modality", "video");
+  // Agendar no descuenta, pero avisa que el plan no tiene videollamadas.
+  await expect(page.getByText(/no incluye videollamadas: puedes agendar/)).toBeVisible();
+  await page.fill("#scheduledAt", "2030-01-15T14:30");
+  await page.getByRole("button", { name: /agendar cita/i }).click();
+  await expect(page).toHaveURL(/\/appointments$/);
+
+  // Free no tiene videollamadas.
+  await page.getByRole("button", { name: /iniciar videollamada/i }).click();
+  await expect(page.getByText(/El plan Free no incluye videollamadas/)).toBeVisible();
+  await expect(page).toHaveURL(/\/appointments$/);
+
+  // Plan pago sin saldo: tampoco.
+  const clinicId = await clinicIdFor(email);
+  const { error: planError } = await service().rpc("activate_subscription", {
+    p_clinic: clinicId,
+    p_plan: "pro",
+  });
+  if (planError) throw planError;
+  await page.reload();
+  await page.getByRole("button", { name: /iniciar videollamada/i }).click();
+  await expect(page.getByText(/No tienes videollamadas disponibles/)).toBeVisible();
+
+  await page.goto("/settings/plan");
+  const section = page.locator("#videollamadas");
+  await expect(section).toContainText("0 disponibles");
+  await expect(section.getByRole("button", { name: "5 videollamadas · $45.000" })).toBeVisible();
+
+  // Con saldo 1 inicia y la reserva retiene la videollamada mientras dura la consulta.
+  await grantVideoCredits(clinicId, 1);
+  await page.goto("/appointments");
+  await page.getByRole("button", { name: /iniciar videollamada/i }).click();
+  await expect(page).toHaveURL(/consultations\/.+\/live/);
+  await expect(page.getByText(/videollamada en curso/i)).toBeVisible();
+
+  await page.goto("/settings/plan");
+  await expect(section).toContainText("0 disponibles");
+  await expect(section).toContainText("1 reservada");
+
+  // Daily avisa que el paciente se conectó: evento firmado contra la ruta real.
+  const { data: appointment, error } = await service()
+    .from("appointments")
+    .select("id, video_room_name")
+    .eq("clinic_id", clinicId)
+    .single();
+  if (error) throw error;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({
+    version: "1.0.0",
+    type: "participant.joined",
+    id: `evt-e2e-${Date.now()}`,
+    event_ts: nowSec,
+    payload: {
+      room: appointment.video_room_name,
+      user_id: patientVideoUserId(appointment.id as string),
+      user_name: "Paciente Video",
+      session_id: "sesion-demo",
+      joined_at: nowSec,
+      owner: false,
+    },
+  });
+  const timestamp = String(nowSec);
+  const res = await page.request.post("/api/webhooks/daily", {
+    headers: {
+      "content-type": "application/json",
+      "x-webhook-timestamp": timestamp,
+      "x-webhook-signature": computeDailySignature({ timestamp, body, secret: E2E_DAILY_WEBHOOK_HMAC }),
+    },
+    data: body,
+  });
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toMatchObject({ result: "consumed" });
+
+  await page.goto("/settings/plan");
+  await expect(section).toContainText("0 disponibles");
+  await expect(section).not.toContainText("reservada");
 });

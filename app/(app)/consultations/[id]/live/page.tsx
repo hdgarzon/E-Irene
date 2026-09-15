@@ -5,6 +5,9 @@ import { beginTranscriptionSession } from "@/lib/db/transcription-usage";
 import { getTranscriptionProvider } from "@/lib/providers";
 import { getVideoProvider } from "@/lib/video";
 import { DailyVideoProvider } from "@/lib/video/daily";
+import { doctorVideoUserId } from "@/lib/video/participant-id";
+import { ensureConsultationVideoAccess } from "@/lib/billing/video-access";
+import { getClinicSubscription } from "@/lib/db/clinic";
 import { requireVerifiedProfessional } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { LiveConsultation } from "@/components/live-consultation";
@@ -50,9 +53,33 @@ export default async function LiveConsultationPage({
   // de texto aunque el video no esté disponible. Por eso videoRoomUrl solo se
   // setea DESPUÉS de que createMeetingToken resuelve con éxito, y transcriptionMode
   // se deriva de si el video realmente quedó listo, no solo de la modalidad.
+  // Videollamadas por plan (migración 0058): el token del profesional solo se emite
+  // con un plan que las incluye o con la reserva de esta consulta. Sin token, la
+  // consulta sigue en modo texto y se explica por qué.
+  let videoBlocked: "plan" | "credits" | "unavailable" | null = null;
+  if (isVideo && appointment) {
+    try {
+      const { plan } = await getClinicSubscription();
+      const access = await ensureConsultationVideoAccess({
+        plan,
+        appointmentId: appointment.id,
+        consultationId: id,
+      });
+      if (!access.allowed) videoBlocked = access.reason;
+    } catch (error) {
+      videoBlocked = "unavailable";
+      logger.error("video.access_check_failed", {
+        clinicId: user.clinicId,
+        actorId: user.id,
+        consultationId: id,
+        error,
+      });
+    }
+  }
+
   let videoRoomUrl: string | undefined;
   let videoToken: string | undefined;
-  if (isVideo && appointment?.videoRoomName && appointment.videoRoomUrl) {
+  if (isVideo && !videoBlocked && appointment?.videoRoomName && appointment.videoRoomUrl) {
     try {
       const videoProvider = getVideoProvider();
       videoToken =
@@ -61,6 +88,7 @@ export default async function LiveConsultationPage({
               roomName: appointment.videoRoomName,
               userName: user.fullName,
               isOwner: true,
+              userId: doctorVideoUserId(user.id),
               expiresInSeconds: (appointment.durationMin + 30) * 60,
             })
           : "mock-token"; // MockVideoProvider: VideoCall renderiza sin conexión real.
@@ -77,7 +105,20 @@ export default async function LiveConsultationPage({
   const videoReady = Boolean(videoRoomUrl && videoToken);
 
   return (
-    <LiveConsultation
+    <>
+      {videoBlocked && (
+        <div
+          role="status"
+          className="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-foreground/90"
+        >
+          {videoBlocked === "plan"
+            ? "Tu plan no incluye videollamadas: esta consulta sigue sin video."
+            : videoBlocked === "credits"
+              ? "No hay videollamadas disponibles: esta consulta sigue sin video. Puedes comprar un pack en Plan y facturación."
+              : "No se pudo verificar el saldo de videollamadas: esta consulta sigue sin video. Recarga la página para intentarlo de nuevo."}
+        </div>
+      )}
+      <LiveConsultation
       consultationId={id}
       patientName={consultation.patientName}
       transcriptionMode={videoReady ? "video" : transcriptionProvider.mode === "deepgram" ? "deepgram" : "mock"}
@@ -92,6 +133,7 @@ export default async function LiveConsultationPage({
       videoToken={videoToken}
       quotaExceeded={!quota.allowed}
       canManagePlan={user.role === "admin"}
-    />
+      />
+    </>
   );
 }
