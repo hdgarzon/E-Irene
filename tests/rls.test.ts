@@ -487,3 +487,399 @@ dv("perfiles: lo que la sesión no puede escribir (0044)", () => {
     expect(data?.id_document_hash).toBeNull();
   }, 30000);
 });
+
+/**
+ * Lo que una fila referencia tiene que ser de su misma clínica (0048). Las
+ * políticas de escritura solo miran clinic_id y las FK solo exigen que la fila
+ * referenciada exista: sin el trigger, la sesión de A escribía en su propia
+ * clínica filas con pacientes, profesionales o registros de B, con INSERT y con
+ * UPDATE.
+ */
+dv("referencias entre clínicas: la sesión no enlaza registros de otra clínica (0048)", () => {
+  const RAISE_EXCEPTION = "P0001";
+
+  type Clinica = { client: SupabaseClient; clinicId: string; userId: string };
+  type Registros = {
+    patient: string;
+    appointment: string;
+    consent: string;
+    consultation: string;
+    link: string;
+    plan: string;
+  };
+
+  let A: Clinica;
+  let B: Clinica;
+  let a: Registros & {
+    otherPatient: string;
+    report: string;
+    notification: string;
+    progress: string;
+    item: string;
+    soap: string;
+    soapConsultation: string;
+  };
+  let b: Registros;
+
+  const manana = () => new Date(Date.now() + 86_400_000).toISOString();
+  const mensaje = (tabla: string, columna: string) =>
+    `${tabla}.${columna} tiene que apuntar a un registro de la misma clínica`;
+
+  async function insertar(tabla: string, fila: Record<string, unknown>): Promise<string> {
+    const { data, error } = await service().from(tabla).insert(fila).select("id").single();
+    expect(error, tabla).toBeNull();
+    return data!.id as string;
+  }
+
+  /** Lo mínimo de una clínica para referenciarlo, sembrado con service-role. */
+  async function sembrar(c: Clinica): Promise<Registros> {
+    const patient = await insertar("patients", { clinic_id: c.clinicId, full_name_enc: encrypt("Paciente Demo") });
+    return {
+      patient,
+      appointment: await insertar("appointments", {
+        clinic_id: c.clinicId,
+        patient_id: patient,
+        doctor_id: c.userId,
+        scheduled_at: manana(),
+      }),
+      consent: await insertar("consents", {
+        clinic_id: c.clinicId,
+        patient_id: patient,
+        document_version: "v1",
+        document_hash: "0".repeat(64),
+      }),
+      consultation: await insertar("consultations", { clinic_id: c.clinicId, patient_id: patient, doctor_id: c.userId }),
+      link: await insertar("patient_links", {
+        clinic_id: c.clinicId,
+        patient_id: patient,
+        purpose: "consent",
+        token_hash: crypto.randomUUID(),
+        expires_at: manana(),
+        created_by: c.userId,
+      }),
+      plan: await insertar("treatment_plans", {
+        clinic_id: c.clinicId,
+        patient_id: patient,
+        title_enc: encrypt("Plan Demo"),
+      }),
+    };
+  }
+
+  beforeAll(async () => {
+    A = await bootstrapClinic("Clínica Referencias A");
+    B = await bootstrapClinic("Clínica Referencias B");
+    b = await sembrar(B);
+    const base = await sembrar(A);
+    const soapConsultation = await insertar("consultations", {
+      clinic_id: A.clinicId,
+      patient_id: base.patient,
+      doctor_id: A.userId,
+    });
+    a = {
+      ...base,
+      otherPatient: await insertar("patients", { clinic_id: A.clinicId, full_name_enc: encrypt("Paciente Demo") }),
+      report: await insertar("reports", {
+        clinic_id: A.clinicId,
+        consultation_id: base.consultation,
+        patient_id: base.patient,
+        payload_enc: encrypt("{}"),
+      }),
+      notification: await insertar("notifications", {
+        clinic_id: A.clinicId,
+        patient_id: base.patient,
+        appointment_id: base.appointment,
+        type: "appointment_reminder",
+      }),
+      progress: await insertar("patient_progress", { clinic_id: A.clinicId, patient_id: base.patient }),
+      item: await insertar("treatment_plan_items", {
+        clinic_id: A.clinicId,
+        plan_id: base.plan,
+        type: "objetivo",
+        description_enc: encrypt("Objetivo Demo"),
+      }),
+      soap: await insertar("soap_notes", {
+        clinic_id: A.clinicId,
+        consultation_id: soapConsultation,
+        patient_id: base.patient,
+      }),
+      soapConsultation,
+    };
+  }, 60000);
+
+  /** Para las tablas con una fila por consulta o por versión del paciente. */
+  const consultaNueva = () =>
+    insertar("consultations", { clinic_id: A.clinicId, patient_id: a.patient, doctor_id: A.userId });
+  const pacienteNuevo = () =>
+    insertar("patients", { clinic_id: A.clinicId, full_name_enc: encrypt("Paciente Demo") });
+
+  /**
+   * Una fila válida de A por tabla, con lo que escriben hoy las Server Actions:
+   * registros de la propia clínica y el usuario de la sesión como autor.
+   */
+  const filaDeA: Record<string, () => Promise<Record<string, unknown>>> = {
+    patients: async () => ({ clinic_id: A.clinicId, full_name_enc: encrypt("Paciente Demo"), created_by: A.userId }),
+    // Como createAppointmentAction.
+    appointments: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      doctor_id: A.userId,
+      scheduled_at: manana(),
+      duration_min: 50,
+      status: "scheduled",
+      modality: "video",
+    }),
+    // Como startVideoConsultationAction: paciente y doctor de la cita, con su consentimiento.
+    consultations: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      doctor_id: A.userId,
+      appointment_id: a.appointment,
+      consent_id: a.consent,
+      status: "in_progress",
+    }),
+    consents: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      document_version: "v1",
+      document_hash: "0".repeat(64),
+      link_id: a.link,
+    }),
+    transcript_chunks: async () => ({
+      clinic_id: A.clinicId,
+      consultation_id: a.consultation,
+      seq: 1,
+      speaker: "doctor",
+      text_enc: encrypt("Hola"),
+    }),
+    reports: async () => ({
+      clinic_id: A.clinicId,
+      consultation_id: a.consultation,
+      patient_id: a.patient,
+      payload_enc: encrypt("{}"),
+      validated_by: A.userId,
+    }),
+    patient_progress: async () => ({ clinic_id: A.clinicId, patient_id: a.patient, consultation_id: a.consultation }),
+    notifications: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      appointment_id: a.appointment,
+      type: "appointment_reminder",
+      status: "simulated",
+    }),
+    clinic_doctors: async () => ({ clinic_id: A.clinicId, doctor_id: A.userId }),
+    // Como createAssessment: la aplica el personal, sin enlace.
+    psychometric_assessments: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      created_by: A.userId,
+      type: "phq9",
+      payload_enc: encrypt(JSON.stringify({ answers: [0, 0, 0, 0, 0, 0, 0, 0, 0], totalScore: 0, severity: "Mínima" })),
+    }),
+    treatment_plans: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      created_by: A.userId,
+      title_enc: encrypt("Plan Demo"),
+    }),
+    treatment_plan_items: async () => ({
+      clinic_id: A.clinicId,
+      plan_id: a.plan,
+      type: "objetivo",
+      description_enc: encrypt("Objetivo Demo"),
+    }),
+    soap_notes: async () => ({
+      clinic_id: A.clinicId,
+      consultation_id: await consultaNueva(),
+      patient_id: a.patient,
+      created_by: A.userId,
+    }),
+    patient_links: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      created_by: A.userId,
+      purpose: "consent",
+      token_hash: crypto.randomUUID(),
+      expires_at: manana(),
+    }),
+    patient_clinical_state: async () => ({
+      clinic_id: A.clinicId,
+      patient_id: await pacienteNuevo(),
+      consultation_id: await consultaNueva(),
+      version: 1,
+      state_enc: encrypt("{}"),
+      model: "mock",
+      prompt_version: "v1",
+    }),
+  };
+
+  // ── Lo que el control debe impedir ────────────────────────────────────────
+
+  const insercionesAjenas: [tabla: string, columna: string, deB: () => string][] = [
+    ["patients", "created_by", () => B.userId],
+    ["appointments", "patient_id", () => b.patient],
+    ["appointments", "doctor_id", () => B.userId],
+    ["consultations", "patient_id", () => b.patient],
+    ["consultations", "doctor_id", () => B.userId],
+    ["consultations", "appointment_id", () => b.appointment],
+    ["consultations", "consent_id", () => b.consent],
+    ["consents", "patient_id", () => b.patient],
+    ["consents", "link_id", () => b.link],
+    ["transcript_chunks", "consultation_id", () => b.consultation],
+    ["reports", "consultation_id", () => b.consultation],
+    ["reports", "patient_id", () => b.patient],
+    ["reports", "validated_by", () => B.userId],
+    ["patient_progress", "patient_id", () => b.patient],
+    ["patient_progress", "consultation_id", () => b.consultation],
+    ["notifications", "patient_id", () => b.patient],
+    ["notifications", "appointment_id", () => b.appointment],
+    ["clinic_doctors", "doctor_id", () => B.userId],
+    ["psychometric_assessments", "patient_id", () => b.patient],
+    ["psychometric_assessments", "created_by", () => B.userId],
+    ["psychometric_assessments", "link_id", () => b.link],
+    ["treatment_plans", "patient_id", () => b.patient],
+    ["treatment_plans", "created_by", () => B.userId],
+    ["treatment_plan_items", "plan_id", () => b.plan],
+    ["soap_notes", "consultation_id", () => b.consultation],
+    ["soap_notes", "patient_id", () => b.patient],
+    ["soap_notes", "created_by", () => B.userId],
+    ["patient_links", "patient_id", () => b.patient],
+    ["patient_links", "created_by", () => B.userId],
+    ["patient_clinical_state", "patient_id", () => b.patient],
+    ["patient_clinical_state", "consultation_id", () => b.consultation],
+  ];
+
+  for (const [tabla, columna, deB] of insercionesAjenas) {
+    it(`NO inserta en ${tabla} con ${columna} de otra clínica`, async () => {
+      const fila = { ...(await filaDeA[tabla]()), [columna]: deB() };
+      const { error } = await A.client.from(tabla).insert(fila);
+      expect(error?.code).toBe(RAISE_EXCEPTION);
+      expect(error?.message).toMatch(mensaje(tabla, columna));
+    });
+  }
+
+  const cambiosAjenos: [tabla: string, id: () => string, columna: string, deB: () => string][] = [
+    ["patients", () => a.patient, "created_by", () => B.userId],
+    ["appointments", () => a.appointment, "patient_id", () => b.patient],
+    ["appointments", () => a.appointment, "doctor_id", () => B.userId],
+    ["consultations", () => a.consultation, "patient_id", () => b.patient],
+    ["consultations", () => a.consultation, "doctor_id", () => B.userId],
+    ["consultations", () => a.consultation, "appointment_id", () => b.appointment],
+    ["consultations", () => a.consultation, "consent_id", () => b.consent],
+    ["reports", () => a.report, "consultation_id", () => b.consultation],
+    ["reports", () => a.report, "patient_id", () => b.patient],
+    ["reports", () => a.report, "validated_by", () => B.userId],
+    ["patient_progress", () => a.progress, "patient_id", () => b.patient],
+    ["patient_progress", () => a.progress, "consultation_id", () => b.consultation],
+    ["notifications", () => a.notification, "patient_id", () => b.patient],
+    ["notifications", () => a.notification, "appointment_id", () => b.appointment],
+    ["treatment_plans", () => a.plan, "patient_id", () => b.patient],
+    ["treatment_plans", () => a.plan, "created_by", () => B.userId],
+    ["treatment_plan_items", () => a.item, "plan_id", () => b.plan],
+    ["soap_notes", () => a.soap, "consultation_id", () => b.consultation],
+    ["soap_notes", () => a.soap, "patient_id", () => b.patient],
+    ["soap_notes", () => a.soap, "created_by", () => B.userId],
+  ];
+
+  for (const [tabla, id, columna, deB] of cambiosAjenos) {
+    it(`NO cambia ${tabla}.${columna} a un registro de otra clínica`, async () => {
+      const antes = await service().from(tabla).select(columna).eq("id", id()).single();
+      expect(antes.error).toBeNull();
+
+      const { error } = await A.client.from(tabla).update({ [columna]: deB() }).eq("id", id());
+      expect(error?.code).toBe(RAISE_EXCEPTION);
+      expect(error?.message).toMatch(mensaje(tabla, columna));
+
+      const despues = await service().from(tabla).select(columna).eq("id", id()).single();
+      expect(despues.data).toEqual(antes.data);
+    });
+  }
+
+  it("NO acepta una referencia inexistente: mismo error que una de otra clínica", async () => {
+    const fila = { ...(await filaDeA.consultations()), patient_id: crypto.randomUUID() };
+    const { error } = await A.client.from("consultations").insert(fila);
+    expect(error?.code).toBe(RAISE_EXCEPTION);
+    expect(error?.message).toMatch(mensaje("consultations", "patient_id"));
+  });
+
+  // ── Lo que el control debe permitir ───────────────────────────────────────
+
+  // clinic_doctors no se inserta con la sesión fuera del alta: su caso legítimo
+  // es create_clinic_and_admin, cubierto abajo.
+  for (const tabla of Object.keys(filaDeA).filter((t) => t !== "clinic_doctors")) {
+    it(`SÍ inserta en ${tabla} con registros de su propia clínica`, async () => {
+      const { error } = await A.client.from(tabla).insert(await filaDeA[tabla]());
+      expect(error).toBeNull();
+    });
+  }
+
+  it("create_clinic_and_admin SÍ sigue vinculando al admin en clinic_doctors", async () => {
+    const { data, error } = await service()
+      .from("clinic_doctors")
+      .select("doctor_id")
+      .eq("clinic_id", A.clinicId);
+    expect(error).toBeNull();
+    expect((data ?? []).map((r) => r.doctor_id)).toContain(A.userId);
+  });
+
+  it("SÍ reasigna la cita a otro paciente de su clínica, como updateAppointment", async () => {
+    const { error } = await A.client
+      .from("appointments")
+      .update({
+        patient_id: a.otherPatient,
+        doctor_id: A.userId,
+        scheduled_at: manana(),
+        duration_min: 45,
+        notes: null,
+        modality: "video",
+      })
+      .eq("id", a.appointment);
+    expect(error).toBeNull();
+
+    const { data } = await service().from("appointments").select("patient_id").eq("id", a.appointment).single();
+    expect(data?.patient_id).toBe(a.otherPatient);
+  });
+
+  it("SÍ cierra la consulta y valida el reporte, como endConsultation y validateReport", async () => {
+    const cierre = await A.client
+      .from("consultations")
+      .update({ status: "ended", ended_at: new Date().toISOString() })
+      .eq("id", a.consultation);
+    expect(cierre.error).toBeNull();
+
+    const validacion = await A.client
+      .from("reports")
+      .update({ validated_by: A.userId, validated_at: new Date().toISOString() })
+      .eq("id", a.report);
+    expect(validacion.error).toBeNull();
+  });
+
+  it("SÍ guarda la nota SOAP con upsert sobre la consulta, como upsertSoapNote", async () => {
+    const { error } = await A.client.from("soap_notes").upsert(
+      {
+        clinic_id: A.clinicId,
+        consultation_id: a.soapConsultation,
+        patient_id: a.patient,
+        created_by: A.userId,
+        subjective_enc: encrypt("Nota Demo"),
+      },
+      { onConflict: "consultation_id" },
+    );
+    expect(error).toBeNull();
+  });
+
+  it("el admin de plataforma SÍ reprograma citas de otra clínica, como updateAppointmentAdmin", async () => {
+    // Actúa con su sesión sobre clínicas que no son la suya: el control no
+    // puede comparar contra auth_clinic_id(), y no mira referencias que no cambian.
+    const { client, userId } = await signUpUser();
+    const { error: grantErr } = await service().from("platform_admins").insert({ user_id: userId });
+    expect(grantErr).toBeNull();
+
+    const { data, error } = await client
+      .from("appointments")
+      .update({ scheduled_at: manana(), status: "confirmed" })
+      .eq("id", b.appointment)
+      .select("id");
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(1);
+  });
+});
