@@ -78,15 +78,19 @@ type CreateRiskAlertInput =
  * para el mismo origen sea un no-op — `isNew: false` le indica al llamador
  * que NO debe reenviar el correo.
  *
- * Usa el cliente service-role para la fuente PHQ-9 (corre desde el flujo de
- * link público, sin sesión de personal) y el cliente de sesión para la
- * fuente de análisis de IA (corre desde una Server Action autenticada).
+ * Usa el cliente service-role en las dos fuentes. La PHQ-9 corre desde el
+ * flujo de link público, sin sesión de personal. La de análisis de IA corre
+ * con la sesión de quien terminó o reintentó la consulta —cualquier rol—, pero
+ * lo que esa sesión puede insertar en `risk_alerts` está acotado (migración
+ * 0047) y se va a retirar: la alerta la registra el servidor. El llamador
+ * responde por los datos: `clinicId` de la sesión, y paciente y doctor leídos
+ * de la consulta bajo RLS.
  */
 export async function createRiskAlert(
   clinicId: string,
   input: CreateRiskAlertInput,
 ): Promise<{ id: string; isNew: boolean }> {
-  const supabase = input.source === "phq9_self_report" ? createAdminClient() : await createClient();
+  const supabase = createAdminClient();
   const conflictColumn = input.source === "session_analysis" ? "consultation_id" : "assessment_id";
   const conflictValue = input.source === "session_analysis" ? input.consultationId : input.assessmentId;
 
@@ -110,9 +114,13 @@ export async function createRiskAlert(
   // 23505 = unique_violation (Postgres) → ya existe una alerta para este
   // origen. No es un error real, es el camino esperado de un reintento.
   if (error.code === "23505") {
+    // Acotada a la clínica: service-role no filtra por RLS, y una alerta de
+    // otra clínica con el mismo origen no es un reintento. Nunca debe volverse
+    // un `isNew: false` que calle el correo: si aparece, esto lanza y se ve.
     const existing = await supabase
       .from("risk_alerts")
       .select("id")
+      .eq("clinic_id", clinicId)
       .eq(conflictColumn, conflictValue)
       .single();
     if (existing.error) throw existing.error;
@@ -190,14 +198,49 @@ export async function listOpenRiskAlerts(
   return { alerts, total: count ?? alerts.length };
 }
 
-/** El doctor (o admin) acusa recibo de la alerta — queda fuera de la cola abierta. */
-export async function acknowledgeRiskAlert(alertId: string, userId: string): Promise<void> {
+/**
+ * Resultado de un acuse de recibo. `not_allowed` junta "RLS no lo permite"
+ * (otra clínica, un rol sin criterio clínico) y "no existe": desde la sesión
+ * son indistinguibles, y en ningún caso hubo un acuse que auditar.
+ */
+export type AcknowledgeRiskAlertResult = "acknowledged" | "already_acknowledged" | "not_allowed";
+
+/**
+ * El doctor (o admin) acusa recibo de la alerta — queda fuera de la cola abierta.
+ *
+ * Un UPDATE que la política `risk_alerts_update` no deja pasar NO devuelve
+ * error: PostgREST responde 0 filas. Por eso se pide la fila actualizada y, si
+ * no vuelve ninguna, se relee para saber por qué.
+ *
+ * Solo acusa una alerta abierta: el filtro por `acknowledged_at is null` evita
+ * que un segundo acuse (doble clic, dos doctores) pise quién la atendió
+ * primero. Con dos acuses simultáneos, Postgres reevalúa el filtro tras el
+ * bloqueo de la fila, así que gana exactamente uno.
+ */
+export async function acknowledgeRiskAlert(
+  alertId: string,
+  userId: string,
+): Promise<AcknowledgeRiskAlertResult> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("risk_alerts")
     .update({ acknowledged_by: userId, acknowledged_at: new Date().toISOString() })
-    .eq("id", alertId);
+    .eq("id", alertId)
+    .is("acknowledged_at", null)
+    .select("id");
   if (error) throw error;
+  if (data.length > 0) return "acknowledged";
+
+  // La política de select deja leer las alertas de la propia clínica a
+  // cualquier rol (también a la secretaría): una alerta visible pero abierta
+  // es una denegación, no un acuse previo.
+  const { data: current, error: readError } = await supabase
+    .from("risk_alerts")
+    .select("acknowledged_at")
+    .eq("id", alertId)
+    .maybeSingle();
+  if (readError) throw readError;
+  return current?.acknowledged_at ? "already_acknowledged" : "not_allowed";
 }
 
 // ─────────────────────────────────────────────────────────────────────────
