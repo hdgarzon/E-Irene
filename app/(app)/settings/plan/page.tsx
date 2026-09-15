@@ -3,7 +3,7 @@ import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { subscriptionState, type SubscriptionState } from "@/lib/billing/subscription-state";
-import { isPaidPlanDowngrade, isPaidPlanUpgrade, quotePlanUpgrade } from "@/lib/billing/proration";
+import { planChangeOption } from "@/lib/billing/plan-change";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import {
   PLANS,
@@ -139,11 +139,6 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const panelState = toPanelState(state);
   const notice = cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined;
 
-  // Con un período pagado vigente, cambiar entre planes pagos no vuelve a cobrar
-  // un mes completo: subir cobra la diferencia y bajar se programa.
-  const paidPeriodEnd =
-    state.kind === "renewing" || state.kind === "canceling" ? state.periodEnd : null;
-  const scheduledPlan = state.kind === "renewing" ? state.scheduledPlan : null;
 
   function features(plan: Plan) {
     const l = PLANS[plan];
@@ -168,79 +163,70 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     ];
   }
 
-  /** Botón de un plan pago que no es el actual. */
+  /** Botón de un plan pago que no es el actual (regla en lib/billing/plan-change.ts). */
   function paidPlanAction(plan: Plan) {
     const l = PLANS[plan];
-
-    if (paidPeriodEnd && isPaidPlanUpgrade(overview.plan, plan)) {
-      const quote = quotePlanUpgrade({
-        fromPlan: overview.plan,
-        toPlan: plan,
-        anchor: overview.billingCycleAnchor,
-        periodEnd: paidPeriodEnd,
-      });
-      if (!quote) {
-        return (
-          <p className="text-center text-xs text-muted-foreground">
-            Escríbenos para cambiar a este plan
-          </p>
-        );
-      }
-      return (
-        <form action={initiatePlanUpgradeAction.bind(null, plan)} className="space-y-1.5">
-          <Button type="submit" size="sm" className="w-full">
-            Pagar {formatCop(quote.amountInCents)} y cambiar
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Diferencia por lo que queda del ciclo. Desde el {formatLongDate(quote.periodEnd)},{" "}
-            {l.price}.
-          </p>
-        </form>
-      );
-    }
-
-    if (paidPeriodEnd && isPaidPlanDowngrade(overview.plan, plan)) {
-      const effectiveOn = formatLongDate(paidPeriodEnd);
-      if (scheduledPlan === plan) {
-        return (
-          <p className="text-center text-xs font-medium text-navy">
-            Cambio programado para el {effectiveOn}
-          </p>
-        );
-      }
-      if (state.kind === "canceling") {
-        return (
-          <p className="text-center text-xs text-muted-foreground">
-            Reactiva la suscripción para cambiar a este plan
-          </p>
-        );
-      }
-      if (!isAdmin) {
-        return (
-          <p className="text-center text-xs text-muted-foreground">
-            El administrador puede programar el cambio a este plan
-          </p>
-        );
-      }
-      return (
-        <form action={schedulePlanDowngradeAction.bind(null, plan)} className="space-y-1.5">
-          <Button type="submit" variant="outline" size="sm" className="w-full">
-            Programar cambio a {l.label}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Sin cobro hoy. Rige desde el {effectiveOn}.
-          </p>
-        </form>
-      );
-    }
-
-    return (
-      <form action={initiatePlanUpgradeAction.bind(null, plan)}>
-        <Button type="submit" size="sm" className="w-full">
-          Pagar y cambiar a {l.label}
-        </Button>
-      </form>
+    const option = planChangeOption({
+      current: overview.plan,
+      target: plan,
+      state,
+      anchor: overview.billingCycleAnchor,
+      isAdmin,
+    });
+    const note = (text: string) => (
+      <p className="text-center text-xs text-muted-foreground">{text}</p>
     );
+
+    switch (option.kind) {
+      case "upgrade":
+        return (
+          <form action={initiatePlanUpgradeAction.bind(null, plan)} className="space-y-1.5">
+            <Button type="submit" size="sm" className="w-full">
+              Pagar {formatCop(option.quote.amountInCents)} y cambiar
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Diferencia por lo que queda del ciclo. Desde el{" "}
+              {formatLongDate(option.quote.periodEnd)}, {l.price}.
+              {option.replacesScheduledPlan &&
+                ` Anula el cambio programado al plan ${PLANS[option.replacesScheduledPlan].label}.`}
+            </p>
+          </form>
+        );
+      case "downgrade":
+        if (option.scheduled) {
+          return (
+            <p className="text-center text-xs font-medium text-navy">
+              Cambio programado para el {formatLongDate(option.effectiveAt)}
+            </p>
+          );
+        }
+        return (
+          <form action={schedulePlanDowngradeAction.bind(null, plan)} className="space-y-1.5">
+            <Button type="submit" variant="outline" size="sm" className="w-full">
+              Programar cambio a {l.label}
+            </Button>
+            {note(`Sin cobro hoy. Rige desde el ${formatLongDate(option.effectiveAt)}.`)}
+          </form>
+        );
+      case "blocked":
+        return note(
+          option.reason === "canceling"
+            ? "Reactiva la suscripción para cambiar de plan"
+            : option.reason === "admin_only"
+              ? "Solo el administrador de la clínica puede cambiar de plan"
+              : "Escríbenos para cambiar a este plan",
+        );
+      case "purchase":
+        return (
+          <form action={initiatePlanUpgradeAction.bind(null, plan)}>
+            <Button type="submit" size="sm" className="w-full">
+              Pagar y cambiar a {l.label}
+            </Button>
+          </form>
+        );
+      default:
+        return null;
+    }
   }
 
   return (

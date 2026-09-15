@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertEncryptionKey, encrypt, decrypt } from "@/lib/crypto";
 import { graceEndsAt } from "@/lib/billing/subscription-state";
 import { logger } from "@/lib/logger";
-import { PAID_PLANS, PLANS, type Plan } from "@/lib/plans";
+import { PAID_PLANS, type Plan } from "@/lib/plans";
 
 export type BillingStatus = "sin_configurar" | "activo" | "pendiente" | "vencido" | "suspendido";
 
@@ -468,8 +468,3 @@ export async function flagClinicForBillingReview(
   });
 }
 
-/** true si el plan requiere pago recurrente. */
-export function isPaidPlan(plan: Plan): boolean {
-  // null = a convenir: se factura por contrato, no por la app.
-  return (PLANS[plan].priceInCents ?? 0) > 0;
-}

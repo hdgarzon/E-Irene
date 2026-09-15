@@ -107,6 +107,24 @@ comment on column clinics.scheduled_plan_requested_at is
 -- ── 4. Funciones de cumplimiento ────────────────────────────────────────────
 
 /**
+ * true si la clínica tiene un cobro de renovación sin desenlace (pendiente o en
+ * proceso). Ese cobro ya fijó el plan de la renovación y su aprobación llega
+ * después: mientras tanto no se aplica un upgrade ni se programa o anula un
+ * downgrade, o la renovación cobraría un plan y aplicaría otro.
+ */
+create or replace function has_open_renewal_charge(p_clinic uuid)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from billing_scheduled_charges
+    where clinic_id = p_clinic and status in ('pending', 'processing')
+  );
+$$;
+
+/**
  * Registra un pago aprobado que no se puede aplicar y deja constancia para
  * reembolsarlo o aplicarlo a mano. Uso interno: lo llaman las funciones de
  * cumplimiento con la clínica ya bloqueada.
@@ -147,12 +165,18 @@ end;
 $$;
 
 /**
- * Pago aprobado de un plan por checkout (suscripción nueva): valida el monto y
- * activa con activate_subscription, una sola vez por transacción.
+ * Pago aprobado de un plan por checkout (suscripción nueva): valida y activa con
+ * activate_subscription, una sola vez por transacción.
  *
- * p_expected_amount es el precio del plan en lib/plans.ts, la única fuente de
- * precios; null o 0 = el plan no se vende por la app. Los argumentos que pueden
- * faltar van al final con default: se llaman por nombre desde la API.
+ * El monto esperado es el del link (billing_checkouts.amount_in_cents): lo que se
+ * ofreció al crearlo, aunque el precio haya cambiado después. Solo un pago sin fila
+ * de checkout (referencia propia, anterior a los links) usa p_expected_amount, el
+ * precio vigente en lib/plans.ts. Se rechaza también, y queda para reembolso:
+ *  · si el link venció antes de crearse la transacción en Wompi;
+ *  · si la clínica ya tiene un período pagado vigente: activarla otra vez
+ *    re-anclaría el ciclo y cobraría dos veces el mismo mes (p. ej. "Pagar ahora"
+ *    en la gracia completado después de que el reintento automático renovó).
+ * Los argumentos que pueden faltar van al final con default: se llaman por nombre.
  */
 create or replace function fulfill_plan_purchase(
   p_clinic uuid,
@@ -162,7 +186,9 @@ create or replace function fulfill_plan_purchase(
   -- null si el pago se resolvió por nuestra referencia, sin fila de checkout.
   p_checkout_id uuid default null,
   p_expected_amount bigint default null,
-  p_payment_source_enc text default null
+  p_payment_source_enc text default null,
+  -- created_at de la transacción en Wompi; sin él se usa now().
+  p_transaction_created_at timestamptz default null
 )
 returns jsonb
 language plpgsql
@@ -170,12 +196,16 @@ security definer
 set search_path = public
 as $$
 declare
+  v_clinic clinics%rowtype;
+  v_checkout billing_checkouts%rowtype;
   v_existing billing_fulfillments%rowtype;
+  v_expected bigint;
+  v_reason text;
   v_period_end timestamptz;
 begin
   -- Bloquear la clínica serializa los cumplimientos del mismo pago que llegan a
   -- la vez (webhook y reconciliación al volver del checkout).
-  perform 1 from clinics where id = p_clinic for update;
+  select * into v_clinic from clinics where id = p_clinic for update;
   if not found then
     raise exception 'fulfill_plan_purchase: clínica inexistente %', p_clinic;
   end if;
@@ -187,22 +217,33 @@ begin
     );
   end if;
 
-  if p_checkout_id is not null and not exists (
-    select 1 from billing_checkouts
-    where id = p_checkout_id and clinic_id = p_clinic and kind = 'plan'
-  ) then
-    return reject_billing_payment(p_clinic, p_transaction_id, p_checkout_id, 'plan', p_amount,
-                                  'checkout_no_corresponde');
+  if p_checkout_id is not null then
+    select * into v_checkout from billing_checkouts where id = p_checkout_id;
+    v_expected := v_checkout.amount_in_cents;
+  else
+    v_expected := p_expected_amount;
   end if;
 
-  if p_plan = 'free' or p_expected_amount is null or p_expected_amount <= 0 then
-    return reject_billing_payment(p_clinic, p_transaction_id, p_checkout_id, 'plan', p_amount,
-                                  'plan_sin_precio_fijo');
+  if p_checkout_id is not null
+     and (v_checkout.id is null or v_checkout.clinic_id <> p_clinic
+          or v_checkout.kind <> 'plan' or v_checkout.plan::text <> p_plan::text) then
+    v_reason := 'checkout_no_corresponde';
+  elsif p_plan not in ('esencial', 'pro', 'clinica') or v_expected is null or v_expected <= 0 then
+    v_reason := 'plan_sin_precio_fijo';
+  elsif p_amount <> v_expected then
+    v_reason := 'monto_no_coincide_con_el_plan';
+  elsif v_checkout.expires_at is not null
+        and coalesce(p_transaction_created_at, now()) > v_checkout.expires_at then
+    v_reason := 'link_vencido';
+  elsif v_clinic.billing_status = 'activo'
+        and v_clinic.current_period_end > now()
+        and v_clinic.plan in ('esencial', 'pro', 'clinica') then
+    v_reason := 'ya_tiene_un_periodo_pagado';
   end if;
 
-  if p_amount <> p_expected_amount then
+  if v_reason is not null then
     return reject_billing_payment(p_clinic, p_transaction_id, p_checkout_id, 'plan', p_amount,
-                                  'monto_no_coincide_con_el_plan');
+                                  v_reason);
   end if;
 
   v_period_end := activate_subscription(p_clinic, p_plan, p_payment_source_enc);
@@ -219,20 +260,29 @@ end;
 $$;
 
 /**
- * Pago aprobado de la diferencia prorrateada de un upgrade. Sube el plan SIN
- * tocar el ancla ni el fin del período: la fecha de renovación y lo consumido
- * en el ciclo se conservan, y los límites del plan nuevo rigen desde ya.
+ * Pago aprobado de la diferencia prorrateada de un upgrade. Sube el plan SIN tocar
+ * el ancla ni el fin del período: la fecha de renovación y lo consumido en el ciclo
+ * se conservan, y los límites del plan nuevo rigen desde ya.
  *
- * Se rechaza (y queda para reembolso) si desde la cotización cambió el plan o el
- * período, o si el monto no es el cotizado. Pagar un plan mayor anula una
- * cancelación pedida y un downgrade programado: es la decisión contraria.
+ * Solo se aplica sobre el estado que se cotizó. Se rechaza, y queda para reembolso,
+ * si:
+ *  · el monto no es el cotizado, o el link venció antes de crearse la transacción
+ *    (Wompi no confirma que respete expires_at: se comprueba aquí);
+ *  · cambiaron el plan, el fin del período o el downgrade programado;
+ *  · el período terminó, la renovación está sin pagar o hay una cancelación pedida
+ *    (pagar no reactiva la renovación en silencio);
+ *  · hay un cobro de renovación en curso: ese cobro ya fijó el plan del ciclo
+ *    siguiente al precio anterior, y el upgrade solo paga lo que queda del actual.
+ * La cotización registra el downgrade programado que había, y pagar lo anula.
  */
 create or replace function apply_plan_upgrade(
   p_clinic uuid,
   p_transaction_id text,
   p_checkout_id uuid,
   p_amount bigint,
-  p_payment_source_enc text default null
+  p_payment_source_enc text default null,
+  -- created_at de la transacción en Wompi; sin él se usa now().
+  p_transaction_created_at timestamptz default null
 )
 returns jsonb
 language plpgsql
@@ -262,7 +312,7 @@ begin
 
   select * into v_checkout from billing_checkouts where id = p_checkout_id;
 
-  if not found or v_checkout.clinic_id <> p_clinic or v_checkout.kind <> 'upgrade' then
+  if v_checkout.id is null or v_checkout.clinic_id <> p_clinic or v_checkout.kind <> 'upgrade' then
     v_reason := 'checkout_no_corresponde';
   else
     v_from := (v_checkout.details->>'from_plan')::clinic_plan;
@@ -271,12 +321,23 @@ begin
 
     if p_amount <> v_checkout.amount_in_cents then
       v_reason := 'monto_no_coincide_con_la_cotizacion';
+    elsif v_checkout.expires_at is not null
+          and coalesce(p_transaction_created_at, now()) > v_checkout.expires_at then
+      v_reason := 'cotizacion_vencida';
     elsif v_clinic.plan <> v_from then
       v_reason := 'el_plan_cambio_desde_la_cotizacion';
     elsif v_clinic.current_period_end is distinct from v_quoted_period_end then
       v_reason := 'el_periodo_cambio_desde_la_cotizacion';
     elsif v_clinic.current_period_end <= now() then
       v_reason := 'el_periodo_ya_termino';
+    elsif v_clinic.billing_status <> 'activo' then
+      v_reason := 'renovacion_pendiente_de_pago';
+    elsif v_clinic.cancel_at_period_end then
+      v_reason := 'la_suscripcion_esta_cancelada';
+    elsif v_clinic.scheduled_plan::text is distinct from (v_checkout.details->>'scheduled_plan') then
+      v_reason := 'el_cambio_programado_cambio_desde_la_cotizacion';
+    elsif has_open_renewal_charge(p_clinic) then
+      v_reason := 'renovacion_en_curso';
     -- El orden del enum clinic_plan es el de los planes: free < esencial < pro
     -- < clinica < enterprise (0053 agregó esencial antes de pro).
     elsif v_to not in ('esencial', 'pro', 'clinica') or v_to <= v_from then
@@ -291,8 +352,6 @@ begin
 
   update clinics
   set plan = v_to,
-      cancel_at_period_end = false,
-      cancel_requested_at = null,
       scheduled_plan = null,
       scheduled_plan_requested_at = null,
       -- Sin token nuevo se conserva el anterior: es el que cobra la renovación.
@@ -306,7 +365,6 @@ begin
     'amount_in_cents', p_amount,
     'period_end', v_clinic.current_period_end,
     'transaction_id', p_transaction_id,
-    'superseded_cancellation', v_clinic.cancel_at_period_end,
     'superseded_downgrade', v_clinic.scheduled_plan
   ));
 
@@ -333,6 +391,7 @@ $$;
  *  · not_a_downgrade                el destino no es menor que el plan actual
  *  · canceling                      hay una cancelación pedida: esa manda
  *  · no_active_period               no hay período pagado vigente que renovar
+ *  · renewal_in_progress            hay un cobro de renovación en curso: su plan ya está fijado
  */
 create or replace function schedule_plan_downgrade(p_plan clinic_plan)
 returns jsonb
@@ -364,6 +423,10 @@ begin
   if v_clinic.current_period_end is null or v_clinic.current_period_end <= now() then
     return jsonb_build_object('status', 'no_active_period');
   end if;
+  -- El cobro de la renovación en curso ya fijó el plan que se cobra.
+  if has_open_renewal_charge(v_clinic.id) then
+    return jsonb_build_object('status', 'renewal_in_progress');
+  end if;
   if v_clinic.scheduled_plan = p_plan then
     return jsonb_build_object('status', 'already_scheduled', 'effective_at', v_clinic.current_period_end);
   end if;
@@ -386,7 +449,10 @@ begin
 end;
 $$;
 
-/** Anula el downgrade programado. Devuelve jsonb { status }: canceled | not_scheduled. */
+/**
+ * Anula el downgrade programado. Devuelve jsonb { status }: canceled | not_scheduled |
+ * renewal_in_progress (el cobro de la renovación en curso ya se hizo por el plan menor).
+ */
 create or replace function cancel_scheduled_plan_change()
 returns jsonb
 language plpgsql
@@ -407,6 +473,9 @@ begin
 
   if v_clinic.scheduled_plan is null then
     return jsonb_build_object('status', 'not_scheduled');
+  end if;
+  if has_open_renewal_charge(v_clinic.id) then
+    return jsonb_build_object('status', 'renewal_in_progress');
   end if;
 
   update clinics
@@ -432,9 +501,9 @@ $$;
  *  · si se cobró el plan programado, lo aplica y limpia la programación;
  *  · si se cobró el plan vigente, lo conserva (un downgrade programado después
  *    de reservar el cobro sigue pendiente para la renovación siguiente);
- *  · si el plan cobrado no es ninguno de los dos (la clínica subió de plan
- *    mientras el cobro estaba en curso), conserva el plan vigente —lo pagó— y
- *    deja constancia para cobrar la diferencia a mano.
+ *  · si el plan cobrado no es ninguno de los dos (el plan cambió con el cobro en
+ *    curso), aplica igual el plan cobrado —es el que se pagó para el ciclo que se
+ *    renueva; conservar un plan mayor regalaría la diferencia— y deja constancia.
  *
  * La versión de dos argumentos se conserva para el código anterior durante el
  * despliegue: ese código no puede programar downgrades.
@@ -481,12 +550,10 @@ begin
     v_reanchored := true;
   end if;
 
-  if p_charged_plan = v_clinic.plan or p_charged_plan = v_clinic.scheduled_plan then
-    v_new_plan := p_charged_plan;
-  else
-    v_new_plan := v_clinic.plan;
-    v_plan_mismatch := true;
-  end if;
+  -- El ciclo que se renueva es el que se pagó: rige el plan cobrado.
+  v_new_plan := p_charged_plan;
+  v_plan_mismatch := p_charged_plan <> v_clinic.plan
+                     and p_charged_plan is distinct from v_clinic.scheduled_plan;
 
   update clinics
   set current_period_end = v_period_end,
@@ -513,9 +580,10 @@ begin
     insert into audit_logs (clinic_id, action, entity_type, entity_id, metadata)
     values (p_clinic, 'subscription.renewal_plan_mismatch', 'clinic', p_clinic, jsonb_build_object(
       'charged_plan', p_charged_plan,
-      'kept_plan', v_clinic.plan,
+      'previous_plan', v_clinic.plan,
+      'scheduled_plan', v_clinic.scheduled_plan,
       'period_end_to', v_period_end,
-      'action', 'se cobró un plan distinto del vigente: cobrar o reembolsar la diferencia a mano'
+      'action', 'se renovó con el plan cobrado, distinto del vigente y del programado: revisar con la clínica'
     ));
   end if;
 
@@ -704,20 +772,21 @@ end; $$;
 -- ── 8. Permisos ─────────────────────────────────────────────────────────────
 -- create or replace conserva los permisos de las funciones que ya existían.
 
+revoke all on function has_open_renewal_charge(uuid) from public, anon, authenticated;
 revoke all on function reject_billing_payment(uuid, text, uuid, text, bigint, text)
   from public, anon, authenticated;
-revoke all on function fulfill_plan_purchase(uuid, text, clinic_plan, bigint, uuid, bigint, text)
+revoke all on function fulfill_plan_purchase(uuid, text, clinic_plan, bigint, uuid, bigint, text, timestamptz)
   from public, anon, authenticated;
-revoke all on function apply_plan_upgrade(uuid, text, uuid, bigint, text)
+revoke all on function apply_plan_upgrade(uuid, text, uuid, bigint, text, timestamptz)
   from public, anon, authenticated;
 revoke all on function renew_subscription_period(uuid, timestamptz, clinic_plan)
   from public, anon, authenticated;
 revoke all on function schedule_plan_downgrade(clinic_plan) from public, anon;
 revoke all on function cancel_scheduled_plan_change() from public, anon;
 
-grant execute on function fulfill_plan_purchase(uuid, text, clinic_plan, bigint, uuid, bigint, text)
+grant execute on function fulfill_plan_purchase(uuid, text, clinic_plan, bigint, uuid, bigint, text, timestamptz)
   to service_role;
-grant execute on function apply_plan_upgrade(uuid, text, uuid, bigint, text) to service_role;
+grant execute on function apply_plan_upgrade(uuid, text, uuid, bigint, text, timestamptz) to service_role;
 grant execute on function renew_subscription_period(uuid, timestamptz, clinic_plan) to service_role;
 grant execute on function schedule_plan_downgrade(clinic_plan) to authenticated;
 grant execute on function cancel_scheduled_plan_change() to authenticated;

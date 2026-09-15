@@ -71,6 +71,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         reference: string;
         payment_source_id: string | null;
         payment_link_id?: string | null;
+        created_at?: string;
       }
     | undefined;
   if (!transaction) {

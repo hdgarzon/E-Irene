@@ -43,7 +43,9 @@ export type DowngradeStatus =
   | "invalid_plan"
   | "not_a_downgrade"
   | "canceling"
-  | "no_active_period";
+  | "no_active_period"
+  /** Hay un cobro de renovación en curso: su plan ya está fijado. */
+  | "renewal_in_progress";
 
 export interface DowngradeResult {
   status: DowngradeStatus;
@@ -60,7 +62,7 @@ export async function schedulePlanDowngrade(plan: Plan): Promise<DowngradeResult
   return { status: r.status, effectiveAt: r.effective_at ?? null };
 }
 
-export type ScheduledChangeCancelStatus = "canceled" | "not_scheduled";
+export type ScheduledChangeCancelStatus = "canceled" | "not_scheduled" | "renewal_in_progress";
 
 /** Anula el downgrade programado: la clínica conserva su plan en la renovación. */
 export async function cancelScheduledPlanChange(): Promise<ScheduledChangeCancelStatus> {

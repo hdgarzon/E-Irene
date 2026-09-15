@@ -1,4 +1,4 @@
-import { PAID_PLANS, PLAN_ORDER, PLANS, type Plan } from "@/lib/plans";
+import { PLAN_ORDER, PLANS, isPaidPlan, type Plan } from "@/lib/plans";
 import { billingCycleBounds } from "@/lib/dates";
 
 /**
@@ -17,18 +17,14 @@ import { billingCycleBounds } from "@/lib/dates";
  */
 export const MIN_UPGRADE_CHARGE_IN_CENTS = 150_000;
 
-function isPaid(plan: Plan): boolean {
-  return PAID_PLANS.includes(plan);
-}
-
 /** Subir entre planes pagos (Esencial → Profesional → Clínica). */
 export function isPaidPlanUpgrade(from: Plan, to: Plan): boolean {
-  return isPaid(from) && isPaid(to) && PLAN_ORDER.indexOf(to) > PLAN_ORDER.indexOf(from);
+  return isPaidPlan(from) && isPaidPlan(to) && PLAN_ORDER.indexOf(to) > PLAN_ORDER.indexOf(from);
 }
 
 /** Bajar entre planes pagos. Bajar a Free no es un downgrade: es cancelar. */
 export function isPaidPlanDowngrade(from: Plan, to: Plan): boolean {
-  return isPaid(from) && isPaid(to) && PLAN_ORDER.indexOf(to) < PLAN_ORDER.indexOf(from);
+  return isPaidPlan(from) && isPaidPlan(to) && PLAN_ORDER.indexOf(to) < PLAN_ORDER.indexOf(from);
 }
 
 export interface UpgradeQuote {

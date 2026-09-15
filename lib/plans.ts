@@ -103,6 +103,11 @@ export const PAID_PLANS: Plan[] = PLAN_ORDER.filter((plan) => {
   return cents !== null && cents > 0;
 });
 
+/** true si el plan se compra y se renueva por Wompi: Esencial, Profesional o Clínica. */
+export function isPaidPlan(plan: Plan): boolean {
+  return PAID_PLANS.includes(plan);
+}
+
 export function planLimits(plan: Plan): PlanLimits {
   return PLANS[plan];
 }

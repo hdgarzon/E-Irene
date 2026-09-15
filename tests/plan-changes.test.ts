@@ -134,12 +134,25 @@ async function paidClinic(plan: PaidPlan, patch: Record<string, unknown> = {}) {
   return { ...clinic, anchor, periodEnd };
 }
 
+/** Cobro de renovación sin desenlace (PSE o Nequi pendiente), como lo deja el cron. */
+async function openRenewalCharge(clinicId: string, plan: PaidPlan, dueAt: string) {
+  const { error } = await service().from("billing_scheduled_charges").insert({
+    clinic_id: clinicId,
+    plan,
+    amount_in_cents: PLANS[plan].priceInCents,
+    due_at: dueAt,
+    status: "processing",
+  });
+  expect(error).toBeNull();
+}
+
 async function insertCheckout(input: {
   clinicId: string;
   kind: "plan" | "upgrade";
   plan: PaidPlan;
   amountInCents: number;
   details?: Record<string, unknown>;
+  expiresAt?: string;
 }): Promise<string> {
   const { data, error } = await service()
     .from("billing_checkouts")
@@ -151,7 +164,7 @@ async function insertCheckout(input: {
       reference: `planchange-${input.clinicId}-${input.plan}-${Date.now()}`,
       kind: input.kind,
       details: input.details ?? {},
-      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      expires_at: input.expiresAt ?? new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     })
     .select("id")
     .single();
@@ -172,12 +185,13 @@ async function upgradeCheckout(
     periodEnd: clinic.periodEnd,
   });
   expect(quote).not.toBeNull();
+  const row = await clinicRow(clinic.clinicId);
   const checkoutId = await insertCheckout({
     clinicId: clinic.clinicId,
     kind: "upgrade",
     plan: to,
     amountInCents: quote!.amountInCents,
-    details: { from_plan: from, to_plan: to, period_end: quote!.periodEnd },
+    details: { from_plan: from, to_plan: to, period_end: quote!.periodEnd, scheduled_plan: row.scheduled_plan },
   });
   return { checkoutId, amount: quote!.amountInCents };
 }
@@ -235,6 +249,73 @@ d("compra de un plan (fulfill_plan_purchase)", () => {
     const retry = await service().rpc("fulfill_plan_purchase", args);
     expect(retry.data).toMatchObject({ outcome: "rejected", already_processed: true });
     expect(await auditActions(clinicId, "billing.payment_rejected")).toBe(1);
+  });
+
+  it("con link, valida contra el monto del link aunque el precio haya cambiado después", async () => {
+    const { clinicId } = await bootstrapClinic();
+    const linkAmount = price - 1_000_000;
+    const checkoutId = await insertCheckout({ clinicId, kind: "plan", plan: "pro", amountInCents: linkAmount });
+
+    const { data, error } = await service().rpc("fulfill_plan_purchase", {
+      p_clinic: clinicId,
+      p_transaction_id: txId(),
+      p_checkout_id: checkoutId,
+      p_plan: "pro",
+      p_amount: linkAmount,
+    });
+    expect(error).toBeNull();
+    expect(data).toMatchObject({ outcome: "applied", plan: "pro" });
+  });
+
+  it("SEGURIDAD: no activa si ya hay un período pagado vigente: no se cobra dos veces el mismo mes", async () => {
+    // "Pagar ahora" quedó abierto en la gracia y el reintento automático renovó antes.
+    const clinic = await paidClinic("pro");
+    const checkoutId = await insertCheckout({
+      clinicId: clinic.clinicId,
+      kind: "plan",
+      plan: "pro",
+      amountInCents: price,
+    });
+    const before = await clinicRow(clinic.clinicId);
+
+    const { data } = await service().rpc("fulfill_plan_purchase", {
+      p_clinic: clinic.clinicId,
+      p_transaction_id: txId(),
+      p_checkout_id: checkoutId,
+      p_plan: "pro",
+      p_amount: price,
+    });
+    expect(data).toMatchObject({ outcome: "rejected", reason: "ya_tiene_un_periodo_pagado" });
+    expect(await clinicRow(clinic.clinicId)).toEqual(before);
+  });
+
+  it("SEGURIDAD: un link vencido no activa; una transacción creada antes de vencer, sí", async () => {
+    const { clinicId } = await bootstrapClinic();
+    const expiresAt = new Date(Date.now() - 60_000).toISOString();
+
+    const late = await insertCheckout({ clinicId, kind: "plan", plan: "pro", amountInCents: price, expiresAt });
+    const rejected = await service().rpc("fulfill_plan_purchase", {
+      p_clinic: clinicId,
+      p_transaction_id: txId(),
+      p_checkout_id: late,
+      p_plan: "pro",
+      p_amount: price,
+      p_transaction_created_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    expect(rejected.data).toMatchObject({ outcome: "rejected", reason: "link_vencido" });
+    expect((await clinicRow(clinicId)).plan).toBe("free");
+
+    // PSE: la transacción se creó con el link vigente y se aprobó después.
+    const onTime = await insertCheckout({ clinicId, kind: "plan", plan: "pro", amountInCents: price, expiresAt });
+    const applied = await service().rpc("fulfill_plan_purchase", {
+      p_clinic: clinicId,
+      p_transaction_id: txId(),
+      p_checkout_id: onTime,
+      p_plan: "pro",
+      p_amount: price,
+      p_transaction_created_at: new Date(Date.now() - 120_000).toISOString(),
+    });
+    expect(applied.data).toMatchObject({ outcome: "applied", plan: "pro" });
   });
 
   it("SEGURIDAD: un plan sin precio fijo (Enterprise) nunca se activa con un pago", async () => {
@@ -350,25 +431,6 @@ d("upgrade prorrateado (apply_plan_upgrade)", () => {
     expect(await fulfillment(tx)).toMatchObject({ kind: "upgrade", outcome: "applied" });
   });
 
-  it("pagar un plan mayor anula la cancelación pedida", async () => {
-    const clinic = await paidClinic("esencial", {
-      cancel_at_period_end: true,
-      cancel_requested_at: new Date().toISOString(),
-    });
-    const { checkoutId, amount } = await upgradeCheckout(clinic, "esencial", "pro");
-
-    const { data } = await service().rpc("apply_plan_upgrade", {
-      p_clinic: clinic.clinicId,
-      p_transaction_id: txId(),
-      p_checkout_id: checkoutId,
-      p_amount: amount,
-    });
-    expect(data).toMatchObject({ outcome: "applied", plan: "pro" });
-    const row = await clinicRow(clinic.clinicId);
-    expect(row.cancel_at_period_end).toBe(false);
-    expect(iso(row.current_period_end)).toBe(clinic.periodEnd);
-  });
-
   const rejections: [
     reason: string,
     arrange: () => Promise<{ clinicId: string; checkoutId: string; amount: number; plan: string }>,
@@ -452,6 +514,71 @@ d("upgrade prorrateado (apply_plan_upgrade)", () => {
           plan: "pro",
           amountInCents: amount,
         });
+        return { clinicId: clinic.clinicId, checkoutId, amount, plan: "esencial" };
+      },
+    ],
+    [
+      "cotizacion_vencida",
+      async () => {
+        // Wompi no confirma que respete expires_at: la base lo comprueba igual.
+        const clinic = await paidClinic("esencial");
+        const quote = quotePlanUpgrade({
+          fromPlan: "esencial",
+          toPlan: "pro",
+          anchor: clinic.anchor,
+          periodEnd: clinic.periodEnd,
+        })!;
+        const checkoutId = await insertCheckout({
+          clinicId: clinic.clinicId,
+          kind: "upgrade",
+          plan: "pro",
+          amountInCents: quote.amountInCents,
+          details: { from_plan: "esencial", to_plan: "pro", period_end: quote.periodEnd, scheduled_plan: null },
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        });
+        return { clinicId: clinic.clinicId, checkoutId, amount: quote.amountInCents, plan: "esencial" };
+      },
+    ],
+    [
+      "renovacion_pendiente_de_pago",
+      async () => {
+        // Cotizado antes de que fallara el cobro de la renovación: no se aplica en la gracia.
+        const clinic = await paidClinic("esencial");
+        const { checkoutId, amount } = await upgradeCheckout(clinic, "esencial", "pro");
+        await setClinic(clinic.clinicId, { billing_status: "vencido" });
+        return { clinicId: clinic.clinicId, checkoutId, amount, plan: "esencial" };
+      },
+    ],
+    [
+      "la_suscripcion_esta_cancelada",
+      async () => {
+        // Pagar no reactiva en silencio una cancelación pedida después de cotizar.
+        const clinic = await paidClinic("esencial");
+        const { checkoutId, amount } = await upgradeCheckout(clinic, "esencial", "pro");
+        await setClinic(clinic.clinicId, {
+          cancel_at_period_end: true,
+          cancel_requested_at: new Date().toISOString(),
+        });
+        return { clinicId: clinic.clinicId, checkoutId, amount, plan: "esencial" };
+      },
+    ],
+    [
+      "el_cambio_programado_cambio_desde_la_cotizacion",
+      async () => {
+        // El admin programó un downgrade después de cotizar el upgrade.
+        const clinic = await paidClinic("pro");
+        const { checkoutId, amount } = await upgradeCheckout(clinic, "pro", "clinica");
+        await setClinic(clinic.clinicId, { scheduled_plan: "esencial" });
+        return { clinicId: clinic.clinicId, checkoutId, amount, plan: "pro" };
+      },
+    ],
+    [
+      "renovacion_en_curso",
+      async () => {
+        // El cobro de la renovación ya fijó el plan del ciclo siguiente al precio anterior.
+        const clinic = await paidClinic("esencial");
+        const { checkoutId, amount } = await upgradeCheckout(clinic, "esencial", "pro");
+        await openRenewalCharge(clinic.clinicId, "esencial", clinic.periodEnd);
         return { clinicId: clinic.clinicId, checkoutId, amount, plan: "esencial" };
       },
     ],
@@ -549,6 +676,19 @@ d("downgrade programado", () => {
     expect(row.scheduled_plan).toBeNull();
   });
 
+  it("no se programa ni se anula con un cobro de renovación en curso", async () => {
+    // El cobro ya se hizo por un plan: cambiar el programado ahora cobraría uno y aplicaría otro.
+    const clinic = await paidClinic("clinica");
+    await clinic.client.rpc("schedule_plan_downgrade", { p_plan: "pro" });
+    await openRenewalCharge(clinic.clinicId, "pro", clinic.periodEnd);
+
+    const cancel = await clinic.client.rpc("cancel_scheduled_plan_change");
+    expect(cancel.data.status).toBe("renewal_in_progress");
+    const reschedule = await clinic.client.rpc("schedule_plan_downgrade", { p_plan: "esencial" });
+    expect(reschedule.data.status).toBe("renewal_in_progress");
+    expect((await clinicRow(clinic.clinicId)).scheduled_plan).toBe("pro");
+  });
+
   it("SEGURIDAD: sin sesión no se programa nada", async () => {
     const { error } = await anon().rpc("schedule_plan_downgrade", { p_plan: "esencial" });
     expect(error).not.toBeNull();
@@ -594,8 +734,9 @@ d("renovación con el plan cobrado (renew_subscription_period)", () => {
     expect(row.scheduled_plan).toBe("esencial");
   });
 
-  it("un plan cobrado distinto del vigente y del programado conserva el vigente y deja constancia", async () => {
-    // La clínica subió de plan mientras el cobro de la renovación estaba en curso.
+  it("un plan cobrado distinto del vigente y del programado se aplica igual y deja constancia", async () => {
+    // El plan cambió con el cobro en curso: el ciclo que se renueva es el que se pagó.
+    // Conservar Clínica al precio de Profesional regalaría la diferencia todo el ciclo.
     const clinic = await paidClinic("clinica");
     const { error } = await service().rpc("renew_subscription_period", {
       p_clinic: clinic.clinicId,
@@ -603,7 +744,7 @@ d("renovación con el plan cobrado (renew_subscription_period)", () => {
       p_charged_plan: "pro",
     });
     expect(error).toBeNull();
-    expect((await clinicRow(clinic.clinicId)).plan).toBe("clinica");
+    expect((await clinicRow(clinic.clinicId)).plan).toBe("pro");
     expect(await auditActions(clinic.clinicId, "subscription.renewal_plan_mismatch")).toBe(1);
   });
 

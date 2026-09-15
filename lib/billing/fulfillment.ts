@@ -24,6 +24,8 @@ export interface PaidTransaction {
   id: string;
   amount_in_cents: number;
   payment_source_id?: number | string | null;
+  /** Creación en Wompi: con ella la base comprueba que el link no había vencido. */
+  created_at?: string | null;
 }
 
 export type FulfillmentResult =
@@ -55,9 +57,12 @@ export async function fulfillCheckoutPayment(
         p_checkout_id: owner.checkoutId ?? undefined,
         p_plan: owner.plan,
         p_amount: transaction.amount_in_cents,
-        // Precio vigente del plan: lib/plans.ts es la única fuente de precios.
-        p_expected_amount: PLANS[owner.plan]?.priceInCents ?? undefined,
+        // Con checkout, la base valida contra el monto del link, aunque el precio haya
+        // cambiado después. El precio vigente de lib/plans.ts solo sirve a un pago sin
+        // checkout (referencia propia, anterior a los links).
+        p_expected_amount: owner.checkoutId ? undefined : (PLANS[owner.plan]?.priceInCents ?? undefined),
         p_payment_source_enc: paymentSourceEnc,
+        p_transaction_created_at: transaction.created_at ?? undefined,
       });
       break;
     case "upgrade":
@@ -71,6 +76,7 @@ export async function fulfillCheckoutPayment(
         p_checkout_id: owner.checkoutId,
         p_amount: transaction.amount_in_cents,
         p_payment_source_enc: paymentSourceEnc,
+        p_transaction_created_at: transaction.created_at ?? undefined,
       });
       break;
     default:
