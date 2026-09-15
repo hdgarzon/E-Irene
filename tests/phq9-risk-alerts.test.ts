@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { encrypt } from "@/lib/crypto";
 import { isPhq9SelfHarmPayload } from "@/lib/db/assessments";
 
@@ -17,7 +17,11 @@ function encResult(answers: number[]) {
 
 describe("isPhq9SelfHarmPayload", () => {
   beforeEach(() => {
-    process.env.ENCRYPTION_KEY = key;
+    vi.stubEnv("ENCRYPTION_KEY", key);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("returns true when PHQ-9 self-harm item is > 0", () => {
