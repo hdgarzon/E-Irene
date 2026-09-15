@@ -87,10 +87,15 @@ export interface ClinicDueForCharge {
  * Clínicas que necesitan ser cobradas: plan de pago, billing_status activo (o
  * vencido, para reprocesar), sin cancelación pedida, y current_period_end
  * vencido o a punto de vencer en los próximos 3 días.
+ *
+ * `clinicIds` acota la consulta a esas clínicas. Lo usan las pruebas contra la
+ * base local compartida, que conserva clínicas de otras corridas.
  */
-export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
+export async function getClinicsDueForCharge(
+  options: { clinicIds?: string[] } = {},
+): Promise<ClinicDueForCharge[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("clinics")
     .select("id, plan, current_period_end, wompi_payment_source_id_enc")
     .in("plan", ["pro", "clinica", "enterprise"] as Plan[])
@@ -99,6 +104,8 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
     // vuelve a cobrar: al vencer, end_canceled_subscriptions() lo pasa a Free.
     .eq("cancel_at_period_end", false)
     .lte("current_period_end", new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString());
+  if (options.clinicIds) query = query.in("id", options.clinicIds);
+  const { data, error } = await query;
   if (error) throw error;
   const rows = data ?? [];
 

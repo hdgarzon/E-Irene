@@ -182,8 +182,8 @@ d("cobro recurrente: un token que no descifra no frena a las demás clínicas", 
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       // La base local es compartida y puede tener otras clínicas vencidas (hasta
-      // con tokens de otra clave): solo se mira lo que creó esta prueba.
-      const found = (await getClinicsDueForCharge()).filter((c) => ours.includes(c.id));
+      // con tokens de otra clave): la consulta se acota a las que creó esta prueba.
+      const found = await getClinicsDueForCharge({ clinicIds: ours });
       expect(found.find((c) => c.id === legible.clinicId)).toMatchObject({
         wompiPaymentSourceId: "ps-demo-legible",
       });
@@ -355,8 +355,10 @@ d("suscripción: activación, renovación y cancelación", () => {
       current_period_end: dueSoon.toISOString(),
       billing_cycle_anchor: addMonthsBogota(dueSoon, -1).toISOString(),
     });
-    const due = await getClinicsDueForCharge();
-    expect(due.map((c) => c.id)).not.toContain(B.clinicId);
+    // Acotada a esta clínica: la base local compartida conserva clínicas de otras
+    // corridas, y una fila ajena no debe poder cambiar el resultado de la prueba.
+    const due = await getClinicsDueForCharge({ clinicIds: [B.clinicId] });
+    expect(due).toEqual([]);
   });
 
   it("revertir antes del fin la deja renovándose como antes", async () => {
@@ -369,8 +371,9 @@ d("suscripción: activación, renovación y cancelación", () => {
     expect(row.cancel_requested_at).toBeNull();
     expect(await subscriptionAudit(B.clinicId)).toContain("subscription.cancel_reverted");
 
-    const due = await getClinicsDueForCharge();
-    expect(due.map((c) => c.id)).toContain(B.clinicId);
+    // Acotada a esta clínica, por lo mismo que en la prueba anterior.
+    const due = await getClinicsDueForCharge({ clinicIds: [B.clinicId] });
+    expect(due.map((c) => c.id)).toEqual([B.clinicId]);
   });
 
   it("al vencer el período, el barrido la pasa a Free, borra el token y no toca los datos", async () => {
