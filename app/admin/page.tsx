@@ -37,7 +37,7 @@ function StatCard({
 }
 
 export default async function AdminResumenPage() {
-  // Totales contados en la BD en una sola fila (migración 0047): sumar una fila
+  // Totales contados en la BD en una sola fila (migración 0051): sumar una fila
   // por clínica los cortaba en 1000 clínicas sin aviso.
   const [totals, appointmentStatus] = await Promise.all([
     getPlatformTotals(),

@@ -25,7 +25,7 @@ import "./helpers/supabase-env";
  * Listas de la consola del admin de plataforma contra un Supabase local:
  * paginación y conteos en BD (PostgREST corta en 1000 filas sin avisar),
  * búsqueda literal, y que el admin siga sin ver datos de pacientes (migraciones
- * 0015 y 0047). Igual que rls.test.ts, solo corre con el stack local levantado.
+ * 0015 y 0051). Igual que rls.test.ts, solo corre con el stack local levantado.
  *
  * Las funciones de lib/db usan el cliente de sesión (cookies de Next). Aquí esa
  * sesión es la de un platform admin de prueba: mismo JWT y mismas políticas RLS
