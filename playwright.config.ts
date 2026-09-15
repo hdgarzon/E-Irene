@@ -16,6 +16,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: "list",
+  // Antes de cualquier spec, el candado de máquina sobre el Supabase local: el
+  // mismo que toma vitest, para no correr a la vez que otra suite.
+  globalSetup: "./tests/e2e/helpers/global-setup.ts",
   use: {
     baseURL: "http://127.0.0.1:3000",
     trace: "on-first-retry",
