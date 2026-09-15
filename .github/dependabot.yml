@@ -8,6 +8,19 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 no trae la API de JavaScript que usa typescript-eslint, y
+      # typescript-eslint 8.x solo soporta TypeScript < 6.1: pnpm lint se rompe.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
+      # eslint-plugin-react 7.37 (el que usa eslint-config-next 16.3) no soporta
+      # ESLint 10: pnpm lint falla. Quitar cuando eslint-config-next lo soporte.
+      - dependency-name: eslint
+        versions: [">=10.0.0"]
+      # Los tipos de Node siguen la versión que corre en producción (Vercel,
+      # Node 24): el salto de mayor se hace a mano, junto con node-version en CI.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
