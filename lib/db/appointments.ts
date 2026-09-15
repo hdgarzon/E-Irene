@@ -184,6 +184,18 @@ export async function updateAppointment(
   return mapRow(data as unknown as RawRow);
 }
 
+/**
+ * La base no deja cambiar el paciente de una cita que ya tiene consultas o
+ * notificaciones de su paciente (migración 0051): ocurrieron con él, y el
+ * recordatorio le llevó el enlace de la videollamada. Una cita mal asignada se
+ * cancela y se crea otra.
+ */
+export function isAppointmentPatientLocked(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return code === "P0001" && typeof message === "string" && message.startsWith("appointments.patient_id");
+}
+
 export async function setAppointmentStatus(
   id: string,
   status: AppointmentStatus,
