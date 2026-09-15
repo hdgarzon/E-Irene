@@ -10,14 +10,16 @@ import { runConsultationAnalysis } from "@/lib/consultation-analysis";
 import "./helpers/supabase-env";
 
 /**
- * Lo que la sesión puede insertar en `risk_alerts` (migración 0047).
+ * Lo que la sesión puede insertar en `risk_alerts`: nada (migraciones 0047 y
+ * 0049).
  *
  * La política `risk_alerts_insert` (0023) solo exigía la clínica. Con su JWT,
  * cualquier miembro —también la secretaria— podía insertar la alerta de una
- * consulta antes que el análisis: ya acusada, de la fuente PHQ-9, antedatada o
- * con paciente o doctor de otra clínica. El análisis real chocaba con el
- * índice único, no avisaba al doctor y, si la alerta venía acusada, la cola
- * quedaba vacía.
+ * consulta antes que el análisis: ya acusada, de la fuente PHQ-9, con paciente
+ * o doctor de otra clínica, o abierta e inventada. El análisis real chocaba
+ * con el índice único y no avisaba al doctor. La 0047 acotó ese insert y la
+ * 0049 lo retira: las alertas las registra el servidor (createRiskAlert con
+ * service-role).
  *
  * Cada intento se hace como lo haría alguien con su sesión: un POST directo a
  * /rest/v1/risk_alerts. Cada rechazo se comprueba por código y mensaje —no solo
@@ -54,11 +56,10 @@ const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && ANON && SERVICE ? describe : describe.skip;
 
-// El raise del trigger. Un 42501 (RLS), un 23514 (check) o un 23505 (índice
-// único) también serían un error, pero no probarían este control.
-const RAISE_EXCEPTION = "P0001";
-const RLS_VIOLATION = "42501";
-const UNIQUE_VIOLATION = "23505";
+// Sin permiso de INSERT. Una política de fila responde con el mismo código, así
+// que también se comprueba el mensaje.
+const INSUFFICIENT_PRIVILEGE = "42501";
+const SIN_PERMISO = /permission denied for table risk_alerts/i;
 
 const CATEGORIAS: RiskAlertCategory[] = [
   { key: "suicidal_ideation", level: "alto", evidence: "Texto de prueba." },
@@ -178,7 +179,7 @@ async function alertasDe(columna: "consultation_id" | "assessment_id", id: strin
   return data!;
 }
 
-/** La fila que manda createRiskAlert para la fuente de análisis de sesión. */
+/** La fila que mandaba createRiskAlert con la sesión, antes de pasar a service-role. */
 function filaDeConsulta(clinicId: string, consultationId: string, patientId: string, doctorId: string) {
   return {
     clinic_id: clinicId,
@@ -192,18 +193,19 @@ function filaDeConsulta(clinicId: string, consultationId: string, patientId: str
 }
 
 /**
- * POST directo con la sesión que tiene que rechazar el trigger. Se pide la fila
- * de vuelta: si el insert pasara, habría datos y la prueba fallaría.
+ * POST directo con la sesión, que tiene que rechazar la falta de permiso. Se
+ * pide la fila de vuelta: si el insert pasara, habría datos y la prueba
+ * fallaría.
  */
-async function rechazado(quien: Miembro, fila: Record<string, unknown>, mensaje: RegExp) {
-  const { data, error } = await quien.client.from("risk_alerts").insert(fila).select("id");
+async function sinPermiso(client: SupabaseClient, fila: Record<string, unknown>) {
+  const { data, error } = await client.from("risk_alerts").insert(fila).select("id");
   const caso = JSON.stringify({ ...fila, categories_enc: undefined });
-  expect(error?.code, caso).toBe(RAISE_EXCEPTION);
-  expect(error?.message, caso).toMatch(mensaje);
+  expect(error?.code, caso).toBe(INSUFFICIENT_PRIVILEGE);
+  expect(error?.message, caso).toMatch(SIN_PERMISO);
   expect(data).toBeNull();
 }
 
-d("risk_alerts: lo que la sesión puede insertar (0047)", () => {
+d("risk_alerts: la sesión no inserta (0047 y 0049)", () => {
   let A: Clinica;
   let B: Clinica;
   let doctor: Miembro;
@@ -233,20 +235,24 @@ d("risk_alerts: lo que la sesión puede insertar (0047)", () => {
     return { patientId, consultationId, fila: filaDeConsulta(A.clinicId, consultationId, patientId, doctor.userId) };
   }
 
-  /**
-   * El escritor real después del intento: la alerta tiene que ser nueva —el
-   * análisis solo avisa al doctor por correo si `isNew`— y quedar abierta en la
-   * cola del dashboard.
-   */
-  async function alertaRealAbierta(c: { consultationId: string; patientId: string }) {
-    session.client = doctor.client;
-    const creada = await createRiskAlert(A.clinicId, {
-      source: "session_analysis",
+  function entradaDeConsulta(c: { consultationId: string; patientId: string }) {
+    return {
+      source: "session_analysis" as const,
       consultationId: c.consultationId,
       patientId: c.patientId,
       doctorId: doctor.userId,
       categories: CATEGORIAS,
-    });
+    };
+  }
+
+  /**
+   * El escritor real después del intento, con la sesión de quien dispara el
+   * análisis: la alerta tiene que ser nueva —el análisis solo avisa al doctor
+   * por correo si `isNew`— y quedar abierta en la cola.
+   */
+  async function alertaRealAbierta(c: { consultationId: string; patientId: string }, quien: Miembro = doctor) {
+    session.client = quien.client;
+    const creada = await createRiskAlert(A.clinicId, entradaDeConsulta(c));
     expect(creada.isNew).toBe(true);
 
     const filas = await alertasDe("consultation_id", c.consultationId);
@@ -254,30 +260,31 @@ d("risk_alerts: lo que la sesión puede insertar (0047)", () => {
     expect(filas[0]).toMatchObject({ id: creada.id, acknowledged_at: null, acknowledged_by: null });
     const cola = await listOpenRiskAlerts("session_analysis", 50);
     expect(cola.alerts.map((a) => a.id)).toContain(creada.id);
+    return creada.id;
   }
 
-  // ── Lo que la sesión no puede insertar ────────────────────────────────────
-
-  it("nadie de la clínica inserta una alerta ya acusada, y la alerta real se registra abierta", async () => {
+  it("ningún rol inserta con su sesión, ni ya acusada ni con la fila de siempre, y la alerta real se registra abierta", async () => {
     for (const quien of [secretaria, doctor, A.admin]) {
       const c = await consultaSinAlerta();
-      const ahora = new Date().toISOString();
-
-      await rechazado(quien, { ...c.fila, acknowledged_at: ahora, acknowledged_by: doctor.userId }, /no puede nacer con acuse/i);
-      await rechazado(quien, { ...c.fila, acknowledged_at: ahora, acknowledged_by: quien.userId }, /no puede nacer con acuse/i);
-      await rechazado(quien, { ...c.fila, acknowledged_at: ahora }, /no puede nacer con acuse/i);
-      await rechazado(quien, { ...c.fila, acknowledged_by: quien.userId }, /no puede nacer con acuse/i);
+      await sinPermiso(quien.client, {
+        ...c.fila,
+        acknowledged_at: new Date().toISOString(),
+        acknowledged_by: quien.userId,
+      });
+      await sinPermiso(quien.client, c.fila);
       expect(await alertasDe("consultation_id", c.consultationId)).toHaveLength(0);
 
-      await alertaRealAbierta(c);
+      // Terminar o reintentar el análisis solo exige sesión: cualquiera de
+      // estos roles puede dispararlo, y la alerta se registra igual.
+      const id = await alertaRealAbierta(c, quien);
+      // Un reintento del análisis relee la alerta existente, sin duplicarla.
+      expect(await createRiskAlert(A.clinicId, entradaDeConsulta(c))).toEqual({ id, isNew: false });
     }
   }, 60000);
 
   it("NO inserta alertas de la fuente PHQ-9: las registra el servidor", async () => {
     const patientId = await paciente(A.clinicId);
     const assessmentId = await escala(A.clinicId, patientId);
-    const { consultationId } = await consultaSinAlerta();
-    const categories_enc = encrypt(JSON.stringify(CATEGORIAS));
     const phq9 = {
       clinic_id: A.clinicId,
       source: "phq9_self_report",
@@ -285,23 +292,9 @@ d("risk_alerts: lo que la sesión puede insertar (0047)", () => {
       consultation_id: null,
       patient_id: patientId,
       doctor_id: null,
-      categories_enc,
+      categories_enc: encrypt(JSON.stringify(CATEGORIAS)),
     };
-
-    for (const quien of [secretaria, doctor]) {
-      await rechazado(quien, phq9, /solo se registran alertas del análisis de una consulta/i);
-      await rechazado(
-        quien,
-        { ...phq9, acknowledged_at: new Date().toISOString(), acknowledged_by: quien.userId },
-        /no puede nacer con acuse/i,
-      );
-      // Tampoco colando la escala en una alerta de consulta.
-      await rechazado(
-        quien,
-        { ...phq9, source: "session_analysis", consultation_id: consultationId },
-        /solo se registran alertas del análisis de una consulta/i,
-      );
-    }
+    for (const quien of [secretaria, doctor]) await sinPermiso(quien.client, phq9);
     expect(await alertasDe("assessment_id", assessmentId)).toHaveLength(0);
 
     const creada = await createRiskAlert(A.clinicId, {
@@ -320,94 +313,53 @@ d("risk_alerts: lo que la sesión puede insertar (0047)", () => {
     expect(cola.alerts.map((a) => a.id)).toContain(creada.id);
   }, 60000);
 
-  it("NO inserta con paciente, doctor o consulta de otra clínica, ni cambiándolos por otros de la suya", async () => {
+  it("NO inserta con la consulta, el paciente o el doctor de otra clínica, y la alerta de esa clínica no queda bloqueada", async () => {
     const c = await consultaSinAlerta();
-    const otroPaciente = await paciente(A.clinicId);
-
-    const cambios: [Record<string, unknown>, RegExp][] = [
-      [{ patient_id: pacienteB }, /los de la consulta/i],
-      [{ doctor_id: B.admin.userId }, /los de la consulta/i],
-      [{ patient_id: otroPaciente }, /los de la consulta/i],
-      [{ doctor_id: A.admin.userId }, /los de la consulta/i],
-      [{ doctor_id: null }, /los de la consulta/i],
-      [{ consultation_id: consultaB, patient_id: pacienteB, doctor_id: B.admin.userId }, /consulta de tu clínica/i],
-      [
-        { clinic_id: B.clinicId, consultation_id: consultaB, patient_id: pacienteB, doctor_id: B.admin.userId },
-        /consulta de tu clínica/i,
-      ],
-      [{ clinic_id: B.clinicId }, /consulta de tu clínica/i],
+    const cambios: Record<string, unknown>[] = [
+      { patient_id: pacienteB },
+      { doctor_id: B.admin.userId },
+      { consultation_id: consultaB, patient_id: pacienteB, doctor_id: B.admin.userId },
+      { clinic_id: B.clinicId, consultation_id: consultaB, patient_id: pacienteB, doctor_id: B.admin.userId },
     ];
     for (const quien of [secretaria, doctor]) {
-      for (const [cambio, mensaje] of cambios) await rechazado(quien, { ...c.fila, ...cambio }, mensaje);
+      for (const cambio of cambios) await sinPermiso(quien.client, { ...c.fila, ...cambio });
     }
     expect(await alertasDe("consultation_id", c.consultationId)).toHaveLength(0);
     expect(await alertasDe("consultation_id", consultaB)).toHaveLength(0);
 
     await alertaRealAbierta(c);
 
-    // El índice único es global: la alerta de la otra clínica tampoco quedó
-    // bloqueada.
-    session.client = B.admin.client;
-    const deB = await createRiskAlert(B.clinicId, {
-      source: "session_analysis",
+    const deB = {
+      source: "session_analysis" as const,
       consultationId: consultaB,
       patientId: pacienteB,
       doctorId: B.admin.userId,
       categories: CATEGORIAS,
-    });
-    expect(deB.isNew).toBe(true);
+    };
+    const creadaB = await createRiskAlert(B.clinicId, deB);
+    expect(creadaB.isNew).toBe(true);
+    session.client = B.admin.client;
     const colaB = await listOpenRiskAlerts("session_analysis", 50);
-    expect(colaB.alerts.map((a) => a.id)).toContain(deB.id);
+    expect(colaB.alerts.map((a) => a.id)).toContain(creadaB.id);
+
+    // Con la clínica equivocada, el índice único no se toma por un reintento:
+    // lanza en vez de devolver `isNew: false` y callar el correo.
+    await expect(createRiskAlert(A.clinicId, deB)).rejects.toMatchObject({ code: "PGRST116" });
   }, 60000);
 
-  it("sin sesión no hay clínica: anon no inserta (RLS)", async () => {
+  it("anon tampoco inserta", async () => {
     const c = await consultaSinAlerta();
-    const { error } = await anon().from("risk_alerts").insert(c.fila);
-    expect(error?.code).toBe(RLS_VIOLATION);
+    await sinPermiso(anon(), c.fila);
     expect(await alertasDe("consultation_id", c.consultationId)).toHaveLength(0);
   }, 30000);
 
-  it("la fecha de la alerta la pone la base: la sesión no puede antedatarla", async () => {
-    const c = await consultaSinAlerta();
-    const { error } = await doctor.client
-      .from("risk_alerts")
-      .insert({ ...c.fila, created_at: "2020-01-01T00:00:00Z" });
-    expect(error).toBeNull();
-
-    const [fila] = await alertasDe("consultation_id", c.consultationId);
-    // Margen amplio por la diferencia de reloj con el contenedor.
-    expect(Math.abs(new Date(fila.created_at).getTime() - Date.now())).toBeLessThan(5 * 60_000);
-  }, 30000);
-
-  // ── Compatibilidad durante el despliegue ──────────────────────────────────
-
-  it("el código anterior, que inserta con la sesión de quien dispara el análisis, sigue registrando la alerta", async () => {
-    // Terminar o reintentar el análisis solo exige sesión, así que también
-    // puede dispararlo la secretaria. Entre la migración y la promoción del
-    // código nuevo, ese insert tiene que seguir pasando.
-    for (const quien of [doctor, secretaria]) {
-      const c = await consultaSinAlerta();
-      const { error } = await quien.client.from("risk_alerts").insert(c.fila);
-      expect(error).toBeNull();
-      const [fila] = await alertasDe("consultation_id", c.consultationId);
-      expect(fila).toMatchObject({ source: "session_analysis", acknowledged_at: null });
-
-      // Un reintento choca con el índice único, que es lo que el código
-      // anterior convierte en `isNew: false`.
-      const repetido = await quien.client.from("risk_alerts").insert(c.fila);
-      expect(repetido.error?.code).toBe(UNIQUE_VIOLATION);
-    }
-  }, 30000);
-
-  // ── De punta a punta ──────────────────────────────────────────────────────
-
   it("el análisis de la consulta registra la alerta abierta y avisa al doctor, aunque antes intentaran silenciarla", async () => {
     const c = await consultaSinAlerta("Doctor: ¿Cómo estuvo la semana?\nPaciente: a veces siento que quiero morir.");
-    await rechazado(
-      secretaria,
-      { ...c.fila, acknowledged_at: new Date().toISOString(), acknowledged_by: secretaria.userId },
-      /no puede nacer con acuse/i,
-    );
+    await sinPermiso(secretaria.client, {
+      ...c.fila,
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: secretaria.userId,
+    });
 
     correos.enviados.length = 0;
     session.client = doctor.client;

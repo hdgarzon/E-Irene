@@ -78,13 +78,12 @@ type CreateRiskAlertInput =
  * para el mismo origen sea un no-op — `isNew: false` le indica al llamador
  * que NO debe reenviar el correo.
  *
- * Usa el cliente service-role en las dos fuentes. La PHQ-9 corre desde el
- * flujo de link público, sin sesión de personal. La de análisis de IA corre
- * con la sesión de quien terminó o reintentó la consulta —cualquier rol—, pero
- * lo que esa sesión puede insertar en `risk_alerts` está acotado (migración
- * 0047) y se va a retirar: la alerta la registra el servidor. El llamador
- * responde por los datos: `clinicId` de la sesión, y paciente y doctor leídos
- * de la consulta bajo RLS.
+ * Usa el cliente service-role en las dos fuentes: la sesión no puede insertar
+ * en `risk_alerts` (migraciones 0047 y 0049). La PHQ-9 corre desde el flujo de
+ * link público, sin sesión de personal. La de análisis de IA corre con la
+ * sesión de quien terminó o reintentó la consulta —cualquier rol—, pero la
+ * alerta la registra el servidor. El llamador responde por los datos:
+ * `clinicId` de la sesión, y paciente y doctor leídos de la consulta bajo RLS.
  */
 export async function createRiskAlert(
   clinicId: string,
