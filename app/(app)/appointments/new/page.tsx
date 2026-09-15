@@ -5,14 +5,16 @@ import { listDoctors } from "@/lib/db/clinic";
 import { getSessionUser } from "@/lib/auth";
 import { createAppointmentAction } from "@/app/(app)/appointments/actions";
 import { AppointmentForm } from "@/components/appointment-form";
+import { getVideoSchedulingNotice } from "@/lib/billing/video-access";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default async function NewAppointmentPage() {
-  const [patients, doctors, user] = await Promise.all([
+  const [patients, doctors, user, videoNotice] = await Promise.all([
     listPatients(),
     listDoctors(),
     getSessionUser(),
+    getVideoSchedulingNotice(),
   ]);
 
   return (
@@ -47,6 +49,7 @@ export default async function NewAppointmentPage() {
             doctors={doctors}
             defaults={{ doctorId: user?.id, durationMin: 50 }}
             submitLabel="Agendar cita"
+            videoNotice={videoNotice}
           />
         )}
       </div>

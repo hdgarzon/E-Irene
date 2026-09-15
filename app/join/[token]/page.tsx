@@ -3,6 +3,9 @@ import { isJoinWindowOpen } from "@/lib/video/join-token";
 import { getVideoProvider } from "@/lib/video";
 import { DailyVideoProvider } from "@/lib/video/daily";
 import { JoinCall } from "./join-call";
+import { WaitingRoomRefresh } from "./waiting-room-refresh";
+import { hasConsultationInProgress } from "@/lib/db/video-credits";
+import { patientVideoUserId } from "@/lib/video/participant-id";
 
 export default async function JoinPage({
   params,
@@ -56,10 +59,28 @@ export default async function JoinPage({
     );
   }
 
+  // El paciente espera a que el profesional inicie la consulta (migración 0058): la
+  // videollamada se descuenta cuando el paciente se conecta durante la consulta, y
+  // una conexión anterior no dejaría esa constancia.
+  if (!(await hasConsultationInProgress(appointment!.id))) {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-3 px-4 text-center">
+        <WaitingRoomRefresh />
+        <h1 className="font-heading text-xl font-bold text-navy">
+          Tu profesional todavía no inicia la consulta
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Deja esta página abierta: se actualiza sola y te conecta en cuanto empiece la sesión.
+        </p>
+      </div>
+    );
+  }
+
   const patientToken = await videoProvider.createMeetingToken({
     roomName: appointment!.videoRoomName!,
     userName: appointment!.patientName,
     isOwner: false,
+    userId: patientVideoUserId(appointment!.id),
     expiresInSeconds: (appointment!.durationMin + 30) * 60,
   });
 

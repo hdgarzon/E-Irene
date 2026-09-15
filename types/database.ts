@@ -1646,6 +1646,122 @@ export type Database = {
           },
         ]
       }
+      video_call_reservations: {
+        Row: {
+          appointment_id: string
+          clinic_id: string
+          consultation_id: string | null
+          created_at: string
+          id: string
+          release_reason: string | null
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          appointment_id: string
+          clinic_id: string
+          consultation_id?: string | null
+          created_at?: string
+          id?: string
+          release_reason?: string | null
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          appointment_id?: string
+          clinic_id?: string
+          consultation_id?: string | null
+          created_at?: string
+          id?: string
+          release_reason?: string | null
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_call_reservations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_call_reservations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_call_reservations_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_credit_ledger: {
+        Row: {
+          actor_id: string | null
+          checkout_id: string | null
+          clinic_id: string
+          consultation_id: string | null
+          created_at: string
+          delta: number
+          id: string
+          note: string | null
+          reason: string
+          wompi_transaction_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          checkout_id?: string | null
+          clinic_id: string
+          consultation_id?: string | null
+          created_at?: string
+          delta: number
+          id?: string
+          note?: string | null
+          reason: string
+          wompi_transaction_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          checkout_id?: string | null
+          clinic_id?: string
+          consultation_id?: string | null
+          created_at?: string
+          delta?: number
+          id?: string
+          note?: string | null
+          reason?: string
+          wompi_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_credit_ledger_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_credit_ledger_checkout_id_fkey"
+            columns: ["checkout_id"]
+            isOneToOne: false
+            referencedRelation: "billing_checkouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_credit_ledger_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1673,6 +1789,10 @@ export type Database = {
         }
         Returns: Json
       }
+      attach_video_reservation: {
+        Args: { p_consultation_id: string; p_reservation_id: string }
+        Returns: boolean
+      }
       auth_can_access_clinical: { Args: never; Returns: boolean }
       auth_clinic_id: { Args: never; Returns: string }
       auth_role: {
@@ -1697,6 +1817,14 @@ export type Database = {
         Returns: boolean
       }
       clinic_cycle_start: { Args: { p_clinic: string }; Returns: string }
+      consume_video_call: {
+        Args: {
+          p_consultation_id: string
+          p_joined_at?: string
+          p_source: string
+        }
+        Returns: Json
+      }
       create_clinic_and_admin: {
         Args: { clinic_name: string; full_name: string }
         Returns: string
@@ -1778,9 +1906,30 @@ export type Database = {
           used_seconds: number
         }[]
       }
+      get_platform_video_credits: {
+        Args: { p_clinic_ids: string[] }
+        Returns: {
+          balance: number
+          clinic_id: string
+        }[]
+      }
       get_transcription_usage: { Args: never; Returns: Json }
+      get_video_credits: { Args: never; Returns: Json }
+      get_video_reservation_status: {
+        Args: { p_consultation_id: string }
+        Returns: string
+      }
       grandfather_verification_deadline: { Args: never; Returns: string }
       grant_transcription_pack: {
+        Args: {
+          p_amount: number
+          p_checkout_id: string
+          p_clinic: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      grant_video_pack: {
         Args: {
           p_amount: number
           p_checkout_id: string
@@ -1793,6 +1942,10 @@ export type Database = {
       mark_subscription_payment_failed: {
         Args: { p_clinic: string; p_reason: string }
         Returns: boolean
+      }
+      platform_adjust_video_credits: {
+        Args: { p_delta: number; p_note: string; target_clinic: string }
+        Returns: number
       }
       platform_set_clinic_plan: {
         Args: { new_plan: string; target_clinic: string }
@@ -1823,6 +1976,14 @@ export type Database = {
         }
         Returns: Json
       }
+      release_video_call: {
+        Args: { p_consultation_id: string; p_reason: string }
+        Returns: boolean
+      }
+      release_video_reservation: {
+        Args: { p_reason: string; p_reservation_id: string }
+        Returns: boolean
+      }
       renew_subscription_period:
         | {
             Args: { p_charged_period_end: string; p_clinic: string }
@@ -1837,6 +1998,7 @@ export type Database = {
             Returns: string
           }
       request_subscription_cancellation: { Args: never; Returns: Json }
+      reserve_video_call: { Args: { p_appointment_id: string }; Returns: Json }
       revert_subscription_cancellation: { Args: never; Returns: Json }
       schedule_plan_downgrade: {
         Args: { p_plan: Database["public"]["Enums"]["clinic_plan"] }
@@ -1852,6 +2014,10 @@ export type Database = {
         Args: { p_clinic: string }
         Returns: number
       }
+      video_call_price_cents: { Args: never; Returns: number }
+      video_credit_balance: { Args: { p_clinic: string }; Returns: number }
+      video_credits_held: { Args: { p_clinic: string }; Returns: number }
+      video_reservation_attach_timeout: { Args: never; Returns: string }
     }
     Enums: {
       appointment_status:

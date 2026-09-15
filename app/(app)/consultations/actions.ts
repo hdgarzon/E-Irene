@@ -9,6 +9,7 @@ import { getClinicOverview } from "@/lib/db/clinic";
 import { canStartConsultation } from "@/lib/plans";
 import { startConsultation, appendChunk, endConsultation, setAnalysisStatus } from "@/lib/db/consultations";
 import { finalizeTranscriptionSession } from "@/lib/db/transcription-usage";
+import { settleVideoCallOnEnd } from "@/lib/billing/video-access";
 import { updateSuggestion, updateDoctorNotes, validateReport } from "@/lib/db/reports";
 import { upsertSoapNote } from "@/lib/db/soap-notes";
 import { runConsultationAnalysis } from "@/lib/consultation-analysis";
@@ -186,6 +187,21 @@ export async function endConsultationAction(consultationId: string): Promise<voi
     await finalizeTranscriptionSession(consultationId);
   } catch (error) {
     logger.error("transcription_usage.finalize_failed", {
+      clinicId: user.clinicId,
+      actorId: user.id,
+      consultationId,
+      error,
+    });
+  }
+
+  // Videollamada (migración 0058): se descuenta solo si el paciente se conectó. Lo
+  // suele confirmar el webhook de Daily durante la consulta; si no llegó, se consulta
+  // la API de reuniones y, sin confirmación, la reserva se libera. Igual que la
+  // transcripción, un fallo aquí no bloquea el cierre.
+  try {
+    await settleVideoCallOnEnd(consultationId);
+  } catch (error) {
+    logger.error("video.settle_on_end_failed", {
       clinicId: user.clinicId,
       actorId: user.id,
       consultationId,

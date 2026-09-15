@@ -76,6 +76,8 @@ export class DailyVideoProvider implements VideoProvider {
     userName: string;
     isOwner: boolean;
     expiresInSeconds: number;
+    /** Identidad en los eventos y la API de reuniones (lib/video/participant-id.ts). */
+    userId?: string;
   }): Promise<string> {
     const res = await fetch(`${DAILY_API_BASE}/meeting-tokens`, {
       method: "POST",
@@ -88,6 +90,7 @@ export class DailyVideoProvider implements VideoProvider {
           room_name: params.roomName,
           user_name: params.userName,
           is_owner: params.isOwner,
+          ...(params.userId ? { user_id: params.userId } : {}),
           exp: Math.floor(Date.now() / 1000) + params.expiresInSeconds,
         },
       }),
@@ -101,5 +104,38 @@ export class DailyVideoProvider implements VideoProvider {
       throw new Error("Daily.co (meeting-tokens) respondió 200 sin token");
     }
     return data.token;
+  }
+
+  /**
+   * Participantes de las reuniones de una sala desde `sinceUnix` (GET /v1/meetings).
+   * Daily registra a quien estuvo al menos 10 segundos, con ~15 s de granularidad en
+   * join_time. Respaldo del webhook para saber si el paciente se conectó.
+   */
+  async listMeetingParticipants(params: {
+    roomName: string;
+    sinceUnix: number;
+  }): Promise<{ userId: string | null; joinTime: number; duration: number }[]> {
+    const query = new URLSearchParams({
+      room: params.roomName,
+      timeframe_start: String(params.sinceUnix),
+      limit: "100",
+    });
+    const res = await fetch(`${DAILY_API_BASE}/meetings?${query}`, {
+      headers: { Authorization: `Bearer ${this.apiKey()}` },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Daily.co (meetings) respondió ${res.status}: ${body.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as {
+      data?: { participants?: { user_id?: string | null; join_time?: number; duration?: number }[] }[];
+    };
+    return (data.data ?? []).flatMap((meeting) =>
+      (meeting.participants ?? []).map((p) => ({
+        userId: p.user_id ?? null,
+        joinTime: Number(p.join_time ?? 0),
+        duration: Number(p.duration ?? 0),
+      })),
+    );
   }
 }

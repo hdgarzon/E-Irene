@@ -62,3 +62,18 @@ export async function setClinicSuspended(clinicId: string, suspend: boolean): Pr
   });
   if (error) throw error;
 }
+
+/**
+ * Suma o resta videollamadas del saldo de una clínica (reembolso o cortesía), con nota
+ * obligatoria (platform_adjust_video_credits, migración 0058). Devuelve el saldo nuevo.
+ */
+export async function adjustVideoCredits(clinicId: string, delta: number, note: string): Promise<number> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("platform_adjust_video_credits", {
+    target_clinic: clinicId,
+    p_delta: delta,
+    p_note: note,
+  });
+  if (error) throw error;
+  return Number(data);
+}

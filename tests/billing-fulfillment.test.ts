@@ -136,8 +136,35 @@ describe("fulfillCheckoutPayment", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("un pack de videollamadas se otorga contra su checkout: cantidad y monto los valida la base", async () => {
+    rpc.mockResolvedValue({
+      data: { outcome: "applied", plan: "pro", quantity: 5, already_processed: false },
+      error: null,
+    });
+
+    const result = await fulfillCheckoutPayment(
+      owner({ kind: "video_pack", amountInCents: 4_500_000, quantity: 5 }),
+      { id: "tx-demo-5", amount_in_cents: 4_500_000, payment_source_id: 88 },
+    );
+
+    expect(result).toEqual({ outcome: "applied", kind: "video_pack", plan: "pro", alreadyProcessed: false });
+    expect(rpc).toHaveBeenCalledWith("grant_video_pack", {
+      p_clinic: CLINIC,
+      p_transaction_id: "tx-demo-5",
+      p_checkout_id: CHECKOUT,
+      p_amount: 4_500_000,
+    });
+  });
+
+  it("un pack de videollamadas sin checkout registrado no se otorga", async () => {
+    await expect(
+      fulfillCheckoutPayment(owner({ kind: "video_pack", checkoutId: null }), tx),
+    ).rejects.toThrow("sin checkout");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("un tipo de compra sin cumplimiento lanza en vez de darse por procesado", async () => {
-    await expect(fulfillCheckoutPayment(owner({ kind: "video_pack" }), tx)).rejects.toThrow(
+    await expect(fulfillCheckoutPayment(owner({ kind: "otro" }), tx)).rejects.toThrow(
       "sin cumplimiento",
     );
     expect(rpc).not.toHaveBeenCalled();

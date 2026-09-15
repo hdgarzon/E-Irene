@@ -1,9 +1,17 @@
-import { PLANS, TRANSCRIPTION_PACK, type Plan } from "@/lib/plans";
+import {
+  PLANS,
+  TRANSCRIPTION_PACK,
+  VIDEO_CALL_PRICE_IN_CENTS,
+  videoPackPriceInCents,
+  type Plan,
+  type VideoPackSize,
+} from "@/lib/plans";
 import { logger } from "@/lib/logger";
 import {
   buildBillingReference,
   buildPlanChangeReference,
   buildTranscriptionPackReference,
+  buildVideoPackReference,
 } from "./wompi";
 import { recordCheckout, type CheckoutKind } from "@/lib/db/billing-checkouts";
 import type { UpgradeQuote } from "./proration";
@@ -281,6 +289,41 @@ export async function createTranscriptionPackCheckout(input: {
     details: {
       hours: TRANSCRIPTION_PACK.hours,
       cycle_end: input.cycleEnd,
+      quoted_at: now.toISOString(),
+    },
+  });
+}
+
+/**
+ * Checkout de un pack de videollamadas (migración 0058): 1, 5 o 10 a $9.000 cada una,
+ * sin vencimiento. La base lo otorga una sola vez (grant_video_pack) y vuelve a
+ * comprobar cantidad y monto.
+ */
+export async function createVideoPackCheckout(input: {
+  clinicId: string;
+  plan: Plan;
+  quantity: VideoPackSize;
+  redirectUrl: string;
+  userEmail?: string;
+  now?: Date;
+}): Promise<WompiCheckoutResult> {
+  const now = input.now ?? new Date();
+  const calls = input.quantity === 1 ? "1 videollamada" : `${input.quantity} videollamadas`;
+  return createPaymentLink({
+    clinicId: input.clinicId,
+    kind: "video_pack",
+    plan: input.plan,
+    amountInCents: videoPackPriceInCents(input.quantity),
+    name: `${calls} · E-Irene`,
+    description: `Pack de ${calls} para consultas por video, sin vencimiento`,
+    reference: buildVideoPackReference(input.clinicId, input.quantity),
+    redirectUrl: input.redirectUrl,
+    userEmail: input.userEmail,
+    expiresAt: new Date(now.getTime() + ADDON_LINK_TTL_MS),
+    quantity: input.quantity,
+    details: {
+      calls: input.quantity,
+      unit_price_in_cents: VIDEO_CALL_PRICE_IN_CENTS,
       quoted_at: now.toISOString(),
     },
   });

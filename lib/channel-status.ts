@@ -73,9 +73,12 @@ export function getChannelStatuses(): ChannelStatus[] {
       missing: [
         ...(has("DAILY_API_KEY") ? [] : ["DAILY_API_KEY"]),
         ...(has("NEXT_PUBLIC_SITE_URL") ? [] : ["NEXT_PUBLIC_SITE_URL"]),
+        // Sin él la sala funciona, pero /api/webhooks/daily responde 503: la
+        // videollamada solo se descuenta al cerrar la consulta (API de reuniones).
+        ...(has("DAILY_WEBHOOK_HMAC") ? [] : ["DAILY_WEBHOOK_HMAC"]),
       ],
       impact:
-        "Las salas son falsas (mock.video) y ni el profesional ni el paciente pueden conectarse.",
+        "Las salas son falsas (mock.video) y ni el profesional ni el paciente pueden conectarse. Sin DAILY_WEBHOOK_HMAC, la conexión del paciente no se registra durante la consulta.",
     },
   ];
 }

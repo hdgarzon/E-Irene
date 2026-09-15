@@ -131,6 +131,11 @@ export function buildTranscriptionPackReference(clinicId: string): string {
   return `transcriptionpack-${clinicId}-${Date.now()}`;
 }
 
+/** Referencia de un pack de videollamadas: igual que la bolsa, solo se aplica por su checkout. */
+export function buildVideoPackReference(clinicId: string, quantity: number): string {
+  return `videopack-${clinicId}-${quantity}-${Date.now()}`;
+}
+
 // ── Referencia de los cobros recurrentes ────────────────────────────────────
 //
 // Los cobros recurrentes son transacciones directas con el token guardado, y en

@@ -85,6 +85,18 @@ export async function fulfillCheckoutPayment(
         p_amount: transaction.amount_in_cents,
       });
       break;
+    case "video_pack":
+      if (!owner.checkoutId) {
+        throw new Error("Pago de pack de videollamadas sin checkout registrado");
+      }
+      // Cantidad y monto los vuelve a comprobar la base contra el checkout.
+      response = await admin.rpc("grant_video_pack", {
+        p_clinic: owner.clinicId,
+        p_transaction_id: transaction.id,
+        p_checkout_id: owner.checkoutId,
+        p_amount: transaction.amount_in_cents,
+      });
+      break;
     default:
       // Todavía no hay forma de aplicar este tipo. Se lanza para que el pago no
       // se dé por procesado: queda en billing_events y Wompi lo reintenta.
