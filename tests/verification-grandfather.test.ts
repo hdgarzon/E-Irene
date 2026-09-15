@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DOCUMENTS_BUCKET, LEGACY_VERIFICATION_DEADLINE } from "@/lib/verification";
 import {
@@ -11,10 +11,23 @@ import {
 // no apunta a un stack local. Estas pruebas escriben con service-role y algunas
 // purgan datos clínicos: contra producción serían destructivas.
 import "./helpers/supabase-env";
+import { LOCK_WAIT_MS, lockAcrossRuns } from "./helpers/db-lock";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && SERVICE ? describe : describe.skip;
+
+// El barrido que se ejerce aquí es GLOBAL: con el plazo vencido degrada todas
+// las cuentas heredadas sin documentos de la base, no solo las de cada prueba.
+// Dos corridas de este archivo sobre el mismo Supabase local se degradaban las
+// cuentas recién creadas (14-sep-2026), así que se turnan: ver helpers/db-lock.ts.
+let unlock: (() => Promise<void>) | undefined;
+beforeAll(async () => {
+  if (URL && SERVICE) unlock = await lockAcrossRuns("expire_grandfathered_verifications");
+}, LOCK_WAIT_MS + 10_000);
+afterAll(async () => {
+  await unlock?.();
+});
 
 /**
  * Vencimiento de las verificaciones heredadas (migración 0040).
