@@ -71,20 +71,28 @@ export interface PurgeResult {
  * transcripciones— porque borrar filas de `storage.objects` desde SQL dejaría
  * los archivos huérfanos en el almacenamiento real. Hay que pasar por la API
  * de Storage.
+ *
+ * @param options.clinicId limita la purga a una clínica. Las pruebas lo usan
+ *   para no purgar las filas de otras suites que corren en paralelo.
  */
-export async function purgeExpiredVerificationDocuments(): Promise<PurgeResult> {
+export async function purgeExpiredVerificationDocuments(
+  options: { clinicId?: string } = {},
+): Promise<PurgeResult> {
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - DOCUMENT_RETENTION_DAYS * 86400000).toISOString();
 
-  const { data: expired, error } = await admin
+  let query = admin
     .from("users")
-    .select("id, clinic_id, id_document_path, license_document_path")
+    .select("id, clinic_id, id_document_path, license_document_path, documents_purged_at")
     // Sin marca de purga, o con rutas vigentes aunque la tenga: una fila que
     // volvió a declarar documentos después de una purga anterior también debe
     // borrarlos a los 30 días de su nueva decisión.
     .or("documents_purged_at.is.null,id_document_path.not.is.null,license_document_path.not.is.null")
     .not("verification_decided_at", "is", null)
     .lt("verification_decided_at", cutoff);
+  if (options.clinicId) query = query.eq("clinic_id", options.clinicId);
+
+  const { data: expired, error } = await query;
   if (error) throw error;
 
   const result: PurgeResult = { candidates: expired?.length ?? 0, purged: 0, filesDeleted: 0 };
@@ -103,22 +111,39 @@ export async function purgeExpiredVerificationDocuments(): Promise<PurgeResult> 
         logger.error("verification_docs.remove_failed", { userId: user.id, error: removeError });
         continue;
       }
-      result.filesDeleted += paths.length;
     }
 
-    const { error: updateError } = await admin
+    // Condicional sobre lo que se leyó: dos corridas simultáneas leen la misma
+    // fila, y sin esto las dos la marcaban y las dos acreditaban su purga en
+    // audit_logs. Solo la acredita la que de verdad la cambió; si otra ya la
+    // marcó, o la fila cambió entre tanto (un reenvío, una nueva decisión), no
+    // coincide nada y no se toca.
+    let mark = admin
       .from("users")
       .update({
         id_document_path: null,
         license_document_path: null,
         documents_purged_at: new Date().toISOString(),
       })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .lt("verification_decided_at", cutoff);
+    mark = user.id_document_path
+      ? mark.eq("id_document_path", user.id_document_path)
+      : mark.is("id_document_path", null);
+    mark = user.license_document_path
+      ? mark.eq("license_document_path", user.license_document_path)
+      : mark.is("license_document_path", null);
+    mark = user.documents_purged_at
+      ? mark.eq("documents_purged_at", user.documents_purged_at)
+      : mark.is("documents_purged_at", null);
+    const { data: marked, error: updateError } = await mark.select("id");
     if (updateError) {
       logger.error("verification_docs.mark_failed", { userId: user.id, error: updateError });
       continue;
     }
+    if (!marked || marked.length === 0) continue;
 
+    result.filesDeleted += paths.length;
     result.purged += 1;
     purgedByClinic.set(user.clinic_id, (purgedByClinic.get(user.clinic_id) ?? 0) + 1);
   }
