@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 import { BILLING_GRACE_DAYS } from "@/lib/billing/subscription-state";
@@ -35,6 +35,9 @@ function daysAgo(days: number): string {
   return new Date(Math.floor((Date.now() - days * DAY) / 1000) * 1000).toISOString();
 }
 
+/** Clínicas que crea este archivo, para sacarlas del cobro al terminar. */
+const createdClinicIds: string[] = [];
+
 async function bootstrapClinic(name: string) {
   const client = anon();
   const email = `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@e-irene.test`;
@@ -45,6 +48,7 @@ async function bootstrapClinic(name: string) {
     full_name: "Doctor Test",
   });
   expect(rpcErr).toBeNull();
+  createdClinicIds.push(clinicId as string);
   return { client, clinicId: clinicId as string };
 }
 
@@ -85,6 +89,30 @@ async function auditMetadata(clinicId: string, action: string) {
 }
 
 d("gracia por impago", () => {
+  // La base local es compartida y no se reinicia entre corridas. Sin esto, las
+  // clínicas que quedan con plan pago, período y token entran al cobro recurrente
+  // de todas las corridas siguientes; y si la corrida usó otra ENCRYPTION_KEY,
+  // su token ya no descifra con ninguna otra.
+  afterAll(async () => {
+    if (createdClinicIds.length === 0) return;
+    const { error, count } = await service()
+      .from("clinics")
+      .update(
+        {
+          plan: "free",
+          billing_status: "sin_configurar",
+          current_period_end: null,
+          cancel_at_period_end: false,
+          cancel_requested_at: null,
+          wompi_payment_source_id_enc: null,
+        },
+        { count: "exact" },
+      )
+      .in("id", createdClinicIds);
+    expect(error).toBeNull();
+    expect(count).toBe(createdClinicIds.length);
+  }, 30000);
+
   it("billing_grace_period() coincide con el plazo que muestra la interfaz", async () => {
     const { data, error } = await service().rpc("billing_grace_period");
     expect(error).toBeNull();
