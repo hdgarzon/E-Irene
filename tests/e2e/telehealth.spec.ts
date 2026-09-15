@@ -214,8 +214,14 @@ test("telehealth: paciente entra a /join/[token] sin sesión (válido, inválido
   // de estado vive en la agenda, no en la consulta en vivo donde quedó `page`
   // tras "iniciar videollamada".
   await page.goto("/appointments");
-  await page.getByRole("button", { name: /Agendada/ }).click();
-  await page.getByRole("menuitem", { name: "Cancelada" }).click();
+  // Viniendo de la consulta en vivo, /appointments puede tardar en hidratar y el
+  // primer clic cae en un botón todavía sin manejador: se repite hasta que abre.
+  const cancelada = page.getByRole("menuitem", { name: "Cancelada" });
+  await expect(async () => {
+    await page.getByRole("button", { name: /Agendada/ }).click();
+    await expect(cancelada).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+  await cancelada.click();
   await expect(page.getByRole("button", { name: /Cancelada/ })).toBeVisible();
 
   await patientPage.goto(`/join/${token}`);
