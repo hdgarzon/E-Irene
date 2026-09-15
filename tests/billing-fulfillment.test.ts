@@ -29,7 +29,12 @@ function owner(overrides: Record<string, unknown> = {}) {
   } as Parameters<typeof fulfillCheckoutPayment>[0];
 }
 
-const tx = { id: "tx-demo-1", amount_in_cents: 9_900_000, payment_source_id: 55 };
+const tx = {
+  id: "tx-demo-1",
+  amount_in_cents: 9_900_000,
+  payment_source_id: 55,
+  created_at: "2026-09-15T15:00:00.000Z",
+};
 
 beforeEach(() => {
   rpc.mockReset().mockResolvedValue({
@@ -43,7 +48,7 @@ afterEach(() => {
 });
 
 describe("fulfillCheckoutPayment", () => {
-  it("la compra de un plan se valida contra el precio vigente de lib/plans.ts", async () => {
+  it("la compra de un plan con link se valida contra el monto del link, no contra el precio vigente", async () => {
     const result = await fulfillCheckoutPayment(owner(), tx);
 
     expect(result).toEqual({ outcome: "applied", kind: "plan", plan: "pro", alreadyProcessed: false });
@@ -53,10 +58,20 @@ describe("fulfillCheckoutPayment", () => {
       p_checkout_id: CHECKOUT,
       p_plan: "pro",
       p_amount: 9_900_000,
-      p_expected_amount: PLANS.pro.priceInCents,
+      p_expected_amount: undefined,
       // El token del medio de pago nunca viaja en claro.
       p_payment_source_enc: "enc(55)",
+      // Con ella la base comprueba que el link no había vencido.
+      p_transaction_created_at: "2026-09-15T15:00:00.000Z",
     });
+  });
+
+  it("un pago sin checkout (referencia propia) se valida contra el precio vigente de lib/plans.ts", async () => {
+    await fulfillCheckoutPayment(owner({ checkoutId: null }), tx);
+    expect(rpc).toHaveBeenCalledWith(
+      "fulfill_plan_purchase",
+      expect.objectContaining({ p_checkout_id: undefined, p_expected_amount: PLANS.pro.priceInCents }),
+    );
   });
 
   it("un plan a convenir llega sin precio esperado: la base lo rechaza", async () => {
@@ -93,6 +108,7 @@ describe("fulfillCheckoutPayment", () => {
       p_checkout_id: CHECKOUT,
       p_amount: 5_000_000,
       p_payment_source_enc: undefined,
+      p_transaction_created_at: undefined,
     });
   });
 

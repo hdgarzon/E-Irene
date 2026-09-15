@@ -15,7 +15,7 @@ import {
 import { hasOpenRenewalCharge } from "@/lib/db/billing";
 import { canAddDoctor, limitLabel, PLANS, TRANSCRIPTION_PACK, type Plan } from "@/lib/plans";
 import { subscriptionState } from "@/lib/billing/subscription-state";
-import { isPaidPlanDowngrade, isPaidPlanUpgrade, quotePlanUpgrade } from "@/lib/billing/proration";
+import { planChangeOption } from "@/lib/billing/plan-change";
 import { transcriptionPackAvailability } from "@/lib/billing/transcription-pack";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
@@ -96,41 +96,39 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   const user = await requireRole(["admin", "doctor"]);
   const overview = await getClinicOverview();
   const state = subscriptionState(overview.plan, overview.subscription);
-  // Volver a pagar el plan actual solo tiene sentido si su renovación no se pudo
-  // cobrar: es la salida de la gracia (lib/billing/subscription-state.ts).
-  if (overview.plan === plan && state.kind !== "overdue") {
-    redirect("/settings/plan");
-  }
-
-  // Los planes a convenir (Enterprise) no se venden por la app: se acuerdan por
-  // contrato y los asigna la consola.
-  const { priceInCents } = PLANS[plan];
-  if (priceInCents === null) {
-    redirect("/settings/plan");
-  }
+  // La misma regla que decide el botón de /settings/plan (lib/billing/plan-change.ts):
+  // si divergen, la pantalla ofrece algo que esta acción rechaza, o al revés.
+  const option = planChangeOption({
+    current: overview.plan,
+    target: plan,
+    state,
+    anchor: overview.billingCycleAnchor,
+    isAdmin: user.role === "admin",
+  });
 
   // Pasar a Free no es un cambio de plan sino cancelar la suscripción, que
   // conserva lo pagado hasta el fin del período (cancelSubscriptionAction). Antes
   // bajaba el plan al instante, perdiendo el resto del período ya cobrado.
-  if (priceInCents <= 0) {
-    redirect("/settings/plan#suscripcion");
+  if (option.kind === "free") redirect("/settings/plan#suscripcion");
+
+  if (option.kind === "blocked" && option.reason === "no_quote") {
+    logger.error("billing.upgrade_quote_unavailable", {
+      clinicId: user.clinicId,
+      fromPlan: overview.plan,
+      toPlan: plan,
+      anchor: overview.billingCycleAnchor,
+      periodEnd: overview.subscription.currentPeriodEnd,
+    });
+    redirect("/settings/plan?cambio=no_cotizable");
   }
 
-  // Con un período pagado vigente, cambiar entre planes pagos no vuelve a cobrar
-  // un mes completo ni mueve la fecha de renovación: subir cobra la diferencia
-  // por lo que queda del ciclo y bajar se programa para la renovación
-  // (schedulePlanDowngradeAction). Comprar el plan completo reiniciaba el ciclo y
-  // se perdía lo ya pagado.
-  const paidPeriodEnd =
-    state.kind === "renewing" || state.kind === "canceling" ? state.periodEnd : null;
-  if (paidPeriodEnd && isPaidPlanDowngrade(overview.plan, plan)) {
-    redirect("/settings/plan");
-  }
-  const prorated = paidPeriodEnd !== null && isPaidPlanUpgrade(overview.plan, plan);
+  // Plan actual, a convenir (se acuerda por contrato), downgrade (se programa con
+  // schedulePlanDowngradeAction) o bloqueado: aquí no hay nada que cobrar.
+  if (option.kind !== "upgrade" && option.kind !== "purchase") redirect("/settings/plan");
 
-  // Un cobro de renovación sin desenlace (PSE, Nequi) es del plan actual: si se
-  // aprueba después de subir de plan, la renovación no sabría qué aplicar.
-  if (prorated && (await hasOpenRenewalCharge(user.clinicId))) {
+  // Un cobro de renovación sin desenlace (PSE, Nequi) ya fijó el plan de la
+  // renovación: la base rechazaría el pago del upgrade (apply_plan_upgrade).
+  if (option.kind === "upgrade" && (await hasOpenRenewalCharge(user.clinicId))) {
     redirect("/settings/plan?cambio=renovacion_en_curso");
   }
 
@@ -147,49 +145,33 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
   // ?wompi=error. Ver docs de Next.js (redirect): "redirect should be called
   // outside the try block when using try/catch statements".
   let checkoutUrl: string | null = null;
-  let quoteUnavailable = false;
   try {
-    if (prorated) {
-      const quote = quotePlanUpgrade({
-        fromPlan: overview.plan,
-        toPlan: plan,
-        anchor: overview.billingCycleAnchor,
-        periodEnd: paidPeriodEnd,
+    if (option.kind === "upgrade") {
+      const { quote } = option;
+      const checkout = await createUpgradeCheckout({
+        clinicId: user.clinicId,
+        quote,
+        scheduledPlan: option.replacesScheduledPlan,
+        redirectUrl,
+        userEmail: user.email,
       });
-      if (!quote) {
-        // El período no coincide con un ciclo del ancla: no se cotiza a ciegas.
-        quoteUnavailable = true;
-        logger.error("billing.upgrade_quote_unavailable", {
-          clinicId: user.clinicId,
-          fromPlan: overview.plan,
-          toPlan: plan,
-          anchor: overview.billingCycleAnchor,
-          periodEnd: paidPeriodEnd,
-        });
-      } else {
-        const checkout = await createUpgradeCheckout({
-          clinicId: user.clinicId,
-          quote,
-          redirectUrl,
-          userEmail: user.email,
-        });
-        await logAudit({
-          clinicId: user.clinicId,
-          actorId: user.id,
-          action: "billing.upgrade_checkout_initiated",
-          entityType: "clinic",
-          entityId: user.clinicId,
-          metadata: {
-            fromPlan: quote.fromPlan,
-            toPlan: quote.toPlan,
-            amountInCents: quote.amountInCents,
-            periodEnd: quote.periodEnd,
-            reference: checkout.reference,
-            paymentLinkId: checkout.paymentLinkId,
-          },
-        });
-        checkoutUrl = checkout.checkoutUrl;
-      }
+      await logAudit({
+        clinicId: user.clinicId,
+        actorId: user.id,
+        action: "billing.upgrade_checkout_initiated",
+        entityType: "clinic",
+        entityId: user.clinicId,
+        metadata: {
+          fromPlan: quote.fromPlan,
+          toPlan: quote.toPlan,
+          amountInCents: quote.amountInCents,
+          periodEnd: quote.periodEnd,
+          replacesScheduledPlan: option.replacesScheduledPlan,
+          reference: checkout.reference,
+          paymentLinkId: checkout.paymentLinkId,
+        },
+      });
+      checkoutUrl = checkout.checkoutUrl;
     } else {
       const checkout = await createWompiCheckout({
         clinicId: user.clinicId,
@@ -212,12 +194,11 @@ export async function initiatePlanUpgradeAction(plan: Plan): Promise<void> {
       clinicId: user.clinicId,
       actorId: user.id,
       plan,
-      prorated,
+      kind: option.kind,
       error,
     });
   }
 
-  if (quoteUnavailable) redirect("/settings/plan?cambio=no_cotizable");
   if (!checkoutUrl) redirect("/settings/plan?wompi=error");
   redirect(checkoutUrl);
 }
@@ -301,6 +282,8 @@ export async function schedulePlanDowngradeAction(plan: Plan): Promise<void> {
       notice = "programado";
     } else if (result.status === "canceling") {
       notice = "cancelacion_pendiente";
+    } else if (result.status === "renewal_in_progress") {
+      notice = "renovacion_en_curso";
     }
   } catch (error) {
     logger.error("subscription.downgrade_failed", {
@@ -327,6 +310,12 @@ export async function cancelScheduledPlanChangeAction(): Promise<SubscriptionSta
       actorId: user.id,
       status,
     });
+    if (status === "renewal_in_progress") {
+      return {
+        error:
+          "Hay un cobro de renovación en proceso con el plan programado. Cuando se confirme podrás volver a cambiar de plan.",
+      };
+    }
   } catch (error) {
     logger.error("subscription.downgrade_cancel_failed", {
       clinicId: user.clinicId,

@@ -7,6 +7,7 @@ import {
 } from "./wompi";
 import { recordCheckout, type CheckoutKind } from "@/lib/db/billing-checkouts";
 import type { UpgradeQuote } from "./proration";
+import { toWompiUtcTimestamp } from "@/lib/dates";
 
 const WOMPI_BASE = {
   sandbox: "https://sandbox.wompi.co/v1",
@@ -25,16 +26,18 @@ const WOMPI_CHECKOUT_BASE = "https://checkout.wompi.co/l";
 export const UPGRADE_LINK_TTL_MS = 30 * 60 * 1000;
 
 /**
- * Vigencia del link de un adicional (bolsa de transcripción). No es una cotización,
- * pero un link abierto sin fecha permitiría pagar meses después al precio de hoy.
+ * Vigencia del link de una compra por precio completo o de un adicional (bolsa de
+ * transcripción). Un link abierto sin fecha permitiría pagar meses después, con otro
+ * precio o con la suscripción ya renovada.
  */
-export const ADDON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
+export const PURCHASE_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface WompiCheckoutInput {
   clinicId: string;
   plan: Plan;
   redirectUrl: string;
   userEmail?: string;
+  now?: Date;
 }
 
 export interface WompiCheckoutResult {
@@ -53,11 +56,6 @@ function getPrivateKey(): string {
   const key = process.env.WOMPI_PRIVATE_KEY;
   if (!key) throw new Error("WOMPI_PRIVATE_KEY no está configurada");
   return key;
-}
-
-/** `expires_at` como lo documenta Wompi: ISO 8601 en UTC, sin zona ("2040-12-10T14:30:00"). */
-export function wompiExpiresAt(date: Date): string {
-  return date.toISOString().slice(0, 19);
 }
 
 interface PaymentLinkInput {
@@ -99,7 +97,7 @@ async function createPaymentLink(input: PaymentLinkInput): Promise<WompiCheckout
     reference: input.reference,
     redirect_url: input.redirectUrl,
     customer_email: input.userEmail ?? undefined,
-    ...(input.expiresAt ? { expires_at: wompiExpiresAt(input.expiresAt) } : {}),
+    ...(input.expiresAt ? { expires_at: toWompiUtcTimestamp(input.expiresAt) } : {}),
   };
 
   const res = await fetch(`${getBaseUrl()}/payment_links`, {
@@ -210,6 +208,7 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
     reference: buildBillingReference(input.clinicId, input.plan),
     redirectUrl: input.redirectUrl,
     userEmail: input.userEmail,
+    expiresAt: new Date((input.now ?? new Date()).getTime() + PURCHASE_LINK_TTL_MS),
   });
 }
 
@@ -221,6 +220,8 @@ export async function createWompiCheckout(input: WompiCheckoutInput): Promise<Wo
 export async function createUpgradeCheckout(input: {
   clinicId: string;
   quote: UpgradeQuote;
+  /** Downgrade programado al cotizar: pagar lo anula, y la base exige que siga igual. */
+  scheduledPlan?: Plan | null;
   redirectUrl: string;
   userEmail?: string;
   now?: Date;
@@ -246,6 +247,7 @@ export async function createUpgradeCheckout(input: {
       to_plan: quote.toPlan,
       period_end: quote.periodEnd,
       cycle_start: quote.cycleStart,
+      scheduled_plan: input.scheduledPlan ?? null,
       quoted_at: now.toISOString(),
     },
   });
@@ -276,7 +278,7 @@ export async function createTranscriptionPackCheckout(input: {
     reference: buildTranscriptionPackReference(input.clinicId),
     redirectUrl: input.redirectUrl,
     userEmail: input.userEmail,
-    expiresAt: new Date(now.getTime() + ADDON_LINK_TTL_MS),
+    expiresAt: new Date(now.getTime() + PURCHASE_LINK_TTL_MS),
     quantity: 1,
     details: {
       hours: TRANSCRIPTION_PACK.hours,

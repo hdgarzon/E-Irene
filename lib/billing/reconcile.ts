@@ -35,6 +35,7 @@ export interface WompiTransaction {
   reference: string;
   payment_method_type?: string;
   payment_link_id?: string | null;
+  created_at?: string;
   /** No está documentado que la consulta lo devuelva; se usa si aparece. */
   payment_source_id?: number | string | null;
 }

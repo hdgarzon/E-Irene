@@ -270,15 +270,19 @@ describe("createUpgradeCheckout", () => {
     );
   });
 
-  it("la compra de un plan completo no vence ni lleva cotización", async () => {
+  it("la compra de un plan completo vence en 24 horas y no lleva cotización", async () => {
+    // Pagado meses después, cobraría otro precio o una suscripción ya renovada.
     await createWompiCheckout({
       clinicId: CLINIC,
       plan: "pro",
       redirectUrl: "https://e-irene.co/settings/plan",
+      now: new Date("2026-09-15T15:00:00Z"),
     });
     const body = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
-    expect(body.expires_at).toBeUndefined();
-    expect(recordCheckout).toHaveBeenCalledWith(expect.objectContaining({ kind: "plan" }));
+    expect(body.expires_at).toBe("2026-09-16T15:00:00");
+    expect(recordCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "plan", expiresAt: "2026-09-16T15:00:00.000Z", details: undefined }),
+    );
   });
 });
 
