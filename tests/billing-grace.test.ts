@@ -6,6 +6,7 @@ import { BILLING_GRACE_DAYS } from "@/lib/billing/subscription-state";
 // Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
 // no apunta a un stack local. Estas pruebas escriben con service-role.
 import "./helpers/supabase-env";
+import { LOCK_WAIT_MS, lockAcrossRuns, SUBSCRIPTION_SWEEPS_LOCK } from "./helpers/db-lock";
 
 /**
  * Gracia por impago (migración 0042), contra Supabase local.
@@ -19,6 +20,19 @@ const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && ANON && SERVICE ? describe : describe.skip;
+
+// El barrido que se ejerce aquí es GLOBAL, igual que end_canceled_subscriptions
+// en billing-cycle.test.ts, y cada archivo siembra clínicas que alcanza el barrido
+// del otro. Vitest los corre en paralelo, así que se turnan: ver
+// SUBSCRIPTION_SWEEPS_LOCK en helpers/db-lock.ts. Se suelta después de la
+// limpieza de abajo, con las clínicas de este archivo ya fuera de su alcance.
+let unlock: (() => Promise<void>) | undefined;
+beforeAll(async () => {
+  if (URL && ANON && SERVICE) unlock = await lockAcrossRuns(SUBSCRIPTION_SWEEPS_LOCK);
+}, LOCK_WAIT_MS + 10_000);
+afterAll(async () => {
+  await unlock?.();
+});
 
 const DAY = 24 * 60 * 60 * 1000;
 
