@@ -1,10 +1,11 @@
 # Memo para revisión legal — E-Irene
 
 **Fecha:** 6 de agosto de 2026
+**Actualizado:** 15 de septiembre de 2026 — se agrega el borrador de condiciones del servicio, con cambios de plan, bolsa de horas y videollamadas
 **Para:** [NOMBRE DE LA ABOGADA]
-**Asunto:** Borradores preliminares — constitución societaria y cumplimiento en protección de datos
+**Asunto:** Borradores preliminares — constitución societaria, cumplimiento en protección de datos y condiciones de la suscripción
 
-> Los cuatro documentos que acompañan este memo son **borradores técnicos preparados por el
+> Los cinco documentos que acompañan este memo son **borradores técnicos preparados por el
 > equipo de producto**, no conceptos jurídicos. Están redactados para ahorrarte la etapa de
 > levantamiento de información: describen con precisión qué hace la plataforma, qué datos toca
 > y con qué proveedores. Todo lo que requiere criterio jurídico quedó marcado con `[ ]`.
@@ -55,6 +56,7 @@ valida, lo que apunta a encargo — pero es la decisión con más consecuencias 
 | `politica-tratamiento-datos-borrador.md` | Política de Tratamiento (Ley 1581/2012, Decreto 1074/2015) | Requiere datos del Responsable |
 | `aviso-privacidad-borrador.md` | Aviso de Privacidad (versión corta para la app) | Derivado de la política |
 | `consentimiento-profesional-borrador.md` | Términos de vinculación + acuerdo de encargo | Requiere definir límite de responsabilidad |
+| `condiciones-servicio-borrador.md` | Condiciones del servicio y de la suscripción: planes, cobro, renovación, cambios de plan, adicionales (bolsa de horas y videollamadas) y cancelación. Se aceptan al pagar | Añadido en septiembre de 2026. Requiere las decisiones de su anexo |
 
 ## 4. Hallazgos técnicos que motivaron este trabajo
 
@@ -169,6 +171,16 @@ El aviso está publicado en `/privacidad`, accesible **sin necesidad de iniciar 
    con lo que hay, o necesitamos un documento diferenciado?
 6. **Vesting de fundadores.** Lo dejamos previsto en estatutos, pero suele ir en un **acuerdo de
    accionistas** (art. 24, Ley 1258 de 2008). ¿Cuál prefieres?
+7. **La suscripción frente al Estatuto del Consumidor.** Los planes pagos son una suscripción
+   mensual con renovación automática, contratada en línea. ¿El profesional que contrata un plan
+   para su consultorio es consumidor (art. 5, Ley 1480 de 2011)? Si lo es, ¿aplican el derecho de
+   retracto (art. 47), o alguna de sus excepciones, y los deberes de información del comercio
+   electrónico (art. 50)? Está desarrollado en `condiciones-servicio-borrador.md`, cláusulas
+   PRIMERA, TERCERA y DÉCIMA.
+8. **IVA y facturación de los planes.** ¿El servicio causa IVA y los precios publicados deben
+   incluirlo? ¿Qué obligación de factura electrónica tiene cada cobro? Hoy la plataforma cobra el
+   valor publicado, sin impuestos adicionales, y no emite factura. Si prefieres que lo defina el
+   contador, basta con que lo indiques.
 
 ---
 
