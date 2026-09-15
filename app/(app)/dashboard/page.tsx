@@ -13,8 +13,13 @@ import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listTodayAppointments } from "@/lib/db/appointments";
 import { countPendingReports } from "@/lib/db/reports";
-import { listOpenRiskAlerts, type RiskAlert } from "@/lib/db/risk-alerts";
-import { listPhq9RiskAlerts, type Phq9RiskAlert } from "@/lib/db/assessments";
+import {
+  listOpenRiskAlerts,
+  reconcilePendingPhq9RiskAlerts,
+  type Phq9ReconcileResult,
+  type RiskAlert,
+  type RiskAlertQueue,
+} from "@/lib/db/risk-alerts";
 import { countPatientsWithoutConsent } from "@/lib/db/consents";
 import { getClinicSubscription } from "@/lib/db/clinic";
 import { getMyVerification } from "@/lib/db/verification";
@@ -36,10 +41,32 @@ const APPT_STATUS_LABEL: Record<string, string> = {
   no_show: "No asistió",
 };
 
+/** Alertas por fuente en la vista normal del dashboard. */
+const RISK_ALERT_PREVIEW = 5;
+/**
+ * Tope por fuente de la cola completa (`?alerts=all`). Si alguna vez se
+ * supera, la página dice cuántas quedan sin mostrar.
+ */
+const RISK_ALERT_FULL_QUEUE = 200;
+const EMPTY_QUEUE: RiskAlertQueue = { alerts: [], total: 0 };
+
 async function patientCount(): Promise<number> {
   const supabase = await createClient();
   const { count } = await supabase.from("patients").select("*", { count: "exact", head: true });
   return count ?? 0;
+}
+
+function AcknowledgeRiskAlertButton({ alertId }: { alertId: string }) {
+  return (
+    <form action={acknowledgeRiskAlertAction.bind(null, alertId)}>
+      <button
+        type="submit"
+        className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-mint"
+      >
+        Acusar recibo
+      </button>
+    </form>
+  );
 }
 
 function SessionRiskAlertItem({ alert, href }: { alert: RiskAlert; href: string }) {
@@ -48,33 +75,35 @@ function SessionRiskAlertItem({ alert, href }: { alert: RiskAlert; href: string 
       <Link href={href} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <span className="font-medium text-navy">{alert.patientName}</span>
         <span className="flex flex-wrap gap-1.5">
-          {alert.categories.map((c) => (
-            <Badge
-              key={c.key}
-              variant="secondary"
-              className={cn(
-                "text-[11px]",
-                c.level === "alto" ? "bg-coral/15 text-destructive" : "bg-amber-100 text-amber-800",
-              )}
-            >
-              {RISK_CATEGORY_LABEL[c.key]} · {c.level}
+          {alert.categories ? (
+            alert.categories.map((c) => (
+              <Badge
+                key={c.key}
+                variant="secondary"
+                className={cn(
+                  "text-[11px]",
+                  c.level === "alto" ? "bg-coral/15 text-destructive" : "bg-amber-100 text-amber-800",
+                )}
+              >
+                {RISK_CATEGORY_LABEL[c.key]} · {c.level}
+              </Badge>
+            ))
+          ) : (
+            // No descifró (ver listOpenRiskAlerts): la alerta sigue abierta y se muestra igual.
+            <Badge variant="secondary" className="text-[11px]">
+              Detalle no disponible
             </Badge>
-          ))}
+          )}
         </span>
       </Link>
-      <form action={acknowledgeRiskAlertAction.bind(null, alert.id)}>
-        <button
-          type="submit"
-          className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-mint"
-        >
-          Acusar recibo
-        </button>
-      </form>
+      <AcknowledgeRiskAlertButton alertId={alert.id} />
     </li>
   );
 }
 
-function Phq9RiskAlertItem({ alert }: { alert: Phq9RiskAlert }) {
+function Phq9RiskAlertItem({ alert }: { alert: RiskAlert }) {
+  // Esta fuente no tiene consulta (consultationId es null): se enlaza a la
+  // ficha del paciente, donde está el historial de escalas.
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm">
       <Link href={`/patients/${alert.patientId}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -83,13 +112,101 @@ function Phq9RiskAlertItem({ alert }: { alert: Phq9RiskAlert }) {
           Autolesión · PHQ-9
         </Badge>
       </Link>
+      <AcknowledgeRiskAlertButton alertId={alert.id} />
     </li>
   );
 }
 
-export default async function DashboardPage() {
+/**
+ * Lo que la lista no muestra. En la vista normal enlaza a la cola completa;
+ * en la cola completa solo aparece si se supera el tope, y dice cuántas faltan.
+ */
+function HiddenRiskAlerts({
+  queue,
+  showAll,
+  anchor,
+  label,
+}: {
+  queue: RiskAlertQueue;
+  showAll: boolean;
+  anchor: string;
+  label: string;
+}) {
+  const hidden = queue.total - queue.alerts.length;
+  if (hidden <= 0) return null;
+  const noun = hidden === 1 ? "alerta" : "alertas";
+  if (showAll) {
+    return (
+      <p className="mt-2 text-xs font-medium text-destructive">
+        Se muestran las {queue.alerts.length} más recientes: hay {hidden} {noun} {label} más{" "}
+        {hidden === 1 ? "antigua" : "antiguas"} sin mostrar.
+      </p>
+    );
+  }
+  return (
+    <Link
+      href={`/dashboard?alerts=all#${anchor}`}
+      className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
+    >
+      Ver {hidden} {noun} más {label}
+    </Link>
+  );
+}
+
+/**
+ * La cola PHQ-9 solo está completa si la conciliación registró cada PHQ-9 de
+ * riesgo. Si no pudo, la página lo dice en vez de mostrar como completa una
+ * cola a la que le pueden faltar alertas.
+ */
+function Phq9CheckNotice({ check }: { check: Phq9ReconcileResult | null }) {
+  if (check && check.failed === 0) return null;
+  const what = !check
+    ? "No se pudo comprobar si hay cuestionarios PHQ-9 con riesgo sin registrar"
+    : check.failed === 1
+      ? "No se pudo revisar 1 cuestionario PHQ-9 en busca de riesgo"
+      : `No se pudieron revisar ${check.failed} cuestionarios PHQ-9 en busca de riesgo`;
+  return (
+    <p
+      role="alert"
+      className="mt-4 flex items-start gap-2 rounded-xl border border-coral/40 bg-card p-3 text-xs text-destructive"
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <span>
+        {what}: puede haber alertas que todavía no aparecen aquí. Recarga la página; si el aviso
+        sigue, contacta a soporte.
+      </span>
+    </p>
+  );
+}
+
+/**
+ * Cola PHQ-9: primero concilia, para que todo PHQ-9 de riesgo tenga su alerta
+ * en risk_alerts (ver reconcilePendingPhq9RiskAlerts), y recién después la
+ * lee. Si la conciliación falla, la cola se lee igual y la página lo avisa.
+ */
+async function loadPhq9Queue(
+  clinicId: string,
+  limit: number,
+): Promise<{ queue: RiskAlertQueue; check: Phq9ReconcileResult | null }> {
+  let check: Phq9ReconcileResult | null = null;
+  try {
+    check = await reconcilePendingPhq9RiskAlerts(clinicId);
+  } catch (error) {
+    logger.error("dashboard.phq9_reconcile_failed", { clinicId, error });
+  }
+  return { queue: await listOpenRiskAlerts("phq9_self_report", limit), check };
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ alerts?: string }>;
+}) {
   const user = await getSessionUser();
   const isClinician = user?.role === "admin" || user?.role === "doctor";
+  const { alerts: alertsView } = await searchParams;
+  const showAllAlerts = alertsView === "all";
+  const alertLimit = showAllAlerts ? RISK_ALERT_FULL_QUEUE : RISK_ALERT_PREVIEW;
 
   // Solo el personal clínico ve contenido de reportes/riesgo (la secretaría no).
   const [
@@ -97,8 +214,8 @@ export default async function DashboardPage() {
     todayAppts,
     pendingReports,
     patientsNoConsent,
-    persistedAlerts,
-    phq9Alerts,
+    sessionAlerts,
+    phq9,
     billing,
     verification,
   ] =
@@ -107,8 +224,14 @@ export default async function DashboardPage() {
       listTodayAppointments(),
       isClinician ? countPendingReports() : Promise.resolve(0),
       countPatientsWithoutConsent(),
-      isClinician ? listOpenRiskAlerts() : Promise.resolve<RiskAlert[]>([]),
-      isClinician ? listPhq9RiskAlerts() : Promise.resolve<Phq9RiskAlert[]>([]),
+      // Una consulta por fuente, cada una con su total: el encabezado suma
+      // totales reales y cada lista dice cuántas deja fuera. Filtrar por fuente
+      // en la base también evita que una alerta PHQ-9 (consultationId null)
+      // termine con un enlace roto a /consultations/null.
+      isClinician
+        ? listOpenRiskAlerts("session_analysis", alertLimit)
+        : Promise.resolve(EMPTY_QUEUE),
+      isClinician && user ? loadPhq9Queue(user.clinicId, alertLimit) : Promise.resolve(null),
       // El aviso de cobro nunca debe tumbar el dashboard, que es donde están las
       // alertas de riesgo: si la consulta falla, se registra y la página sigue.
       isClinician
@@ -127,12 +250,9 @@ export default async function DashboardPage() {
         : Promise.resolve(null),
     ]);
 
-  // listOpenRiskAlerts() ya trae AMBAS fuentes (unificadas en risk_alerts,
-  // ver migración 0026) — hay que filtrar antes de renderizar como "De
-  // consultas (IA)", si no, una alerta phq9_self_report con
-  // consultationId=null termina con un link roto a /consultations/null.
-  const sessionAlerts = persistedAlerts.filter((a) => a.source === "session_analysis");
-  const allRiskAlerts = [...sessionAlerts, ...phq9Alerts];
+  const phq9Alerts = phq9?.queue ?? EMPTY_QUEUE;
+  const phq9CheckIncomplete = phq9 !== null && (phq9.check === null || phq9.check.failed > 0);
+  const totalRiskAlerts = sessionAlerts.total + phq9Alerts.total;
 
   const firstName = user?.fullName.split(" ")[0] ?? "";
 
@@ -165,24 +285,29 @@ export default async function DashboardPage() {
       {billing && <BillingOverdueBanner plan={billing.plan} subscription={billing.subscription} />}
 
       {/* Alertas de riesgo — lo más importante arriba */}
-      {isClinician && allRiskAlerts.length > 0 && (
+      {isClinician && (totalRiskAlerts > 0 || phq9CheckIncomplete) && (
         <section className="rounded-2xl border border-coral/40 bg-coral/5 p-5">
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <ShieldAlert className="size-5 text-destructive" />
             <h2 className="font-heading font-semibold text-navy">
-              Alertas de riesgo ({allRiskAlerts.length})
+              Alertas de riesgo ({totalRiskAlerts})
             </h2>
+            {showAllAlerts && (
+              <Link href="/dashboard" className="ml-auto text-xs text-brand hover:underline">
+                Ver solo las más recientes
+              </Link>
+            )}
           </div>
-          {sessionAlerts.length > 0 && (
+          {sessionAlerts.total > 0 && (
             <>
               <h3
                 id="risk-alerts-ia-heading"
-                className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="mb-1.5 scroll-mt-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               >
                 De consultas (IA)
               </h3>
               <ul className="space-y-2" aria-labelledby="risk-alerts-ia-heading">
-                {sessionAlerts.slice(0, 5).map((a) => (
+                {sessionAlerts.alerts.map((a) => (
                   <SessionRiskAlertItem
                     key={a.id}
                     alert={a}
@@ -190,33 +315,46 @@ export default async function DashboardPage() {
                   />
                 ))}
               </ul>
+              <HiddenRiskAlerts
+                queue={sessionAlerts}
+                showAll={showAllAlerts}
+                anchor="risk-alerts-ia-heading"
+                label="de consultas"
+              />
               <p className="mt-3 text-xs text-muted-foreground">
                 Detección temprana por IA — apoyo a tu criterio, nunca un diagnóstico.
               </p>
             </>
           )}
-          {phq9Alerts.length > 0 && (
+          {phq9Alerts.total > 0 && (
             <>
               <h3
                 id="risk-alerts-phq9-heading"
                 className={cn(
-                  "mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                  sessionAlerts.length > 0 && "mt-4",
+                  "mb-1.5 scroll-mt-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                  sessionAlerts.total > 0 && "mt-4",
                 )}
               >
                 De cuestionarios (PHQ-9)
               </h3>
               <ul className="space-y-2" aria-labelledby="risk-alerts-phq9-heading">
-                {phq9Alerts.slice(0, 5).map((a) => (
-                  <Phq9RiskAlertItem key={a.assessmentId} alert={a} />
+                {phq9Alerts.alerts.map((a) => (
+                  <Phq9RiskAlertItem key={a.id} alert={a} />
                 ))}
               </ul>
+              <HiddenRiskAlerts
+                queue={phq9Alerts}
+                showAll={showAllAlerts}
+                anchor="risk-alerts-phq9-heading"
+                label="de cuestionarios"
+              />
               <p className="mt-3 text-xs text-muted-foreground">
                 Autolesión reportada directamente por el paciente en el PHQ-9 — no es una
                 detección por IA.
               </p>
             </>
           )}
+          {phq9 && <Phq9CheckNotice check={phq9.check} />}
         </section>
       )}
 
