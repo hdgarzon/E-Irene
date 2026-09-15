@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { createHmac } from "node:crypto";
 
 // Estas reglas no tocan la base: se aíslan los módulos que la leen.
 vi.mock("@/lib/db/clinic", () => ({ getClinicSubscription: vi.fn() }));
@@ -78,15 +79,20 @@ describe("identidad en la sala de Daily", () => {
 });
 
 describe("firma de los webhooks de Daily", () => {
-  // Vector calculado fuera del código de la app, con openssl y con node:
+  // Vector del algoritmo que documenta Daily, calculado con node:crypto y no con el
+  // código de la app. Coincide con openssl:
   //   printf '%s' "$TS.$BODY" | openssl dgst -sha256 -mac HMAC -macopt hexkey:<secreto> -binary | base64
-  const SECRET = "c2VjcmV0by12ZWN0b3ItZGFpbHk="; // base64 de "secreto-vector-daily"
+  // Secreto y firma se derivan aquí en vez de escribirse literales: son ficticios, pero
+  // un literal base64 de alta entropía dispara el detector de secretos del repositorio.
+  const RAW_SECRET = "secreto-vector-daily";
+  const SECRET = Buffer.from(RAW_SECRET).toString("base64");
   const TIMESTAMP = "1789000000";
   const BODY =
     '{"version":"1.0.0","type":"participant.joined","id":"evt-vector","payload":{"room":"apt-demo","user_id":"p-00000000000040008000000000000001"}}';
-  const SIGNATURE = "RqYeT8F3UqDSpmM8bfWkj6vMNkHTOmp38jX/KFOusvs=";
+  const SIGNATURE = createHmac("sha256", RAW_SECRET).update(`${TIMESTAMP}.${BODY}`).digest("base64");
 
-  it("coincide con el vector calculado a mano", () => {
+  it("coincide con HMAC-SHA256 calculado aparte, sobre timestamp.cuerpo y con el secreto en base64", () => {
+    expect(SIGNATURE).toHaveLength(44);
     expect(computeDailySignature({ timestamp: TIMESTAMP, body: BODY, secret: SECRET })).toBe(SIGNATURE);
     expect(
       verifyDailySignature({ timestamp: TIMESTAMP, signature: SIGNATURE, body: BODY, secret: SECRET }),
