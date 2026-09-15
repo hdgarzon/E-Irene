@@ -1358,6 +1358,60 @@ export type Database = {
           },
         ]
       }
+      transcription_packs: {
+        Row: {
+          amount_in_cents: number | null
+          checkout_id: string | null
+          clinic_id: string
+          created_at: string
+          id: string
+          seconds: number
+          source: string
+          valid_from: string
+          valid_until: string
+          wompi_transaction_id: string | null
+        }
+        Insert: {
+          amount_in_cents?: number | null
+          checkout_id?: string | null
+          clinic_id: string
+          created_at?: string
+          id?: string
+          seconds: number
+          source?: string
+          valid_from?: string
+          valid_until: string
+          wompi_transaction_id?: string | null
+        }
+        Update: {
+          amount_in_cents?: number | null
+          checkout_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          seconds?: number
+          source?: string
+          valid_from?: string
+          valid_until?: string
+          wompi_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcription_packs_checkout_id_fkey"
+            columns: ["checkout_id"]
+            isOneToOne: false
+            referencedRelation: "billing_checkouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transcription_packs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcription_usage: {
         Row: {
           clinic_id: string
@@ -1728,6 +1782,15 @@ export type Database = {
       }
       get_transcription_usage: { Args: never; Returns: Json }
       grandfather_verification_deadline: { Args: never; Returns: string }
+      grant_transcription_pack: {
+        Args: {
+          p_amount: number
+          p_checkout_id: string
+          p_clinic: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
       has_open_renewal_charge: { Args: { p_clinic: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       mark_subscription_payment_failed: {
@@ -1782,7 +1845,12 @@ export type Database = {
         Args: { p_plan: Database["public"]["Enums"]["clinic_plan"] }
         Returns: Json
       }
+      transcription_extra_seconds: {
+        Args: { p_clinic: string }
+        Returns: number
+      }
       transcription_month_start: { Args: never; Returns: string }
+      transcription_pack_seconds: { Args: never; Returns: number }
       transcription_seconds_used: {
         Args: { p_clinic: string }
         Returns: number

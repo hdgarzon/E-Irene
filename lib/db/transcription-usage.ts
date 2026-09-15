@@ -13,7 +13,7 @@ export interface TranscriptionQuota {
   /** false = cuota mensual agotada: NO acuñar token de Deepgram. */
   allowed: boolean;
   usedSeconds: number;
-  /** null = ilimitado (enterprise). */
+  /** Límite del plan más las bolsas vigentes; null = ilimitado (enterprise). */
   limitSeconds: number | null;
 }
 
@@ -46,11 +46,14 @@ export async function beginTranscriptionSession(
     p_limit_seconds: limitSeconds,
   });
   if (error) throw error;
-  const result = data as { allowed: boolean; used_seconds: number };
+  // Las horas de bolsas vigentes (migración 0057) las resuelve la base: no se
+  // pasan por parámetro, así que no se pueden inflar desde aquí.
+  const result = data as { allowed: boolean; used_seconds: number; extra_seconds?: number };
+  const extraSeconds = Number(result.extra_seconds ?? 0);
   return {
     allowed: Boolean(result.allowed),
     usedSeconds: Number(result.used_seconds ?? 0),
-    limitSeconds,
+    limitSeconds: limitSeconds === null ? null : limitSeconds + extraSeconds,
   };
 }
 
@@ -70,15 +73,29 @@ export async function finalizeTranscriptionSession(consultationId: string): Prom
 export interface TranscriptionUsage {
   usedSeconds: number;
   sessions: number;
+  /** Segundos de bolsas vigentes que se suman al límite del plan (migración 0057). */
+  extraSeconds: number;
+  /** Cuándo vence la última bolsa vigente, o null si no hay. */
+  extraValidUntil: string | null;
 }
 
-/** Consumo del mes en curso (zona Bogotá) de la clínica del usuario. */
+/** Consumo del ciclo vigente de la clínica del usuario, con sus horas adicionales. */
 export async function getTranscriptionUsage(): Promise<TranscriptionUsage> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_transcription_usage");
   if (error) throw error;
-  const r = data as { used_seconds: number; sessions: number };
-  return { usedSeconds: Number(r?.used_seconds ?? 0), sessions: Number(r?.sessions ?? 0) };
+  const r = data as {
+    used_seconds: number;
+    sessions: number;
+    extra_seconds?: number;
+    extra_valid_until?: string | null;
+  };
+  return {
+    usedSeconds: Number(r?.used_seconds ?? 0),
+    sessions: Number(r?.sessions ?? 0),
+    extraSeconds: Number(r?.extra_seconds ?? 0),
+    extraValidUntil: r?.extra_valid_until ?? null,
+  };
 }
 
 // El consumo por clínica de la consola de plataforma viene de

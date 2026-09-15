@@ -3,7 +3,7 @@ import { Users, CreditCard, ChevronRight } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview, type ClinicOverview } from "@/lib/db/clinic";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
-import { PLANS, transcriptionUsageLabel } from "@/lib/plans";
+import { PLANS, transcriptionLimitHours, transcriptionUsageLabel } from "@/lib/plans";
 import { formatLongDate } from "@/lib/dates";
 import { subscriptionState } from "@/lib/billing/subscription-state";
 import { UsageBar } from "@/components/usage-bar";
@@ -56,9 +56,9 @@ export default async function SettingsPage() {
           />
           <UsageBar
             used={usage.usedSeconds / 3600}
-            max={limits.transcriptionHours}
+            max={transcriptionLimitHours(overview.plan, usage.extraSeconds)}
             label="Transcripción del ciclo"
-            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan)}
+            display={transcriptionUsageLabel(usage.usedSeconds, overview.plan, usage.extraSeconds)}
           />
         </div>
       </div>

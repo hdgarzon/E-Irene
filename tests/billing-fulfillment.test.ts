@@ -119,6 +119,39 @@ describe("fulfillCheckoutPayment", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("una bolsa de transcripción se otorga contra su checkout, sin token de cobro", async () => {
+    rpc.mockResolvedValue({
+      data: { outcome: "applied", plan: "esencial", seconds: 18_000, already_processed: false },
+      error: null,
+    });
+
+    const result = await fulfillCheckoutPayment(
+      owner({ kind: "transcription_pack", plan: "esencial", amountInCents: 2_500_000, quantity: 1 }),
+      { id: "tx-demo-4", amount_in_cents: 2_500_000, payment_source_id: 77 },
+    );
+
+    expect(result).toEqual({
+      outcome: "applied",
+      kind: "transcription_pack",
+      plan: "esencial",
+      alreadyProcessed: false,
+    });
+    // Ni horas ni vencimiento viajan desde aquí: los fija la base.
+    expect(rpc).toHaveBeenCalledWith("grant_transcription_pack", {
+      p_clinic: CLINIC,
+      p_transaction_id: "tx-demo-4",
+      p_checkout_id: CHECKOUT,
+      p_amount: 2_500_000,
+    });
+  });
+
+  it("una bolsa sin checkout registrado no se otorga", async () => {
+    await expect(
+      fulfillCheckoutPayment(owner({ kind: "transcription_pack", checkoutId: null }), tx),
+    ).rejects.toThrow("sin checkout");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("un tipo de compra sin cumplimiento lanza en vez de darse por procesado", async () => {
     await expect(fulfillCheckoutPayment(owner({ kind: "video_pack" }), tx)).rejects.toThrow(
       "sin cumplimiento",

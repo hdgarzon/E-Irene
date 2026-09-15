@@ -397,14 +397,14 @@ export function LiveConsultation({
               {transcriptionMode === "video" ? " (la videollamada sigue disponible)" : ""}.{" "}
               {canManagePlan ? (
                 <>
-                  Amplía tu plan en{" "}
+                  Suma horas adicionales o amplía tu plan en{" "}
                   <Link href="/settings/plan" className="underline hover:text-navy">
                     Plan y facturación
                   </Link>
                   .
                 </>
               ) : (
-                "Pide al administrador de la clínica ampliar el plan."
+                "Pide al administrador de la clínica sumar horas adicionales o ampliar el plan."
               )}
             </p>
           </div>

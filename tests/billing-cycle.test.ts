@@ -172,7 +172,8 @@ d("la cuota de transcripción corta por ciclo, no por mes calendario", () => {
 
     const { data, error: usageErr } = await A.client.rpc("get_transcription_usage");
     expect(usageErr).toBeNull();
-    expect(data).toEqual({ used_seconds: 1200, sessions: 1 });
+    // Sin bolsas vigentes (migración 0057): nada adicional que sumar.
+    expect(data).toEqual({ used_seconds: 1200, sessions: 1, extra_seconds: 0, extra_valid_until: null });
   }, 30000);
 });
 
