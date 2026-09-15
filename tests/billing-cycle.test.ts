@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
@@ -8,6 +8,7 @@ import { getClinicsDueForCharge } from "@/lib/db/billing";
 // Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
 // no apunta a un stack local. Estas pruebas escriben con service-role.
 import "./helpers/supabase-env";
+import { LOCK_WAIT_MS, lockAcrossRuns, SUBSCRIPTION_SWEEPS_LOCK } from "./helpers/db-lock";
 
 /**
  * Ciclo de facturación y cancelación (migración 0041), contra Supabase local.
@@ -25,6 +26,18 @@ const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && ANON && SERVICE ? describe : describe.skip;
+
+// El barrido que se ejerce aquí es GLOBAL, igual que end_overdue_subscriptions
+// en billing-grace.test.ts, y cada archivo siembra clínicas que alcanza el barrido
+// del otro. Vitest los corre en paralelo, así que se turnan: ver
+// SUBSCRIPTION_SWEEPS_LOCK en helpers/db-lock.ts.
+let unlock: (() => Promise<void>) | undefined;
+beforeAll(async () => {
+  if (URL && ANON && SERVICE) unlock = await lockAcrossRuns(SUBSCRIPTION_SWEEPS_LOCK);
+}, LOCK_WAIT_MS + 10_000);
+afterAll(async () => {
+  await unlock?.();
+});
 
 function anon(): SupabaseClient {
   return createClient(URL!, ANON!, { auth: { autoRefreshToken: false, persistSession: false } });
