@@ -1,8 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getPlatformClinicOverview } from "@/lib/db/platform-admin";
-import { getPlatformTranscriptionUsage } from "@/lib/db/transcription-usage";
+import {
+  ADMIN_PAGE_SIZE,
+  fetchListPage,
+  ilikeCondition,
+  type ListPage,
+  type ListParams,
+} from "@/lib/admin-list";
 import type { UserRole } from "@/lib/auth";
+
+// Las listas de este archivo se paginan en BD y cuentan con head: traerlas
+// enteras las cortaba en max_rows (1000) sin aviso. Ver lib/admin-list.ts.
+
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
 // ============================ Doctores / personal ===========================
 
@@ -15,31 +25,50 @@ export interface AdminStaff {
   clinicName: string;
 }
 
-export async function listAllStaff(): Promise<AdminStaff[]> {
+interface StaffRow {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserRole;
+  clinic_id: string;
+  clinics: { name: string } | null;
+}
+
+/**
+ * Personal (todo rol salvo paciente) de todas las clínicas, lo más reciente
+ * primero, con búsqueda por nombre o correo.
+ */
+export async function listAllStaff(params: ListParams): Promise<ListPage<AdminStaff>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, full_name, email, role, clinic_id, clinics:clinics!users_clinic_id_fkey(name)")
-    .neq("role", "paciente")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (
-    data as unknown as {
-      id: string;
-      full_name: string;
-      email: string;
-      role: UserRole;
-      clinic_id: string;
-      clinics: { name: string } | null;
-    }[]
-  ).map((r) => ({
-    id: r.id,
-    fullName: r.full_name,
-    email: r.email,
-    role: r.role,
-    clinicId: r.clinic_id,
-    clinicName: r.clinics?.name ?? "—",
-  }));
+  const search = [
+    ilikeCondition("full_name", params.query),
+    ilikeCondition("email", params.query),
+  ].join(",");
+  const countStaff = () =>
+    supabase.from("users").select("id", { count: "exact", head: true }).neq("role", "paciente");
+
+  return fetchListPage({
+    params,
+    pageSize: ADMIN_PAGE_SIZE,
+    countTotal: countStaff,
+    countMatched: () => countStaff().or(search),
+    fetchRows: (from, to) => {
+      let query = supabase
+        .from("users")
+        .select("id, full_name, email, role, clinic_id, clinics:clinics!users_clinic_id_fkey(name)")
+        .neq("role", "paciente");
+      if (params.query) query = query.or(search);
+      return query.order("created_at", { ascending: false }).order("id").range(from, to);
+    },
+    map: (r: StaffRow): AdminStaff => ({
+      id: r.id,
+      fullName: r.full_name,
+      email: r.email,
+      role: r.role,
+      clinicId: r.clinic_id,
+      clinicName: r.clinics?.name ?? "—",
+    }),
+  });
 }
 
 export async function updateStaff(
@@ -75,7 +104,8 @@ export async function deleteStaff(id: string): Promise<{ ok: boolean; error?: st
 //
 // El super-admin gestiona la AGENDA (reagendar/cambiar estado/cancelar) como
 // herramienta de soporte de negocio, pero NUNCA ve la identidad del paciente:
-// la consulta no trae `full_name_enc` — solo profesional, clínica y horario.
+// la consulta no trae `full_name_enc` ni las notas de la cita (texto libre que
+// puede describir al paciente) — solo profesional, clínica y horario.
 
 export interface AdminAppointment {
   id: string;
@@ -84,39 +114,54 @@ export interface AdminAppointment {
   scheduledAt: string;
   durationMin: number;
   status: string;
-  notes: string | null;
 }
 
-export async function listAllAppointments(): Promise<AdminAppointment[]> {
+interface AppointmentRow {
+  id: string;
+  scheduled_at: string;
+  duration_min: number;
+  status: string;
+  doctor: { full_name: string } | null;
+  clinics: { name: string } | null;
+}
+
+/** Con `!inner`, filtrar la clínica embebida acota las citas: así se busca por clínica. */
+const APPOINTMENT_CLINIC = "clinics:clinics!appointments_clinic_id_fkey!inner(name)";
+
+/** Citas de todas las clínicas, la fecha más lejana primero, con búsqueda por clínica. */
+export async function listAllAppointments(params: ListParams): Promise<ListPage<AdminAppointment>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      "id, scheduled_at, duration_min, status, notes, " +
-        "doctor:users!appointments_doctor_id_fkey(full_name), " +
-        "clinics:clinics!appointments_clinic_id_fkey(name)",
-    )
-    .order("scheduled_at", { ascending: false });
-  if (error) throw error;
-  return (
-    data as unknown as {
-      id: string;
-      scheduled_at: string;
-      duration_min: number;
-      status: string;
-      notes: string | null;
-      doctor: { full_name: string } | null;
-      clinics: { name: string } | null;
-    }[]
-  ).map((r) => ({
-    id: r.id,
-    doctorName: r.doctor?.full_name ?? "—",
-    clinicName: r.clinics?.name ?? "—",
-    scheduledAt: r.scheduled_at,
-    durationMin: r.duration_min,
-    status: r.status,
-    notes: r.notes,
-  }));
+  const search = ilikeCondition("name", params.query);
+
+  return fetchListPage({
+    params,
+    pageSize: ADMIN_PAGE_SIZE,
+    countTotal: () => supabase.from("appointments").select("id", { count: "exact", head: true }),
+    countMatched: () =>
+      supabase
+        .from("appointments")
+        .select(`id, ${APPOINTMENT_CLINIC}`, { count: "exact", head: true })
+        .or(search, { referencedTable: "clinics" }),
+    fetchRows: (from, to) => {
+      let query = supabase
+        .from("appointments")
+        .select(
+          "id, scheduled_at, duration_min, status, " +
+            "doctor:users!appointments_doctor_id_fkey(full_name), " +
+            APPOINTMENT_CLINIC,
+        );
+      if (params.query) query = query.or(search, { referencedTable: "clinics" });
+      return query.order("scheduled_at", { ascending: false }).order("id").range(from, to);
+    },
+    map: (r: AppointmentRow): AdminAppointment => ({
+      id: r.id,
+      doctorName: r.doctor?.full_name ?? "—",
+      clinicName: r.clinics?.name ?? "—",
+      scheduledAt: r.scheduled_at,
+      durationMin: r.duration_min,
+      status: r.status,
+    }),
+  });
 }
 
 type AppointmentStatus = "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
@@ -190,6 +235,9 @@ export async function setPlanConfig(
 
 // ============================= Mapa de clínicas =============================
 
+/** Las tarjetas son altas: menos por página que las listas de filas. */
+export const CLINICS_PAGE_SIZE = 20;
+
 export interface ClinicMapEntry {
   clinicId: string;
   clinicName: string;
@@ -204,55 +252,94 @@ export interface ClinicMapEntry {
   transcriptionSecondsCycle: number;
 }
 
+interface ClinicRow {
+  id: string;
+  name: string;
+  plan: string;
+  suspended_at: string | null;
+  cancel_at_period_end: boolean;
+  current_period_end: string | null;
+  users: { id: string; full_name: string; email: string; role: UserRole }[] | null;
+}
+
 /**
- * Clínicas con sus doctores, conteo de pacientes y consumo de transcripción
- * del ciclo vigente (el "mapa").
- *
- * El conteo de pacientes viene de get_platform_clinic_overview() (SECURITY
- * DEFINER, solo count, sin PII) — NO de leer filas de `patients`, a las que el
- * super-admin ya no tiene acceso vía RLS (ver migración 0015). El consumo de
- * transcripción viene de get_platform_transcription_usage() (misma línea:
- * solo segundos y conteos, nunca contenido clínico).
+ * Conteo de pacientes y consumo de transcripción del ciclo, solo de las
+ * clínicas pedidas, vía get_platform_clinic_stats() (migración 0052):
+ * SECURITY DEFINER, solo conteos y segundos, sin PII. NO lee filas de
+ * `patients`, a las que el super-admin no tiene acceso vía RLS (migración 0015).
  */
-export async function getClinicMap(): Promise<ClinicMapEntry[]> {
-  const supabase = await createClient();
-  const [{ data, error }, overview, usage] = await Promise.all([
-    supabase
-      .from("clinics")
-      .select(
-        "id, name, plan, suspended_at, cancel_at_period_end, current_period_end, " +
-          "users:users!users_clinic_id_fkey(id, full_name, email, role)",
-      )
-      .order("created_at", { ascending: false }),
-    getPlatformClinicOverview(),
-    getPlatformTranscriptionUsage(),
-  ]);
+async function getClinicStats(
+  supabase: ServerClient,
+  clinicIds: string[],
+): Promise<Map<string, { patientCount: number; transcriptionSecondsCycle: number }>> {
+  if (clinicIds.length === 0) return new Map();
+  const { data, error } = await supabase.rpc("get_platform_clinic_stats", {
+    p_clinic_ids: clinicIds,
+  });
   if (error) throw error;
+  return new Map(
+    (data ?? []).map((r) => [
+      r.clinic_id,
+      {
+        patientCount: Number(r.patient_count),
+        transcriptionSecondsCycle: Number(r.transcription_seconds_cycle),
+      },
+    ]),
+  );
+}
 
-  const patientCountByClinic = new Map(overview.map((o) => [o.clinicId, o.patientCount]));
-  const usageByClinic = new Map(usage.map((u) => [u.clinicId, u.usedSeconds]));
+/**
+ * Clínicas con sus profesionales, conteo de pacientes y consumo de
+ * transcripción del ciclo vigente (el "mapa"), lo más reciente primero y con
+ * búsqueda por nombre. Los conteos se piden solo para la página mostrada.
+ */
+export async function getClinicMap(params: ListParams): Promise<ListPage<ClinicMapEntry>> {
+  const supabase = await createClient();
+  const search = ilikeCondition("name", params.query);
+  const countClinics = () => supabase.from("clinics").select("id", { count: "exact", head: true });
 
-  return (
-    data as unknown as {
-      id: string;
-      name: string;
-      plan: string;
-      suspended_at: string | null;
-      cancel_at_period_end: boolean;
-      current_period_end: string | null;
-      users: { id: string; full_name: string; email: string; role: UserRole }[];
-    }[]
-  ).map((c) => ({
-    clinicId: c.id,
-    clinicName: c.name,
-    plan: c.plan,
-    suspended: Boolean(c.suspended_at),
-    cancelAtPeriodEnd: c.cancel_at_period_end,
-    currentPeriodEnd: c.current_period_end,
-    doctors: (c.users ?? [])
-      .filter((u) => u.role !== "paciente")
-      .map((u) => ({ id: u.id, fullName: u.full_name, email: u.email, role: u.role })),
-    patientCount: patientCountByClinic.get(c.id) ?? 0,
-    transcriptionSecondsCycle: usageByClinic.get(c.id) ?? 0,
-  }));
+  const list = await fetchListPage({
+    params,
+    pageSize: CLINICS_PAGE_SIZE,
+    countTotal: countClinics,
+    countMatched: () => countClinics().or(search),
+    fetchRows: (from, to) => {
+      let query = supabase
+        .from("clinics")
+        .select(
+          "id, name, plan, suspended_at, cancel_at_period_end, current_period_end, " +
+            "users:users!users_clinic_id_fkey(id, full_name, email, role)",
+        )
+        // Solo el personal: las cuentas de paciente ni siquiera salen de la BD.
+        .neq("users.role", "paciente");
+      if (params.query) query = query.or(search);
+      return query.order("created_at", { ascending: false }).order("id").range(from, to);
+    },
+    map: (row: ClinicRow) => row,
+  });
+
+  const stats = await getClinicStats(
+    supabase,
+    list.items.map((c) => c.id),
+  );
+
+  return {
+    ...list,
+    items: list.items.map((c) => ({
+      clinicId: c.id,
+      clinicName: c.name,
+      plan: c.plan,
+      suspended: Boolean(c.suspended_at),
+      cancelAtPeriodEnd: c.cancel_at_period_end,
+      currentPeriodEnd: c.current_period_end,
+      doctors: (c.users ?? []).map((u) => ({
+        id: u.id,
+        fullName: u.full_name,
+        email: u.email,
+        role: u.role,
+      })),
+      patientCount: stats.get(c.id)?.patientCount ?? 0,
+      transcriptionSecondsCycle: stats.get(c.id)?.transcriptionSecondsCycle ?? 0,
+    })),
+  };
 }

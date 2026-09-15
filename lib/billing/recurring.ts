@@ -16,6 +16,7 @@ import {
   clinicExists,
   findScheduledChargeForPeriod,
   getSubscriptionPeriod,
+  recordUnreadablePaymentSource,
   type ClinicDueForCharge,
 } from "@/lib/db/billing";
 import { buildRenewalReference, type RenewalReference } from "./wompi";
@@ -49,6 +50,13 @@ export interface ChargeResult {
    * transacción viva.
    */
   pending?: boolean;
+  /**
+   * La petición a Wompi no terminó (DNS, TLS, timeout, conexión cortada), así
+   * que no se sabe si la transacción se creó: pudo llegar y perderse solo la
+   * respuesta. Tampoco es un fallo: darlo por fallido liberaría el período para
+   * cobrar de nuevo encima de una transacción que quizá existe.
+   */
+  outcomeUnknown?: boolean;
 }
 
 /**
@@ -79,16 +87,31 @@ export async function chargeClinic(
     payment_source_id: clinic.wompiPaymentSourceId,
   };
 
-  const res = await fetch(`${getBaseUrl()}/transactions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${getPrivateKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  // Fuera del try: una llave sin configurar no es un problema de red de esta
+  // clínica y tiene que seguir tumbando la corrida entera.
+  const url = `${getBaseUrl()}/transactions`;
+  const authorization = `Bearer ${getPrivateKey()}`;
 
-  const responseText = await res.text();
+  let res: Response;
+  let responseText: string;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    responseText = await res.text();
+  } catch (error) {
+    // fetch rechaza con un "fetch failed" genérico; lo que distingue DNS, TLS,
+    // timeout o socket cortado viene en `cause`.
+    const cause = error instanceof Error && error.cause !== undefined ? error.cause : error;
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return { success: false, outcomeUnknown: true, error: `wompi_request_failed: ${detail}` };
+  }
+
   let responseData: unknown;
   try {
     responseData = JSON.parse(responseText);
@@ -132,8 +155,16 @@ export interface ProcessRecurringChargesResult {
   skipped: number;
   /** Cobros que Wompi dejó en curso (PSE/Nequi); los resuelve el webhook. */
   pending: number;
+  /**
+   * Cobros cuya petición a Wompi no terminó (DNS, TLS, timeout, conexión
+   * cortada): el período queda reservado y lo resuelven el webhook o, si nunca
+   * llega, expireStaleProcessingCharges a las 24 h.
+   */
+  outcomeUnknown: number;
   /** Clínicas en plan pago sin medio de pago tokenizado — requieren acción nuestra, no del cliente. */
   missingPaymentSource: number;
+  /** Clínicas con token de cobro que no descifra (clave rotada, dato corrupto) — tampoco se les cobra. */
+  unreadablePaymentSource: number;
 }
 
 const FAILURES_BEFORE_REVIEW = 3;
@@ -169,7 +200,9 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     failed: 0,
     skipped: 0,
     pending: 0,
+    outcomeUnknown: 0,
     missingPaymentSource: 0,
+    unreadablePaymentSource: 0,
   };
 
   for (const clinic of dueClinics) {
@@ -177,6 +210,23 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     const amountInCents = PLANS[clinic.plan].priceInCents;
     if (amountInCents <= 0) {
       result.skipped++;
+      continue;
+    }
+
+    // Token de cobro que no descifra (clave rotada, dato corrupto): no hay con
+    // qué cobrar. Como la clínica sin token, es un problema nuestro y no un pago
+    // rechazado: no se reserva el período ni se la marca morosa. Queda en
+    // audit_logs para la plataforma y se sigue con las demás.
+    if (clinic.paymentSourceUnreadable) {
+      result.unreadablePaymentSource++;
+      try {
+        await recordUnreadablePaymentSource(clinic);
+      } catch (error) {
+        logger.error("billing.record_unreadable_payment_source_failed", {
+          clinicId: clinic.id,
+          error,
+        });
+      }
       continue;
     }
 
@@ -239,6 +289,24 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
     }
 
     const chargeResult = await chargeClinic(clinic);
+
+    // La petición a Wompi no terminó y no se sabe si creó la transacción. La
+    // reserva queda en 'processing' y NO se marca fallida ni morosa: eso
+    // liberaría el período para cobrarlo otra vez encima de un cobro que quizá
+    // existe. Si Wompi lo aprobó, el webhook (settleRenewalPayment) renueva; si
+    // no, expireStaleProcessingCharges libera el período a las 24 h. Una clínica
+    // sin respuesta no frena a las demás.
+    if (chargeResult.outcomeUnknown) {
+      result.outcomeUnknown++;
+      logger.error("billing.charge_outcome_unknown", {
+        clinicId: clinic.id,
+        periodKey,
+        error: chargeResult.error,
+        action:
+          "no se sabe si Wompi creó la transacción: el período quedó reservado en 'processing'. Si la aprobó, el webhook renueva; si no, se libera a las 24 h y el cron reintenta. Antes de cobrar a mano, buscar en Wompi una referencia que empiece por renewal-<clinicId>-<plan>-<periodKey>.",
+      });
+      continue;
+    }
 
     // Pendiente (PSE/Nequi): se deja el intento en 'processing'. El período
     // queda reservado, así que no se cobrará de nuevo mientras siga vivo, y

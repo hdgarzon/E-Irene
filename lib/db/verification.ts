@@ -1,9 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt, decryptNullable } from "@/lib/crypto";
+import { ADMIN_PAGE_SIZE, fetchListPage, ilikeCondition, type ListPage } from "@/lib/admin-list";
 import {
   canTransition,
   DOCUMENTS_BUCKET as BUCKET,
+  VERIFICATION_QUEUE_FILTER,
+  VERIFICATION_REVIEWED_FILTER,
   type VerificationStatus,
 } from "@/lib/verification";
 import type { UserRole } from "@/lib/auth";
@@ -114,43 +117,25 @@ export interface PendingVerification {
   notes: string | null;
 }
 
-/**
- * Cola de revisión. Trae `pending_review` primero (lo accionable) y luego el
- * resto de estados no verificados, para que el revisor vea también quién quedó
- * rechazado o suspendido.
- */
-export async function listVerifications(
-  statuses: VerificationStatus[] = ["pending_review", "rejected", "suspended"],
-): Promise<PendingVerification[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select(
-      "id, full_name, email, role, clinic_id, verification_status, profession, license_number, document_enc, id_document_path, license_document_path, verification_submitted_at, verification_notes, clinics:clinics!users_clinic_id_fkey(name)",
-    )
-    .neq("role", "paciente")
-    .in("verification_status", statuses)
-    .order("verification_submitted_at", { ascending: true, nullsFirst: false });
-  if (error) throw error;
+interface VerificationRow {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserRole;
+  clinic_id: string;
+  verification_status: VerificationStatus;
+  profession: string | null;
+  license_number: string | null;
+  document_enc: string | null;
+  id_document_path: string | null;
+  license_document_path: string | null;
+  verification_submitted_at: string | null;
+  verification_notes: string | null;
+  clinics: { name: string } | null;
+}
 
-  return (
-    data as unknown as {
-      id: string;
-      full_name: string;
-      email: string;
-      role: UserRole;
-      clinic_id: string;
-      verification_status: VerificationStatus;
-      profession: string | null;
-      license_number: string | null;
-      document_enc: string | null;
-      id_document_path: string | null;
-      license_document_path: string | null;
-      verification_submitted_at: string | null;
-      verification_notes: string | null;
-      clinics: { name: string } | null;
-    }[]
-  ).map((r) => ({
+function toPendingVerification(r: VerificationRow): PendingVerification {
+  return {
     id: r.id,
     fullName: r.full_name,
     email: r.email,
@@ -165,7 +150,71 @@ export async function listVerifications(
     licenseDocumentPath: r.license_document_path,
     submittedAt: r.verification_submitted_at,
     notes: r.verification_notes,
-  }));
+  };
+}
+
+export interface VerificationQueue {
+  /** Por revisar (lo accionable), en orden de llegada. */
+  pending: ListPage<PendingVerification>;
+  /** Ya revisadas, lo decidido más recientemente primero. */
+  reviewed: ListPage<PendingVerification>;
+}
+
+/**
+ * Las dos listas de /admin/verificaciones, cada una separada, paginada y
+ * contada en BD (VERIFICATION_QUEUE_FILTER y VERIFICATION_REVIEWED_FILTER en
+ * lib/verification.ts), con búsqueda por nombre o correo.
+ *
+ * Incluye las verificadas para poder suspender a alguien ya aprobado si llega
+ * el reporte de una inhabilitación.
+ */
+export async function listVerificationQueue(params: {
+  query: string;
+  pendingPage: number;
+  reviewedPage: number;
+}): Promise<VerificationQueue> {
+  const supabase = await createClient();
+  const search = [
+    ilikeCondition("full_name", params.query),
+    ilikeCondition("email", params.query),
+  ].join(",");
+
+  const section = (filter: string, page: number, reviewed: boolean) => {
+    const countSection = () =>
+      supabase
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .neq("role", "paciente")
+        .or(filter);
+
+    return fetchListPage({
+      params: { query: params.query, page },
+      pageSize: ADMIN_PAGE_SIZE,
+      countTotal: countSection,
+      countMatched: () => countSection().or(search),
+      fetchRows: (from, to) => {
+        let query = supabase
+          .from("users")
+          .select(
+            "id, full_name, email, role, clinic_id, verification_status, profession, license_number, document_enc, id_document_path, license_document_path, verification_submitted_at, verification_notes, clinics:clinics!users_clinic_id_fkey(name)",
+          )
+          .neq("role", "paciente")
+          .or(filter);
+        if (params.query) query = query.or(search);
+        query = reviewed
+          ? query.order("verification_decided_at", { ascending: false, nullsFirst: false })
+          : query.order("verification_submitted_at", { ascending: true, nullsFirst: false });
+        return query.order("id").range(from, to);
+      },
+      map: toPendingVerification,
+    });
+  };
+
+  const [pending, reviewed] = await Promise.all([
+    section(VERIFICATION_QUEUE_FILTER, params.pendingPage, false),
+    section(VERIFICATION_REVIEWED_FILTER, params.reviewedPage, true),
+  ]);
+  return { pending, reviewed };
 }
 
 /**

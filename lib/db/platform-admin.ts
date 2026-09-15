@@ -1,59 +1,35 @@
 import { createClient } from "@/lib/supabase/server";
 
-export interface PlatformClinicOverview {
-  clinicId: string;
-  clinicName: string;
-  slug: string;
-  plan: string;
-  createdAt: string;
-  suspendedAt: string | null;
-  doctorCount: number;
-  patientCount: number;
-  consultationCount: number;
-  reportCount: number;
-  appointmentCount: number;
+export interface PlatformTotals {
+  clinics: number;
+  patients: number;
+  consultations: number;
+  reports: number;
+  appointments: number;
   notificationsSent: number;
 }
 
-interface RpcRow {
-  clinic_id: string;
-  clinic_name: string;
-  slug: string;
-  plan: string;
-  created_at: string;
-  suspended_at: string | null;
-  doctor_count: number;
-  patient_count: number;
-  consultation_count: number;
-  report_count: number;
-  appointment_count: number;
-  notifications_sent: number;
-}
-
 /**
- * Vista de negocio de TODAS las clínicas de la plataforma — nombre, plan,
- * fecha, estado y conteos agregados (pacientes, doctores, consultas,
- * reportes, citas, notificaciones). NUNCA expone datos clínicos: la función
- * de base de datos solo devuelve metadatos y conteos, y solo a platform admins.
+ * Totales de negocio de TODA la plataforma en una sola fila
+ * (get_platform_totals, migración 0052). NUNCA expone datos clínicos: la
+ * función solo devuelve conteos, y solo a platform admins.
+ *
+ * No sumar get_platform_clinic_overview() en la app: devuelve una fila por
+ * clínica y PostgREST la corta en 1000, así que pasadas las 1000 clínicas el
+ * resumen contaba y sumaba solo esas.
  */
-export async function getPlatformClinicOverview(): Promise<PlatformClinicOverview[]> {
+export async function getPlatformTotals(): Promise<PlatformTotals> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_platform_clinic_overview");
+  const { data, error } = await supabase.rpc("get_platform_totals").single();
   if (error) throw error;
-  return (data as unknown as RpcRow[]).map((r) => ({
-    clinicId: r.clinic_id,
-    clinicName: r.clinic_name,
-    slug: r.slug,
-    plan: r.plan,
-    createdAt: r.created_at,
-    suspendedAt: r.suspended_at,
-    doctorCount: Number(r.doctor_count),
-    patientCount: Number(r.patient_count),
-    consultationCount: Number(r.consultation_count),
-    reportCount: Number(r.report_count),
-    appointmentCount: Number(r.appointment_count),
-    notificationsSent: Number(r.notifications_sent),
-  }));
+  return {
+    clinics: Number(data.clinic_count),
+    patients: Number(data.patient_count),
+    consultations: Number(data.consultation_count),
+    reports: Number(data.report_count),
+    appointments: Number(data.appointment_count),
+    notificationsSent: Number(data.notifications_sent),
+  };
 }
 
 /** Desglose global de citas por estado (conteos, sin datos de paciente). */
