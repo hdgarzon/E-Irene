@@ -264,7 +264,7 @@ interface ClinicRow {
 
 /**
  * Conteo de pacientes y consumo de transcripción del ciclo, solo de las
- * clínicas pedidas, vía get_platform_clinic_stats() (migración 0051):
+ * clínicas pedidas, vía get_platform_clinic_stats() (migración 0052):
  * SECURITY DEFINER, solo conteos y segundos, sin PII. NO lee filas de
  * `patients`, a las que el super-admin no tiene acceso vía RLS (migración 0015).
  */

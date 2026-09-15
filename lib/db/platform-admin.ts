@@ -11,7 +11,7 @@ export interface PlatformTotals {
 
 /**
  * Totales de negocio de TODA la plataforma en una sola fila
- * (get_platform_totals, migración 0051). NUNCA expone datos clínicos: la
+ * (get_platform_totals, migración 0052). NUNCA expone datos clínicos: la
  * función solo devuelve conteos, y solo a platform admins.
  *
  * No sumar get_platform_clinic_overview() en la app: devuelve una fila por
