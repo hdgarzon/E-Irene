@@ -1,6 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import type { TestProject } from "vitest/node";
 import { isLocalSupabase } from "./supabase-env";
+import { acquireSupabaseLock, releaseSupabaseLock, supabaseLockPath } from "./supabase-lock";
+
+/** URL del Supabase local si hay credenciales para escribir en él. */
+function localSupabaseUrl(): string | undefined {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Sin stack, las pruebas que lo necesitan se saltan solas; con una URL remota,
+  // supabase-env.ts ya aborta al importarse.
+  if (!url || !process.env.SUPABASE_SERVICE_ROLE_KEY || !isLocalSupabase(url)) return undefined;
+  return url;
+}
 
 /**
  * Comprobación previa de toda la suite: si hay credenciales de Supabase, el stack
@@ -16,14 +26,8 @@ import { isLocalSupabase } from "./supabase-env";
  *   (billing_grace_period, migración 0041) y antes de que corra ningún archivo
  *   de pruebas: abortar aquí no deja escribir ni un registro.
  */
-async function checkSupabaseProject(): Promise<void> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  // Sin stack, las pruebas que lo necesitan se saltan solas; con una URL remota,
-  // supabase-env.ts ya aborta al importarse.
-  if (!url || !serviceKey || !isLocalSupabase(url)) return;
-
-  const client = createClient(url, serviceKey, {
+async function checkSupabaseProject(url: string): Promise<void> {
+  const client = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   const { error } = await client.rpc("billing_grace_period");
@@ -38,9 +42,37 @@ async function checkSupabaseProject(): Promise<void> {
   }
 }
 
-export default async function setup(project: TestProject): Promise<void> {
-  await checkSupabaseProject();
-  // En modo watch el globalSetup corre una sola vez: si a mitad de la sesión otro
-  // proyecto toma los puertos, cada re-ejecución vuelve a comprobarlo.
-  project.onTestsRerun(checkSupabaseProject);
+/**
+ * Toma el candado de máquina (supabase-lock.ts) y comprueba el proyecto. Si la
+ * comprobación falla, lo suelta: no va a correr ninguna prueba y no hay por qué
+ * hacer esperar a otra corrida.
+ */
+async function lockAndCheck(): Promise<void> {
+  const url = localSupabaseUrl();
+  if (!url) return;
+  const lock = await acquireSupabaseLock(url);
+  try {
+    await checkSupabaseProject(url);
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
+}
+
+export default async function setup(project: TestProject): Promise<() => void> {
+  const url = localSupabaseUrl();
+  const release = () => {
+    if (url) releaseSupabaseLock(supabaseLockPath(url));
+  };
+  // Si vitest sale sin pasar por el teardown, el candado no queda colgado hasta
+  // que otra corrida note que este pid ya no existe.
+  process.once("exit", release);
+
+  await lockAndCheck();
+  // En modo watch el globalSetup corre una sola vez. Cada re-ejecución vuelve a
+  // tomar el candado —el plugin de vitest.config.ts lo suelta al terminar cada
+  // corrida, así un watch inactivo no bloquea a otras sesiones— y a comprobar
+  // que otro proyecto no haya tomado los puertos a mitad de la sesión.
+  project.onTestsRerun(lockAndCheck);
+  return release;
 }

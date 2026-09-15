@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { randomUUID } from "node:crypto";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
 import { addMonthsBogota, billingCycleBounds } from "@/lib/dates";
-import { getClinicsDueForCharge } from "@/lib/db/billing";
+import { graceEndsAt } from "@/lib/billing/subscription-state";
+import { getClinicsDueForCharge, recordUnreadablePaymentSource } from "@/lib/db/billing";
+import { logger } from "@/lib/logger";
 
 // Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
 // no apunta a un stack local. Estas pruebas escriben con service-role.
@@ -18,6 +20,8 @@ import { LOCK_WAIT_MS, lockAcrossRuns, SUBSCRIPTION_SWEEPS_LOCK } from "./helper
  *  · una renovación avanza el período exactamente un ciclo, una sola vez;
  *  · cancelar conserva lo pagado hasta el fin del período, no vuelve a cobrar
  *    y no borra nada;
+ *  · un token de cobro ilegible (clave rotada, dato corrupto) en una clínica no
+ *    impide listar a las demás para el cobro recurrente;
  *  · el cálculo del ciclo en SQL (el que aplica la cuota) y en lib/dates.ts
  *    (el que muestra la interfaz y cuenta consultas) dan lo mismo.
  */
@@ -395,5 +399,102 @@ d("suscripción: activación, renovación y cancelación", () => {
     expect(error).toBeNull();
     expect((data as { status: string }).status).toBe("ended");
     expect((await clinicRow(B.clinicId)).plan).toBe("free");
+  });
+});
+
+d("cobro recurrente: un token de cobro ilegible no impide listar a las demás clínicas", () => {
+  // La base local es compartida y guarda clínicas por cobrar de otras corridas,
+  // con tokens cifrados con otra ENCRYPTION_KEY. Acá se crea una a propósito:
+  // así la prueba no depende de lo que haya en la base y falla igual en una nueva.
+  let legible: string;
+  let ilegible: string;
+  let ilegibleEnc: string;
+
+  async function dueClinic(name: string, paymentSourceEnc: string): Promise<string> {
+    const { clinicId } = await bootstrapClinic(name);
+    const { error } = await service().rpc("activate_subscription", {
+      p_clinic: clinicId,
+      p_plan: "pro",
+      p_payment_source_enc: paymentSourceEnc,
+    });
+    expect(error).toBeNull();
+    const dueSoon = nowSeconds(1 * DAY);
+    await setClinic(clinicId, {
+      current_period_end: dueSoon.toISOString(),
+      billing_cycle_anchor: addMonthsBogota(dueSoon, -1).toISOString(),
+    });
+    return clinicId;
+  }
+
+  beforeAll(async () => {
+    legible = await dueClinic("Clínica Token Legible", encrypt("ps-demo-legible"));
+    // Cifrado con otra clave: lo que deja una rotación de ENCRYPTION_KEY.
+    ilegibleEnc = encrypt("ps-demo-ilegible", randomBytes(32).toString("base64"));
+    ilegible = await dueClinic("Clínica Token Ilegible", ilegibleEnc);
+  }, 30000);
+
+  // Al terminar, fuera de la ventana de cobro: que no queden como filas ajenas
+  // para las corridas siguientes.
+  afterAll(async () => {
+    for (const id of [legible, ilegible]) {
+      if (id) await setClinic(id, { current_period_end: null, wompi_payment_source_id_enc: null });
+    }
+  });
+
+  it("lista a las demás y marca la del token ilegible, sin registrar el token", async () => {
+    // Silencia también los tokens ilegibles de otras corridas.
+    const logError = vi.spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      const due = await getClinicsDueForCharge();
+      const byId = new Map(due.map((c) => [c.id, c]));
+      expect(byId.get(legible)).toMatchObject({
+        wompiPaymentSourceId: "ps-demo-legible",
+        paymentSourceUnreadable: false,
+      });
+      expect(byId.get(ilegible)).toMatchObject({
+        wompiPaymentSourceId: null,
+        paymentSourceUnreadable: true,
+      });
+
+      const logged = logError.mock.calls.filter(
+        ([event, context]) => event === "billing.payment_source_unreadable" && context?.clinicId === ilegible,
+      );
+      expect(logged).toHaveLength(1);
+      const line = JSON.stringify(logged[0]);
+      expect(line).not.toContain(ilegibleEnc);
+      expect(line).not.toContain("ps-demo-ilegible");
+    } finally {
+      logError.mockRestore();
+    }
+  });
+
+  it("deja constancia en audit_logs una sola vez por período y no la marca morosa", async () => {
+    const row = await clinicRow(ilegible);
+    const clinic = {
+      id: ilegible,
+      plan: "pro" as const,
+      currentPeriodEnd: row.current_period_end as string,
+      wompiPaymentSourceId: null,
+      paymentSourceUnreadable: true,
+    };
+
+    expect(await recordUnreadablePaymentSource(clinic)).toBe(true);
+    // El cron corre a diario: al día siguiente no se repite la constancia.
+    expect(await recordUnreadablePaymentSource(clinic)).toBe(false);
+
+    const { data, error } = await service()
+      .from("audit_logs")
+      .select("metadata")
+      .eq("clinic_id", ilegible)
+      .eq("action", "subscription.payment_source_unreadable");
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+    expect(data![0].metadata).toMatchObject({
+      plan: "pro",
+      period_end: clinic.currentPeriodEnd,
+      grace_ends_at: graceEndsAt(clinic.currentPeriodEnd),
+    });
+    // Es un problema nuestro, no un pago rechazado.
+    expect((await clinicRow(ilegible)).billing_status).toBe("activo");
   });
 });
