@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertEncryptionKey, encrypt, decrypt } from "@/lib/crypto";
 import { graceEndsAt } from "@/lib/billing/subscription-state";
 import { logger } from "@/lib/logger";
-import { PLANS, type Plan } from "@/lib/plans";
+import { PAID_PLANS, PLANS, type Plan } from "@/lib/plans";
 
 export type BillingStatus = "sin_configurar" | "activo" | "pendiente" | "vencido" | "suspendido";
 
@@ -97,7 +97,8 @@ export async function getClinicsDueForCharge(): Promise<ClinicDueForCharge[]> {
   const { data, error } = await admin
     .from("clinics")
     .select("id, plan, current_period_end, wompi_payment_source_id_enc")
-    .in("plan", ["pro", "clinica", "enterprise"] as Plan[])
+    // Solo los planes con precio fijo: Free no se cobra y Enterprise se factura por contrato.
+    .in("plan", PAID_PLANS)
     .in("billing_status", ["activo", "vencido"])
     // Quien canceló conserva el plan hasta el fin del período, pero no se le
     // vuelve a cobrar: al vencer, end_canceled_subscriptions() lo pasa a Free.
@@ -460,5 +461,6 @@ export async function flagClinicForBillingReview(
 
 /** true si el plan requiere pago recurrente. */
 export function isPaidPlan(plan: Plan): boolean {
-  return PLANS[plan].priceInCents > 0;
+  // null = a convenir: se factura por contrato, no por la app.
+  return (PLANS[plan].priceInCents ?? 0) > 0;
 }

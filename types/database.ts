@@ -1679,7 +1679,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
-      clinic_plan: "free" | "pro" | "clinica" | "enterprise"
+      clinic_plan: "free" | "esencial" | "pro" | "clinica" | "enterprise"
       consultation_status: "in_progress" | "ended" | "analyzed"
       notification_channel: "email" | "whatsapp"
       notification_status: "pending" | "sent" | "failed" | "simulated"
@@ -1824,7 +1824,7 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
-      clinic_plan: ["free", "pro", "clinica", "enterprise"],
+      clinic_plan: ["free", "esencial", "pro", "clinica", "enterprise"],
       consultation_status: ["in_progress", "ended", "analyzed"],
       notification_channel: ["email", "whatsapp"],
       notification_status: ["pending", "sent", "failed", "simulated"],

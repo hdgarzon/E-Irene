@@ -10,7 +10,7 @@ test("configuración: plan Free muestra upgrade pago y permite agregar miembro a
   // Settings hub → plan Free por defecto
   await page.goto("/settings");
   await expect(page.getByText("Plan actual")).toBeVisible();
-  await expect(page.getByText("Free · $0/mes")).toBeVisible();
+  await expect(page.getByText("Free · $0 COP/mes")).toBeVisible();
 
   // Los planes pagos ahora requieren completar un pago real en Wompi (Fase 2
   // de facturación) — ya no es un cambio instantáneo que se pueda probar con
@@ -18,7 +18,9 @@ test("configuración: plan Free muestra upgrade pago y permite agregar miembro a
   // cambiar a...", no "Cambiar a..."); el flujo de pago en sí se prueba en
   // tests/billing-checkout.test.ts (unitario, con Wompi mockeado).
   await page.goto("/settings/plan");
-  await expect(page.getByRole("button", { name: "Pagar y cambiar a Plus" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pagar y cambiar a Clínica" })).toBeVisible();
+  // Enterprise no se compra por la app: se ofrece por contacto.
+  await expect(page.getByRole("link", { name: "Contáctanos" })).toBeVisible();
 
   // Agregar personal de secretaría — no cuenta contra el límite de
   // profesionales del plan (maxDoctors), a diferencia de admin/doctor. La

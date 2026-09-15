@@ -12,8 +12,11 @@ import {
 } from "@/lib/db/platform-console";
 import type { UserRole } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { PLAN_ORDER, type Plan } from "@/lib/plans";
 
-const PLANS = ["free", "pro", "clinica", "enterprise"] as const;
+// Los mismos códigos que lib/plans.ts: con una lista propia, la consola no podía
+// asignar los planes nuevos.
+const PLANS: readonly Plan[] = PLAN_ORDER;
 const ROLES: UserRole[] = ["admin", "doctor", "secretaria"];
 const APPT_STATUS = ["scheduled", "confirmed", "completed", "cancelled", "no_show"] as const;
 
