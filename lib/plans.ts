@@ -14,7 +14,6 @@ export interface PlanLimits {
   maxPatients: number;
   transcriptionHours: number;
   consultationsPerMonth: number;
-  ai: boolean;
   whatsapp: boolean;
   /**
    * Videollamadas (migración 0058): "none" no las tiene; "addon" las compra por packs y
@@ -47,6 +46,12 @@ function definePlan(plan: Omit<PlanLimits, "price">): PlanLimits {
 // `esencial` se agregó en la migración 0053. En los planes pagos la bolsa de
 // horas es consultas × 1 h, de modo que "20 consultas de hasta una hora" es a
 // la vez la promesa comercial y el límite que se aplica.
+//
+// El análisis con IA no es un límite del plan: todos lo tienen, Free incluido. Es
+// el mismo análisis que genera las alertas de riesgo al profesional
+// (lib/consultation-analysis.ts), y una alerta de riesgo no se condiciona al plan.
+// Antes había un flag `ai` que decía "Sin análisis con IA" en Free sin que nada lo
+// aplicara.
 export const PLANS: Record<Plan, PlanLimits> = {
   free: definePlan({
     label: "Free",
@@ -55,7 +60,6 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxPatients: 5,
     transcriptionHours: 2,
     consultationsPerMonth: 5,
-    ai: false,
     whatsapp: false,
     video: "none",
   }),
@@ -66,7 +70,6 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxPatients: Infinity,
     transcriptionHours: 20,
     consultationsPerMonth: 20,
-    ai: true,
     whatsapp: false,
     video: "addon",
   }),
@@ -77,7 +80,6 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxPatients: Infinity,
     transcriptionHours: 30,
     consultationsPerMonth: 30,
-    ai: true,
     whatsapp: false,
     video: "addon",
   }),
@@ -88,7 +90,6 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxPatients: Infinity,
     transcriptionHours: 75,
     consultationsPerMonth: 75,
-    ai: true,
     whatsapp: true,
     video: "addon",
   }),
@@ -100,7 +101,6 @@ export const PLANS: Record<Plan, PlanLimits> = {
     maxPatients: Infinity,
     transcriptionHours: Infinity,
     consultationsPerMonth: Infinity,
-    ai: true,
     whatsapp: true,
     video: "included",
   }),

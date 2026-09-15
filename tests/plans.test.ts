@@ -40,8 +40,9 @@ describe("plans (límites por plan)", () => {
   });
 
   it("planLimits expone las funciones de cada plan", () => {
-    expect(planLimits("free").ai).toBe(false);
-    expect(planLimits("esencial").ai).toBe(true);
+    // El análisis con IA no es una función del plan: está en todos, porque genera las
+    // alertas de riesgo al profesional (lib/plans.ts).
+    expect(planLimits("free")).not.toHaveProperty("ai");
     expect(planLimits("esencial").whatsapp).toBe(false);
     expect(planLimits("clinica").whatsapp).toBe(true);
   });

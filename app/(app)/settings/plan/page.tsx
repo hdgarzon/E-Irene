@@ -100,11 +100,8 @@ const NOTICE_TONE = {
 };
 
 /**
- * Qué incluye Free, en una frase: lo que ve quien está por cancelar.
- *
- * No menciona el análisis con IA a propósito: PLANS.free.ai es false, pero nada
- * lo aplica —las clínicas Free también reciben análisis y alertas de riesgo— y
- * decirle a quien cancela que lo pierde sería falso.
+ * Qué incluye Free, en una frase: lo que ve quien está por cancelar. No menciona el
+ * análisis con IA porque cancelar no lo quita: está en todos los planes (lib/plans.ts).
  */
 function freeLimitsSummary(): string {
   const f = PLANS.free;
@@ -197,7 +194,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   function features(plan: Plan) {
     const l = PLANS[plan];
     const extras = [
-      l.ai ? "Análisis con IA" : "Sin análisis con IA",
+      // En todos los planes: es el análisis que genera las alertas de riesgo (lib/plans.ts).
+      "Análisis con IA",
       l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
       l.video === "included"
         ? "Videollamadas incluidas"
