@@ -43,6 +43,15 @@ describe("estado de la suscripción", () => {
     expect(subscriptionState("pro", subscription(), NOW)).toEqual({
       kind: "renewing",
       periodEnd: "2026-10-10T15:00:00Z",
+      scheduledPlan: null,
+    });
+  });
+
+  it("un downgrade programado viaja con la renovación, no la reemplaza", () => {
+    expect(subscriptionState("pro", subscription({ scheduledPlan: "esencial" }), NOW)).toEqual({
+      kind: "renewing",
+      periodEnd: "2026-10-10T15:00:00Z",
+      scheduledPlan: "esencial",
     });
   });
 

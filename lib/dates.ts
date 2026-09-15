@@ -145,6 +145,16 @@ export function billingCycleBounds(
   return { start: addMonthsBogota(origin, months), end: addMonthsBogota(origin, months + 1) };
 }
 
+/**
+ * Instante en UTC con el formato de `expires_at` de los links de Wompi,
+ * "2040-12-10T14:30:00": sin zona ni milisegundos. Wompi no documenta en qué zona lo
+ * lee; la vigencia que cuenta la comprueba la base contra la fecha de creación de la
+ * transacción (fulfill_plan_purchase, apply_plan_upgrade).
+ */
+export function toWompiUtcTimestamp(date: Date): string {
+  return date.toISOString().slice(0, 19);
+}
+
 /** true si `iso` fue hace más de `days` días. */
 export function isMoreThanDaysAgo(iso: string, days: number): boolean {
   return Date.now() - new Date(iso).getTime() > days * 24 * 60 * 60 * 1000;

@@ -136,8 +136,12 @@ export type Database = {
           amount_in_cents: number
           clinic_id: string
           created_at: string
+          details: Json
+          expires_at: string | null
           id: string
+          kind: string
           plan: string
+          quantity: number | null
           reference: string
           wompi_payment_link_id: string
         }
@@ -145,8 +149,12 @@ export type Database = {
           amount_in_cents: number
           clinic_id: string
           created_at?: string
+          details?: Json
+          expires_at?: string | null
           id?: string
+          kind?: string
           plan: string
+          quantity?: number | null
           reference: string
           wompi_payment_link_id: string
         }
@@ -154,8 +162,12 @@ export type Database = {
           amount_in_cents?: number
           clinic_id?: string
           created_at?: string
+          details?: Json
+          expires_at?: string | null
           id?: string
+          kind?: string
           plan?: string
+          quantity?: number | null
           reference?: string
           wompi_payment_link_id?: string
         }
@@ -203,6 +215,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "billing_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_fulfillments: {
+        Row: {
+          amount_in_cents: number
+          checkout_id: string | null
+          clinic_id: string
+          created_at: string
+          kind: string
+          outcome: string
+          reason: string | null
+          wompi_transaction_id: string
+        }
+        Insert: {
+          amount_in_cents: number
+          checkout_id?: string | null
+          clinic_id: string
+          created_at?: string
+          kind: string
+          outcome: string
+          reason?: string | null
+          wompi_transaction_id: string
+        }
+        Update: {
+          amount_in_cents?: number
+          checkout_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          kind?: string
+          outcome?: string
+          reason?: string | null
+          wompi_transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_fulfillments_checkout_id_fkey"
+            columns: ["checkout_id"]
+            isOneToOne: false
+            referencedRelation: "billing_checkouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_fulfillments_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
@@ -304,6 +364,8 @@ export type Database = {
           id: string
           name: string
           plan: Database["public"]["Enums"]["clinic_plan"]
+          scheduled_plan: Database["public"]["Enums"]["clinic_plan"] | null
+          scheduled_plan_requested_at: string | null
           slug: string
           suspended_at: string | null
           updated_at: string
@@ -319,6 +381,8 @@ export type Database = {
           id?: string
           name: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
+          scheduled_plan?: Database["public"]["Enums"]["clinic_plan"] | null
+          scheduled_plan_requested_at?: string | null
           slug: string
           suspended_at?: string | null
           updated_at?: string
@@ -334,6 +398,8 @@ export type Database = {
           id?: string
           name?: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
+          scheduled_plan?: Database["public"]["Enums"]["clinic_plan"] | null
+          scheduled_plan_requested_at?: string | null
           slug?: string
           suspended_at?: string | null
           updated_at?: string
@@ -1543,6 +1609,17 @@ export type Database = {
         Args: { p_from: string; p_months: number }
         Returns: string
       }
+      apply_plan_upgrade: {
+        Args: {
+          p_amount: number
+          p_checkout_id: string
+          p_clinic: string
+          p_payment_source_enc?: string
+          p_transaction_created_at?: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
       auth_can_access_clinical: { Args: never; Returns: boolean }
       auth_clinic_id: { Args: never; Returns: string }
       auth_role: {
@@ -1561,6 +1638,7 @@ export type Database = {
         }[]
       }
       billing_grace_period: { Args: never; Returns: string }
+      cancel_scheduled_plan_change: { Args: never; Returns: Json }
       check_rate_limit: {
         Args: { p_key: string; p_max: number; p_window_seconds: number }
         Returns: boolean
@@ -1583,6 +1661,19 @@ export type Database = {
       finalize_transcription_session: {
         Args: { p_consultation_id: string }
         Returns: undefined
+      }
+      fulfill_plan_purchase: {
+        Args: {
+          p_amount: number
+          p_checkout_id?: string
+          p_clinic: string
+          p_expected_amount?: number
+          p_payment_source_enc?: string
+          p_plan: Database["public"]["Enums"]["clinic_plan"]
+          p_transaction_created_at?: string
+          p_transaction_id: string
+        }
+        Returns: Json
       }
       get_platform_appointment_status: {
         Args: never
@@ -1637,6 +1728,7 @@ export type Database = {
       }
       get_transcription_usage: { Args: never; Returns: Json }
       grandfather_verification_deadline: { Args: never; Returns: string }
+      has_open_renewal_charge: { Args: { p_clinic: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       mark_subscription_payment_failed: {
         Args: { p_clinic: string; p_reason: string }
@@ -1660,12 +1752,36 @@ export type Database = {
         Returns: undefined
       }
       purge_expired_transcripts: { Args: never; Returns: undefined }
-      renew_subscription_period: {
-        Args: { p_charged_period_end: string; p_clinic: string }
-        Returns: string
+      reject_billing_payment: {
+        Args: {
+          p_amount: number
+          p_checkout_id: string
+          p_clinic: string
+          p_kind: string
+          p_reason: string
+          p_transaction_id: string
+        }
+        Returns: Json
       }
+      renew_subscription_period:
+        | {
+            Args: { p_charged_period_end: string; p_clinic: string }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_charged_period_end: string
+              p_charged_plan: Database["public"]["Enums"]["clinic_plan"]
+              p_clinic: string
+            }
+            Returns: string
+          }
       request_subscription_cancellation: { Args: never; Returns: Json }
       revert_subscription_cancellation: { Args: never; Returns: Json }
+      schedule_plan_downgrade: {
+        Args: { p_plan: Database["public"]["Enums"]["clinic_plan"] }
+        Returns: Json
+      }
       transcription_month_start: { Args: never; Returns: string }
       transcription_seconds_used: {
         Args: { p_clinic: string }

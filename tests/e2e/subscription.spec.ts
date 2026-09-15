@@ -72,6 +72,46 @@ test("suscripción: cancelar conserva el plan hasta el fin del período y se pue
   if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/4-reactivada.png`, fullPage: true });
 });
 
+test("cambio de plan: subir cobra la diferencia y bajar se programa para la renovación", async ({
+  page,
+}) => {
+  const email = `cambio_${Date.now()}@e-irene.test`;
+  await signUpAndActivate(page, { clinicName: "Clínica Cambio", fullName: "Dra. Admin", email });
+  await activatePaidPlan(email);
+
+  await page.goto("/settings/plan");
+  await expect(page.getByText("consultas por ciclo").first()).toBeVisible();
+
+  // Subir: se muestra lo que se paga hoy, no el precio completo del plan. El
+  // checkout de Wompi no se recorre en e2e (billing-checkout.test.ts).
+  const clinica = page.locator('[data-plan="clinica"]');
+  await expect(clinica.getByRole("button", { name: /^Pagar \$[\d.]+ y cambiar$/ })).toBeVisible();
+  await expect(clinica).toContainText("Diferencia por lo que queda del ciclo");
+
+  // Bajar: sin cobro, desde la renovación.
+  const esencial = page.locator('[data-plan="esencial"]');
+  await expect(esencial).toContainText("Sin cobro hoy");
+  if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/7-planes-cambio.png`, fullPage: true });
+  await esencial.getByRole("button", { name: "Programar cambio a Esencial" }).click();
+
+  await expect(page).toHaveURL(/cambio=programado/);
+  await expect(page.getByRole("status")).toContainText("Cambio de plan programado");
+  const panel = page.locator("#suscripcion");
+  await expect(panel).toContainText("Conservas el plan Profesional hasta el");
+  await expect(panel).toContainText("Ese día pasas al plan Esencial");
+  await expect(esencial).toContainText("Cambio programado para el");
+  if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/8-downgrade-programado.png`, fullPage: true });
+
+  await page.goto("/settings");
+  await expect(page.getByText(/con el plan Esencial\.$/)).toBeVisible();
+
+  // Anularlo deja la renovación con el plan actual.
+  await page.goto("/settings/plan");
+  await panel.getByRole("button", { name: "Mantener plan Profesional" }).click();
+  await expect(panel).toContainText("Plan Profesional · se renueva el");
+  await expect(esencial.getByRole("button", { name: "Programar cambio a Esencial" })).toBeVisible();
+});
+
 test("suscripción: una renovación sin cobrar avisa hasta cuándo dura la gracia y ofrece pagar", async ({
   page,
 }) => {

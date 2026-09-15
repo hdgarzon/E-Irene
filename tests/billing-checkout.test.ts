@@ -8,7 +8,9 @@ vi.mock("@/lib/db/billing-checkouts", () => ({
   recordCheckout: (...a: unknown[]) => recordCheckout(...a),
 }));
 
-const { createWompiCheckout } = await import("@/lib/billing/wompi-checkout");
+const { createWompiCheckout, createUpgradeCheckout } = await import("@/lib/billing/wompi-checkout");
+const { parseBillingReference } = await import("@/lib/billing/wompi");
+const { PLANS } = await import("@/lib/plans");
 const { chargeClinic } = await import("@/lib/billing/recurring");
 const { periodKeyFor } = await import("@/lib/db/billing");
 
@@ -200,6 +202,88 @@ describe("createWompiCheckout", () => {
   });
 });
 
+describe("createUpgradeCheckout", () => {
+  const CLINIC = "6550747c-13a0-4cfb-a88a-b1cb9bb99952";
+  const quote = {
+    fromPlan: "esencial",
+    toPlan: "pro",
+    amountInCents: 2_000_000,
+    cycleStart: "2026-09-01T05:00:00.000Z",
+    periodEnd: "2026-10-01T05:00:00.000Z",
+    nextRenewalInCents: 9_900_000,
+  } as const;
+
+  beforeEach(() => {
+    process.env.WOMPI_PRIVATE_KEY = "test_private_key";
+    process.env.WOMPI_ENVIRONMENT = "sandbox";
+    recordCheckout.mockReset().mockResolvedValue(undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { id: "test_up123", active: true } }),
+      })) as unknown as typeof fetch,
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("cobra la diferencia cotizada con un link que vence y guarda la cotización", async () => {
+    const now = new Date("2026-09-15T15:00:00Z");
+    const result = await createUpgradeCheckout({
+      clinicId: CLINIC,
+      quote,
+      redirectUrl: "https://e-irene.co/settings/plan",
+      now,
+    });
+
+    const body = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(body.amount_in_cents).toBe(2_000_000);
+    // La cotización baja con cada minuto: un link sin vencimiento cobraría mañana el monto de hoy.
+    expect(body.expires_at).toBe("2026-09-15T15:30:00");
+    expect(body.single_use).toBe(true);
+    expect(body.collect_shipping).toBe(false);
+
+    // Nunca se lee como la compra de un plan completo, que reiniciaría el ciclo.
+    expect(result.reference).toMatch(new RegExp(`^planchange-${CLINIC}-pro-\\d+$`));
+    expect(parseBillingReference(result.reference)).toBeNull();
+
+    expect(recordCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentLinkId: "test_up123",
+        clinicId: CLINIC,
+        kind: "upgrade",
+        plan: "pro",
+        amountInCents: 2_000_000,
+        expiresAt: "2026-09-15T15:30:00.000Z",
+        details: expect.objectContaining({
+          from_plan: "esencial",
+          to_plan: "pro",
+          period_end: quote.periodEnd,
+        }),
+      }),
+    );
+  });
+
+  it("la compra de un plan completo vence en 24 horas y no lleva cotización", async () => {
+    // Pagado meses después, cobraría otro precio o una suscripción ya renovada.
+    await createWompiCheckout({
+      clinicId: CLINIC,
+      plan: "pro",
+      redirectUrl: "https://e-irene.co/settings/plan",
+      now: new Date("2026-09-15T15:00:00Z"),
+    });
+    const body = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(body.expires_at).toBe("2026-09-16T15:00:00");
+    expect(recordCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "plan", expiresAt: "2026-09-16T15:00:00.000Z", details: undefined }),
+    );
+  });
+});
+
 describe("chargeClinic", () => {
   beforeEach(() => {
     process.env.WOMPI_PRIVATE_KEY = "test_private_key";
@@ -224,6 +308,8 @@ describe("chargeClinic", () => {
     const result = await chargeClinic({
       id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
       plan: "pro",
+      scheduledPlan: null,
+      chargePlan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
       paymentSourceUnreadable: false,
@@ -244,10 +330,39 @@ describe("chargeClinic", () => {
     );
   });
 
+  it("con un downgrade programado cobra el precio del plan menor", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { id: "tx-recurring-3", status: "APPROVED" } }),
+      })) as unknown as typeof fetch,
+    );
+
+    await chargeClinic({
+      id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
+      plan: "pro",
+      scheduledPlan: "esencial",
+      chargePlan: "esencial",
+      currentPeriodEnd: "2026-01-01T00:00:00.000Z",
+      wompiPaymentSourceId: "ps-123",
+      paymentSourceUnreadable: false,
+    });
+
+    const body = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(body.amount_in_cents).toBe(PLANS.esencial.priceInCents);
+    expect(body.reference).toMatch(
+      /^renewal-6550747c-13a0-4cfb-a88a-b1cb9bb99952-esencial-2026-01-01-\d+$/,
+    );
+  });
+
   it("returns failure when clinic has no payment source", async () => {
     const result = await chargeClinic({
       id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
       plan: "pro",
+      scheduledPlan: null,
+      chargePlan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: null,
       paymentSourceUnreadable: false,
@@ -271,6 +386,8 @@ describe("chargeClinic", () => {
     const result = await chargeClinic({
       id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
       plan: "pro",
+      scheduledPlan: null,
+      chargePlan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
       paymentSourceUnreadable: false,
@@ -293,6 +410,8 @@ describe("chargeClinic", () => {
     const result = await chargeClinic({
       id: "6550747c-13a0-4cfb-a88a-b1cb9bb99952",
       plan: "pro",
+      scheduledPlan: null,
+      chargePlan: "pro",
       currentPeriodEnd: "2026-01-01T00:00:00.000Z",
       wompiPaymentSourceId: "ps-123",
       paymentSourceUnreadable: false,

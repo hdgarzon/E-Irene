@@ -26,8 +26,11 @@ export type SubscriptionState =
   | { kind: "negotiated" }
   /** Plan pago sin período: asignado desde la consola, sin cobro. */
   | { kind: "unbilled" }
-  /** Período pagado vigente que se va a renovar. */
-  | { kind: "renewing"; periodEnd: string }
+  /**
+   * Período pagado vigente que se va a renovar. `scheduledPlan` es el plan menor
+   * que rige desde esa renovación, si se programó un downgrade.
+   */
+  | { kind: "renewing"; periodEnd: string; scheduledPlan: Plan | null }
   /** Cancelación pedida: conserva el plan hasta periodEnd, sin gracia. */
   | { kind: "canceling"; periodEnd: string }
   /**
@@ -66,5 +69,9 @@ export function subscriptionState(
       periodEnded,
     };
   }
-  return { kind: "renewing", periodEnd: currentPeriodEnd };
+  return {
+    kind: "renewing",
+    periodEnd: currentPeriodEnd,
+    scheduledPlan: subscription.scheduledPlan ?? null,
+  };
 }

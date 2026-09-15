@@ -116,6 +116,16 @@ export function parseBillingReference(reference: string): BillingReference | nul
   return { clinicId: match[1], plan: match[2] as Plan };
 }
 
+// ── Referencia de un cambio de plan (upgrade prorrateado) ───────────────────
+//
+// Prefijo propio para que nunca se lea como la compra de un plan completo:
+// parseBillingReference no la reconoce, así que un pago de upgrade solo se
+// aplica a través de su fila en billing_checkouts, que guarda la cotización.
+
+export function buildPlanChangeReference(clinicId: string, plan: Plan): string {
+  return `planchange-${clinicId}-${plan}-${Date.now()}`;
+}
+
 // ── Referencia de los cobros recurrentes ────────────────────────────────────
 //
 // Los cobros recurrentes son transacciones directas con el token guardado, y en

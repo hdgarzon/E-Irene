@@ -3,16 +3,22 @@ import { ArrowLeft, Check, Info, CheckCircle2, Clock } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { getClinicOverview } from "@/lib/db/clinic";
 import { subscriptionState, type SubscriptionState } from "@/lib/billing/subscription-state";
+import { planChangeOption } from "@/lib/billing/plan-change";
 import { getTranscriptionUsage } from "@/lib/db/transcription-usage";
 import {
   PLANS,
   PLAN_ORDER,
+  formatCop,
   limitLabel,
   transcriptionLimitSeconds,
   transcriptionUsageLabel,
+  type Plan,
 } from "@/lib/plans";
 import { formatLongDate } from "@/lib/dates";
-import { initiatePlanUpgradeAction } from "@/app/(app)/settings/actions";
+import {
+  initiatePlanUpgradeAction,
+  schedulePlanDowngradeAction,
+} from "@/app/(app)/settings/actions";
 import { reconcilePlanPayment, type ReconcileOutcome } from "@/lib/billing/reconcile";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
@@ -21,11 +27,41 @@ import { UsageBar } from "@/components/usage-bar";
 import { SubscriptionPanel, type SubscriptionPanelState } from "@/components/subscription-panel";
 
 interface PlanPageProps {
-  searchParams: Promise<{ wompi?: string; id?: string }>;
+  searchParams: Promise<{ wompi?: string; id?: string; cambio?: string }>;
 }
 
 /** Enterprise se acuerda por correo, con el mismo contacto de la página pública. */
 const ENTERPRISE_CONTACT_URL = "mailto:hola@e-irene.co?subject=Plan%20Enterprise";
+
+/** Resultado de un cambio de plan, tras volver de la acción (?cambio=). */
+const PLAN_CHANGE_NOTICES: Record<string, { tone: "ok" | "warn" | "error"; text: string }> = {
+  programado: {
+    tone: "ok",
+    text: "Cambio de plan programado. Rige desde la próxima renovación; hasta entonces conservas tu plan actual.",
+  },
+  cancelacion_pendiente: {
+    tone: "warn",
+    text: "Tienes una cancelación pedida. Reactiva la suscripción para programar un cambio de plan.",
+  },
+  no_programado: {
+    tone: "error",
+    text: "No se pudo programar el cambio de plan. Intenta de nuevo o escríbenos.",
+  },
+  renovacion_en_curso: {
+    tone: "warn",
+    text: "Hay un cobro de renovación en proceso. Cuando se confirme podrás cambiar de plan.",
+  },
+  no_cotizable: {
+    tone: "error",
+    text: "No pudimos calcular la diferencia para cambiar de plan. Escríbenos y lo resolvemos.",
+  },
+};
+
+const NOTICE_TONE = {
+  ok: "border-mint/40 bg-soft-mint/20 text-foreground/90",
+  warn: "border-amber-400/40 bg-amber-400/10 text-foreground/90",
+  error: "border-coral/40 bg-coral/5 text-destructive",
+};
 
 /**
  * Qué incluye Free, en una frase: lo que ve quien está por cancelar.
@@ -56,18 +92,27 @@ function toPanelState(state: SubscriptionState): SubscriptionPanelState | null {
       periodEnded: state.periodEnded,
     };
   }
-  return { kind: state.kind, periodEnd: formatLongDate(state.periodEnd) };
+  if (state.kind === "renewing") {
+    return {
+      kind: "renewing",
+      periodEnd: formatLongDate(state.periodEnd),
+      scheduledChange: state.scheduledPlan
+        ? { planLabel: PLANS[state.scheduledPlan].label, price: PLANS[state.scheduledPlan].price }
+        : null,
+    };
+  }
+  return { kind: "canceling", periodEnd: formatLongDate(state.periodEnd) };
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const user = await requireRole(["admin", "doctor"]);
-  const { wompi, id: transactionId } = await searchParams;
+  const { wompi, id: transactionId, cambio } = await searchParams;
 
   // Wompi devuelve al usuario con ?id=<transaction_id>. Se verifica el pago
-  // contra la API de Wompi y se activa el plan si corresponde — red de
-  // seguridad para que un webhook no entregado no deje a la clínica pagando
-  // sin recibir el plan (ver lib/billing/reconcile.ts). Es idempotente: si el
-  // webhook ya lo procesó, esto no hace nada.
+  // contra la API de Wompi y se aplica si corresponde — red de seguridad para
+  // que un webhook no entregado no deje a la clínica pagando sin recibir lo
+  // comprado (ver lib/billing/reconcile.ts). Es idempotente: si el webhook ya
+  // lo procesó, esto no hace nada.
   let reconciled: ReconcileOutcome | null = null;
   if (transactionId) {
     try {
@@ -92,8 +137,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const cycleEndLabel = formatLongDate(overview.cycleEnd);
   const state = subscriptionState(overview.plan, overview.subscription);
   const panelState = toPanelState(state);
+  const notice = cambio ? PLAN_CHANGE_NOTICES[cambio] : undefined;
 
-  function features(plan: (typeof PLAN_ORDER)[number]) {
+
+  function features(plan: Plan) {
     const l = PLANS[plan];
     const extras = [
       l.ai ? "Análisis con IA" : "Sin análisis con IA",
@@ -110,10 +157,76 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return [
       `${limitLabel(l.maxDoctors)} profesional${l.maxDoctors === 1 ? "" : "es"}`,
       `${limitLabel(l.maxPatients)} pacientes`,
-      `${limitLabel(l.consultationsPerMonth)} consultas/mes`,
+      `${limitLabel(l.consultationsPerMonth)} consultas por ciclo`,
       `${limitLabel(l.transcriptionHours)} h de transcripción`,
       ...extras,
     ];
+  }
+
+  /** Botón de un plan pago que no es el actual (regla en lib/billing/plan-change.ts). */
+  function paidPlanAction(plan: Plan) {
+    const l = PLANS[plan];
+    const option = planChangeOption({
+      current: overview.plan,
+      target: plan,
+      state,
+      anchor: overview.billingCycleAnchor,
+      isAdmin,
+    });
+    const note = (text: string) => (
+      <p className="text-center text-xs text-muted-foreground">{text}</p>
+    );
+
+    switch (option.kind) {
+      case "upgrade":
+        return (
+          <form action={initiatePlanUpgradeAction.bind(null, plan)} className="space-y-1.5">
+            <Button type="submit" size="sm" className="w-full">
+              Pagar {formatCop(option.quote.amountInCents)} y cambiar
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Diferencia por lo que queda del ciclo. Desde el{" "}
+              {formatLongDate(option.quote.periodEnd)}, {l.price}.
+              {option.replacesScheduledPlan &&
+                ` Anula el cambio programado al plan ${PLANS[option.replacesScheduledPlan].label}.`}
+            </p>
+          </form>
+        );
+      case "downgrade":
+        if (option.scheduled) {
+          return (
+            <p className="text-center text-xs font-medium text-navy">
+              Cambio programado para el {formatLongDate(option.effectiveAt)}
+            </p>
+          );
+        }
+        return (
+          <form action={schedulePlanDowngradeAction.bind(null, plan)} className="space-y-1.5">
+            <Button type="submit" variant="outline" size="sm" className="w-full">
+              Programar cambio a {l.label}
+            </Button>
+            {note(`Sin cobro hoy. Rige desde el ${formatLongDate(option.effectiveAt)}.`)}
+          </form>
+        );
+      case "blocked":
+        return note(
+          option.reason === "canceling"
+            ? "Reactiva la suscripción para cambiar de plan"
+            : option.reason === "admin_only"
+              ? "Solo el administrador de la clínica puede cambiar de plan"
+              : "Escríbenos para cambiar a este plan",
+        );
+      case "purchase":
+        return (
+          <form action={initiatePlanUpgradeAction.bind(null, plan)}>
+            <Button type="submit" size="sm" className="w-full">
+              Pagar y cambiar a {l.label}
+            </Button>
+          </form>
+        );
+      default:
+        return null;
+    }
   }
 
   return (
@@ -138,10 +251,22 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           <div className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
             <p>
-              <span className="font-semibold text-navy">Pago confirmado.</span> Tu plan ya está
-              activo.
+              <span className="font-semibold text-navy">Pago confirmado.</span>{" "}
+              {reconciled.kind === "upgrade"
+                ? `Ya tienes el plan ${PLANS[reconciled.plan].label}; tu fecha de renovación no cambia.`
+                : "Tu plan ya está activo."}
             </p>
           </div>
+        </div>
+      )}
+
+      {reconciled?.result === "rejected" && (
+        <div className="rounded-2xl border border-coral/40 bg-coral/5 p-4 text-sm text-destructive">
+          <p>
+            Recibimos tu pago, pero no se pudo aplicar automáticamente (por ejemplo, porque el plan
+            o el período cambiaron mientras pagabas). Escríbenos y lo resolvemos: el pago queda
+            registrado y no necesitas volver a pagar.
+          </p>
         </div>
       )}
 
@@ -182,6 +307,15 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {wompi === "error" && (
         <div className="rounded-2xl border border-coral/40 bg-coral/5 p-4 text-sm text-destructive">
           <p>No se pudo iniciar el pago. Intentá de nuevo o contactá soporte.</p>
+        </div>
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className={cn("rounded-2xl border p-4 text-sm", NOTICE_TONE[notice.tone])}
+        >
+          <p>{notice.text}</p>
         </div>
       )}
 
@@ -234,6 +368,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           return (
             <div
               key={plan}
+              data-plan={plan}
               className={`flex flex-col rounded-2xl border bg-card p-5 ${
                 current ? "border-brand ring-1 ring-brand" : "border-gray-line"
               }`}
@@ -283,11 +418,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
                     )}
                   </p>
                 ) : (
-                  <form action={initiatePlanUpgradeAction.bind(null, plan)}>
-                    <Button type="submit" size="sm" className="w-full">
-                      Pagar y cambiar a {l.label}
-                    </Button>
-                  </form>
+                  paidPlanAction(plan)
                 )}
               </div>
             </div>
@@ -297,8 +428,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
       <p className="text-center text-xs text-muted-foreground">
         Los pagos se procesan de forma segura a través de Wompi. Tu tarjeta o medio de pago se
-        tokeniza para la suscripción mensual. Puedes cancelar en cualquier momento y conservas el
-        plan hasta el final del período pagado.
+        tokeniza para la suscripción mensual. Si subes de plan pagas solo la diferencia por lo que
+        queda del ciclo y tu fecha de renovación no cambia; si bajas, el cambio rige desde la
+        renovación. Puedes cancelar en cualquier momento y conservas el plan hasta el final del
+        período pagado.
       </p>
     </div>
   );

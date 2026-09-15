@@ -1,10 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import type { Plan } from "@/lib/plans";
+import type { Json } from "@/types/database";
 import { parseBillingReference } from "@/lib/billing/wompi";
 
 /**
- * Resolución de "¿de qué clínica y plan es este pago?".
+ * Resolución de "¿de qué clínica es este pago y qué se compró?".
  *
  * Wompi devuelve nuestra `reference` intacta SOLO en las transacciones que
  * creamos directamente (cobros recurrentes con payment_source_id). En los
@@ -17,11 +18,24 @@ import { parseBillingReference } from "@/lib/billing/wompi";
  * vez de asignarse a una clínica equivocada.
  */
 
-/** El monto NO se toma de acá: se valida siempre contra PLANS[plan], que es
- *  la única fuente de verdad de precios. */
+/** Qué se compra con un link (migración 0056). */
+export type CheckoutKind = "plan" | "upgrade" | "transcription_pack" | "video_pack";
+
+/**
+ * Un pago por link, tal como se registró al crear el checkout. El monto cobrado
+ * no se da por bueno aquí: lo valida el cumplimiento (lib/billing/fulfillment.ts)
+ * contra el precio del plan en lib/plans.ts o contra lo cotizado en este registro.
+ */
 export interface CheckoutRecord {
+  /** null si se resolvió por nuestra propia referencia, sin fila de checkout. */
+  checkoutId: string | null;
   clinicId: string;
+  /** Plan comprado o, en un upgrade, el plan destino. */
   plan: Plan;
+  kind: CheckoutKind;
+  amountInCents: number | null;
+  quantity: number | null;
+  details: Record<string, unknown>;
 }
 
 export async function recordCheckout(input: {
@@ -30,6 +44,10 @@ export async function recordCheckout(input: {
   plan: Plan;
   amountInCents: number;
   reference: string;
+  kind?: CheckoutKind;
+  quantity?: number | null;
+  details?: Record<string, unknown>;
+  expiresAt?: string | null;
 }): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.from("billing_checkouts").insert({
@@ -38,6 +56,10 @@ export async function recordCheckout(input: {
     plan: input.plan,
     amount_in_cents: input.amountInCents,
     reference: input.reference,
+    kind: input.kind ?? "plan",
+    quantity: input.quantity ?? null,
+    details: (input.details ?? {}) as Json,
+    expires_at: input.expiresAt ?? null,
   });
   // 23505 = el mismo link ya se registró (reintento del usuario): no es error.
   if (error && error.code !== "23505") throw error;
@@ -49,12 +71,23 @@ export async function findCheckoutByPaymentLinkId(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("billing_checkouts")
-    .select("clinic_id, plan")
+    .select("id, clinic_id, plan, kind, amount_in_cents, quantity, details")
     .eq("wompi_payment_link_id", paymentLinkId)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return { clinicId: data.clinic_id, plan: data.plan as Plan };
+  return {
+    checkoutId: data.id,
+    clinicId: data.clinic_id,
+    plan: data.plan as Plan,
+    kind: data.kind as CheckoutKind,
+    amountInCents: Number(data.amount_in_cents),
+    quantity: data.quantity,
+    details:
+      data.details && typeof data.details === "object" && !Array.isArray(data.details)
+        ? (data.details as Record<string, unknown>)
+        : {},
+  };
 }
 
 /**
@@ -73,9 +106,9 @@ export function extractPaymentLinkId(wompiReference: string): string | null {
 }
 
 /**
- * Resuelve clínica y plan de una transacción, probando en orden:
+ * Resuelve clínica y compra de una transacción, probando en orden:
  *  1. `payment_link_id` del propio payload (lo más directo y confiable).
- *  2. Nuestra referencia, si Wompi la conservó (cobros recurrentes).
+ *  2. Nuestra referencia de compra de plan, si Wompi la conservó.
  *  3. El id embebido en la referencia que generó Wompi.
  *
  * Siempre contra la base: un id inventado no resuelve nada.
@@ -90,7 +123,17 @@ export async function resolveTransactionOwner(tx: {
   }
 
   const own = parseBillingReference(tx.reference);
-  if (own) return { clinicId: own.clinicId, plan: own.plan };
+  if (own) {
+    return {
+      checkoutId: null,
+      clinicId: own.clinicId,
+      plan: own.plan,
+      kind: "plan",
+      amountInCents: null,
+      quantity: null,
+      details: {},
+    };
+  }
 
   const extracted = extractPaymentLinkId(tx.reference);
   if (extracted) {
