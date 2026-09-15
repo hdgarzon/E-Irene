@@ -10,6 +10,7 @@ import {
   setAppointmentStatus,
   getAppointment,
   ensureVideoRoom,
+  isAppointmentPatientLocked,
   type AppointmentInput,
 } from "@/lib/db/appointments";
 import { getActiveConsent } from "@/lib/db/consents";
@@ -118,6 +119,14 @@ export async function updateAppointmentAction(
       entityId: appointmentId,
     });
   } catch (error) {
+    if (isAppointmentPatientLocked(error)) {
+      return {
+        fieldErrors: {
+          patientId:
+            "Esta cita ya tiene consultas o recordatorios de su paciente y no puede pasar a otro. Cancélala y crea una nueva.",
+        },
+      };
+    }
     logger.error("appointment.update_failed", {
       clinicId: user.clinicId,
       actorId: user.id,

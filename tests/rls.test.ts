@@ -701,15 +701,24 @@ dv("referencias entre clínicas: la sesión no enlaza registros de otra clínica
       token_hash: crypto.randomUUID(),
       expires_at: manana(),
     }),
-    patient_clinical_state: async () => ({
-      clinic_id: A.clinicId,
-      patient_id: await pacienteNuevo(),
-      consultation_id: await consultaNueva(),
-      version: 1,
-      state_enc: encrypt("{}"),
-      model: "mock",
-      prompt_version: "v1",
-    }),
+    // Paciente nuevo por unique(patient_id, version), con una consulta suya: desde
+    // la 0051 el estado clínico tiene que ser del paciente de su consulta.
+    patient_clinical_state: async () => {
+      const patient = await pacienteNuevo();
+      return {
+        clinic_id: A.clinicId,
+        patient_id: patient,
+        consultation_id: await insertar("consultations", {
+          clinic_id: A.clinicId,
+          patient_id: patient,
+          doctor_id: A.userId,
+        }),
+        version: 1,
+        state_enc: encrypt("{}"),
+        model: "mock",
+        prompt_version: "v1",
+      };
+    },
   };
 
   // ── Lo que el control debe impedir ────────────────────────────────────────
@@ -822,6 +831,14 @@ dv("referencias entre clínicas: la sesión no enlaza registros de otra clínica
   });
 
   it("SÍ reasigna la cita a otro paciente de su clínica, como updateAppointment", async () => {
+    // Una cita sin consultas ni recordatorios: con ellos, la 0051 no deja
+    // cambiarle el paciente.
+    const cita = await insertar("appointments", {
+      clinic_id: A.clinicId,
+      patient_id: a.patient,
+      doctor_id: A.userId,
+      scheduled_at: manana(),
+    });
     const { error } = await A.client
       .from("appointments")
       .update({
@@ -832,10 +849,10 @@ dv("referencias entre clínicas: la sesión no enlaza registros de otra clínica
         notes: null,
         modality: "video",
       })
-      .eq("id", a.appointment);
+      .eq("id", cita);
     expect(error).toBeNull();
 
-    const { data } = await service().from("appointments").select("patient_id").eq("id", a.appointment).single();
+    const { data } = await service().from("appointments").select("patient_id").eq("id", cita).single();
     expect(data?.patient_id).toBe(a.otherPatient);
   });
 
