@@ -64,9 +64,9 @@ plataforma cobra exactamente el valor de la tabla, sin sumar impuestos.]`
 WhatsApp, son las que se muestran en la sección **Plan y facturación** de la plataforma al momento
 de contratar.
 
-`[Ver ANEXO, punto 3, antes de fijar la tabla de funcionalidades: hay una diferencia entre lo que
-anuncia la página de planes y lo que la plataforma entrega. Las videollamadas quedan definidas en la
-cláusula SEXTA, numeral 6.7.]`
+El **análisis con IA** de las sesiones está incluido en **todos los planes, incluido Free**, junto
+con las alertas de riesgo que ese análisis genera para el profesional. Las videollamadas se rigen
+por la cláusula SEXTA, numeral 6.7.
 
 **2.4** El plan **Enterprise** no se contrata desde la plataforma. Su precio, sus límites y sus
 condiciones se acuerdan por escrito con E-Irene, que lo asigna a la cuenta una vez firmado el
@@ -362,9 +362,9 @@ cuentas.]`
    información del Estatuto del Consumidor.
 2. **IVA y factura electrónica** (SEGUNDA y TERCERA). Hoy se cobra el valor de la tabla, sin
    impuestos adicionales, y la plataforma no emite factura.
-3. **Análisis con IA en el plan Free.** La página de planes anuncia "Sin análisis con IA" para Free,
-   pero la plataforma sí lo presta a las cuentas Free. Hay que alinear lo que se anuncia con lo que
-   se entrega antes de fijar la tabla de funcionalidades.
+3. **Análisis con IA en el plan Free — decidido** (SEGUNDA, numeral 2.3). Está incluido en todos los
+   planes, porque es el mismo análisis que genera las alertas de riesgo al profesional, y esas
+   alertas no se condicionan al plan. La página de planes ya lo anuncia así.
 4. **Videollamada — decidido** (SEGUNDA y SEXTA, numeral 6.7). Free no la incluye; Esencial,
    Profesional y Clínica la compran por paquetes que no vencen y se descuentan solo si el paciente se
    conecta; Enterprise la incluye. Falta definir: cómo se informa a quien ya tenía citas por
