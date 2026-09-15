@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/verificaciones/actions";
 import type { PendingVerification } from "@/lib/db/verification";
 import { VERIFICATION_LABELS, legacyVerificationState } from "@/lib/verification";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,8 @@ const STATUS_TONE: Record<string, string> = {
 function DocumentLink({ path, label }: { path: string | null; label: string }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Antes de hidratar, el clic no pide la URL firmada.
+  const hydrated = useHydrated();
 
   if (!path) return <span className="text-xs text-muted-foreground">{label}: sin archivo</span>;
 
@@ -42,7 +45,7 @@ function DocumentLink({ path, label }: { path: string | null; label: string }) {
   }
 
   return (
-    <Button type="button" size="sm" variant="outline" disabled={pending} onClick={open}>
+    <Button type="button" size="sm" variant="outline" disabled={pending || !hydrated} onClick={open}>
       <ExternalLink className="size-3.5" />
       {label}
       {error && <span className="ml-1 text-destructive">{error}</span>}

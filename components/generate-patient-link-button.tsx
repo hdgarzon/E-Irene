@@ -5,6 +5,7 @@ import { Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { GenerateLinkResult } from "@/app/(app)/patients/[id]/actions";
+import { useHydrated } from "@/lib/use-hydrated";
 
 export function GeneratePatientLinkButton({
   action,
@@ -16,6 +17,8 @@ export function GeneratePatientLinkButton({
   const [pending, startTransition] = useTransition();
   const [url, setUrl] = useState<string | null>(null);
   const [delivered, setDelivered] = useState(true);
+  // Antes de hidratar, el clic no genera el enlace.
+  const hydrated = useHydrated();
 
   function handleClick() {
     startTransition(async () => {
@@ -43,7 +46,7 @@ export function GeneratePatientLinkButton({
 
   return (
     <div className="space-y-2">
-      <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={pending}>
+      <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={pending || !hydrated}>
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Link2 className="size-3.5" />}
         {label}
       </Button>
