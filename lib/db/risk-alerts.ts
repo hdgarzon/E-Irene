@@ -78,15 +78,19 @@ type CreateRiskAlertInput =
  * para el mismo origen sea un no-op — `isNew: false` le indica al llamador
  * que NO debe reenviar el correo.
  *
- * Usa el cliente service-role para la fuente PHQ-9 (corre desde el flujo de
- * link público, sin sesión de personal) y el cliente de sesión para la
- * fuente de análisis de IA (corre desde una Server Action autenticada).
+ * Usa el cliente service-role en las dos fuentes. La PHQ-9 corre desde el
+ * flujo de link público, sin sesión de personal. La de análisis de IA corre
+ * con la sesión de quien terminó o reintentó la consulta —cualquier rol—, pero
+ * lo que esa sesión puede insertar en `risk_alerts` está acotado (migración
+ * 0047) y se va a retirar: la alerta la registra el servidor. El llamador
+ * responde por los datos: `clinicId` de la sesión, y paciente y doctor leídos
+ * de la consulta bajo RLS.
  */
 export async function createRiskAlert(
   clinicId: string,
   input: CreateRiskAlertInput,
 ): Promise<{ id: string; isNew: boolean }> {
-  const supabase = input.source === "phq9_self_report" ? createAdminClient() : await createClient();
+  const supabase = createAdminClient();
   const conflictColumn = input.source === "session_analysis" ? "consultation_id" : "assessment_id";
   const conflictValue = input.source === "session_analysis" ? input.consultationId : input.assessmentId;
 
@@ -110,9 +114,13 @@ export async function createRiskAlert(
   // 23505 = unique_violation (Postgres) → ya existe una alerta para este
   // origen. No es un error real, es el camino esperado de un reintento.
   if (error.code === "23505") {
+    // Acotada a la clínica: service-role no filtra por RLS, y una alerta de
+    // otra clínica con el mismo origen no es un reintento. Nunca debe volverse
+    // un `isNew: false` que calle el correo: si aparece, esto lanza y se ve.
     const existing = await supabase
       .from("risk_alerts")
       .select("id")
+      .eq("clinic_id", clinicId)
       .eq(conflictColumn, conflictValue)
       .single();
     if (existing.error) throw existing.error;

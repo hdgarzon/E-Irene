@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { encrypt } from "@/lib/crypto";
 import {
   encryptPatient,
@@ -8,7 +8,11 @@ import {
 } from "@/lib/db/patient-mappers";
 
 beforeAll(() => {
-  process.env.ENCRYPTION_KEY = Buffer.from("a".repeat(32)).toString("base64");
+  vi.stubEnv("ENCRYPTION_KEY", Buffer.from("a".repeat(32)).toString("base64"));
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("patient mappers (cifrado de PII)", () => {
