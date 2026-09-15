@@ -26,6 +26,24 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # Antes de instalar nada y de levantar Supabase. Si dos migraciones
+      # comparten versión, o un PR trae una que no va después de la última de
+      # main, el `supabase db push` del deploy falla o se salta una: los casos,
+      # comprobados con el CLI, están en la cabecera del script.
+      #
+      # En un pull_request hay que traer la base: actions/checkout clona a
+      # profundidad 1. El árbol del PR es el merge con main, así que lo que no
+      # está en origin/main es lo que agrega el PR. Como main se lee en cada
+      # corrida, re-ejecutar el job vuelve a evaluar contra el main de ese momento.
+      - name: Verificar numeración de migraciones
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+            node scripts/check-migration-versions.mjs --base "origin/$GITHUB_BASE_REF"
+          else
+            node scripts/check-migration-versions.mjs
+          fi
+
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
