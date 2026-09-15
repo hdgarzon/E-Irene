@@ -6,6 +6,7 @@ import type { ClinicMapEntry } from "@/lib/db/platform-console";
 import { setClinicPlanAction, setClinicSuspendedAction } from "@/app/admin/actions";
 import { PLANS, PLAN_ORDER, transcriptionHoursLabel, type Plan } from "@/lib/plans";
 import { formatLongDate } from "@/lib/dates";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AdminVideoCredits } from "@/components/admin-video-credits";
@@ -21,6 +22,9 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
   const [pending, startTransition] = useTransition();
+  // Antes de hidratar, cambiar el plan o suspender no llega al servidor.
+  const hydrated = useHydrated();
+  const locked = pending || !hydrated;
 
   return (
     <div data-testid="clinic-card" className="rounded-2xl border border-gray-line bg-card p-5">
@@ -54,7 +58,7 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
           <select
             aria-label="Plan"
             value={clinic.plan}
-            disabled={pending}
+            disabled={locked}
             onChange={(e) =>
               startTransition(() => setClinicPlanAction(clinic.clinicId, e.target.value))
             }
@@ -70,7 +74,7 @@ export function AdminClinicCard({ clinic }: { clinic: ClinicMapEntry }) {
             type="button"
             size="sm"
             variant={clinic.suspended ? "outline" : "destructive"}
-            disabled={pending}
+            disabled={locked}
             onClick={() =>
               startTransition(() => setClinicSuspendedAction(clinic.clinicId, !clinic.suspended))
             }

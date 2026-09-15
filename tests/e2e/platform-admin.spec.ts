@@ -99,12 +99,25 @@ test("admin de plataforma: suspender una clínica bloquea su acceso y es reversi
   await expect(targetPage).toHaveURL(/\/dashboard/);
 
   // El maestro cambia el plan de la clínica objetivo y persiste tras recargar.
-  await adminPage.goto(clinicasUrl(targetClinic));
+  //
+  // Se entra con el JS del cliente retrasado para actuar sobre el HTML del
+  // servidor antes de que React hidrate. page.goto resuelve con el evento load
+  // y la hidratación termina después; selectOption, a diferencia de click, no
+  // espera a que el elemento esté estable y actúa apenas lo ve habilitado. Un
+  // cambio en esa ventana no llegaba al servidor aunque el <select> mostrara el
+  // plan nuevo, y así falló main el 15-sep-2026. La tarjeta deshabilita sus
+  // controles hasta hidratar; con el retraso, esta prueba falla siempre si no.
+  await adminPage.route("**/_next/static/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.continue();
+  });
+  await adminPage.goto(clinicasUrl(targetClinic), { waitUntil: "commit" });
   const cardPlan = adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic });
   await Promise.all([
     adminPage.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin/clinicas")),
     cardPlan.locator("select").selectOption("pro"),
   ]);
+  await adminPage.unroute("**/_next/static/**");
   await adminPage.goto(clinicasUrl(targetClinic));
   await expect(
     adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic }).locator("select"),
