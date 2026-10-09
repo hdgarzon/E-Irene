@@ -54,6 +54,18 @@ function mapRow(r: ConsentRow): Consent {
   };
 }
 
+/** Todas las firmas del paciente, de cualquier versión, de la más reciente hacia atrás. */
+export async function listConsentsForPatient(patientId: string): Promise<Consent[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("consents")
+    .select("*")
+    .eq("patient_id", patientId)
+    .order("signed_at", { ascending: false });
+  if (error) throw error;
+  return (data as ConsentRow[]).map(mapRow);
+}
+
 /** Consentimiento vigente del paciente (versión actual), o null. */
 export async function getActiveConsent(patientId: string): Promise<Consent | null> {
   const supabase = await createClient();
