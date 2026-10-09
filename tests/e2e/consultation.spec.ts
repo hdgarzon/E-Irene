@@ -45,6 +45,11 @@ test("consulta: consentimiento → grabar → transcribir → finalizar", async 
   await page.getByRole("button", { name: /iniciar y grabar/i }).click();
   await expect(page).toHaveURL(/consultations\/.+\/live/);
 
+  // Pieza 3: el aviso al paciente va antes; la transcripción la inicia el profesional.
+  await expect(page.getByText(/esta sesión será transcrita/i)).toBeVisible();
+  await page.getByRole("button", { name: /iniciar transcripción/i }).click();
+  await expect(page.getByRole("button", { name: /detener transcripción/i })).toBeVisible();
+
   // Aparecen chunks en vivo
   await expect(page.getByText(/cómo te has sentido/)).toBeVisible();
   await expect(page.getByText(/momentos aparece/)).toBeVisible();

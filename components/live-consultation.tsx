@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { CircleAlert, MicOff, Square, ShieldCheck } from "lucide-react";
+import { CircleAlert, Mic, MicOff, Square, ShieldCheck } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
 // Imports directos a los módulos (no al barrel @/lib/providers, que re-exporta
 // mock.ts → node:crypto, incompatible con el bundle del cliente).
@@ -57,6 +57,17 @@ export function LiveConsultation({
   canManagePlan?: boolean;
 }) {
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
+  // Pieza 3 de los documentos legales: el aviso al paciente va ANTES de que
+  // empiece la transcripción, y el profesional la inicia con un botón; durante
+  // la sesión siempre hay un botón para detenerla. Detenerla es definitivo para
+  // esta consulta: la sesión (y la videollamada) siguen, el reporte se genera
+  // con lo transcrito hasta ahí. No hace falta comprobar aquí el consentimiento:
+  // sin consentimiento firmado no se puede crear la consulta
+  // (startConsultationAction), así que esta pantalla no existe sin él.
+  const [transcription, setTranscription] = useState<"idle" | "running" | "stopped">("idle");
+  const running = transcription === "running";
+  const runningRef = useRef(false);
+  const remoteTrackRef = useRef<MediaStreamTrack | null>(null);
   const [done, setDone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micOk, setMicOk] = useState<boolean | null>(null);
@@ -82,7 +93,7 @@ export function LiveConsultation({
   useEffect(() => {
     // Con la cuota agotada tampoco corre el guion mock: es la misma feature
     // de producto y simularla escribiría chunks de una sesión que no existe.
-    if (!isSimulatedTranscript || quotaExceeded) return;
+    if (!isSimulatedTranscript || quotaExceeded || !running) return;
 
     const md = navigator.mediaDevices;
     if (md?.getUserMedia) {
@@ -118,11 +129,11 @@ export function LiveConsultation({
       clearInterval(streamer);
       clearInterval(clock);
     };
-  }, [isSimulatedTranscript, consultationId, quotaExceeded]);
+  }, [isSimulatedTranscript, consultationId, quotaExceeded, running]);
 
   // ── Modo real: micrófono → MediaRecorder → WebSocket directo a Deepgram ──
   useEffect(() => {
-    if (isSimulatedTranscript || (transcriptionMode !== "deepgram" && transcriptionMode !== "video") || !sessionToken) return;
+    if (!running || isSimulatedTranscript || (transcriptionMode !== "deepgram" && transcriptionMode !== "video") || !sessionToken) return;
 
     const clock = setInterval(() => setElapsed((e) => e + 1), 1000);
     let cancelled = false;
@@ -220,7 +231,7 @@ export function LiveConsultation({
       }
       remoteWsRef.current = null;
     };
-  }, [isSimulatedTranscript, transcriptionMode, sessionToken, consultationId]);
+  }, [running, isSimulatedTranscript, transcriptionMode, sessionToken, consultationId]);
 
   // ── Modo video: pista remota del paciente → segunda conexión Deepgram,
   // ── tageada "Paciente" directamente (no hace falta diarización: cada
@@ -264,7 +275,14 @@ export function LiveConsultation({
   // Si el paciente se reconecta a mitad de la consulta, Daily.co puede volver
   // a emitir esta pista — reemplazamos la conexión anterior en vez de
   // ignorarla o acumularla (ver contrato documentado en components/video-call.tsx).
+  // La pista del paciente puede llegar antes de que se inicie la transcripción
+  // (la videollamada arranca sola): se guarda y se conecta al iniciar.
   function handleRemoteAudioTrack(track: MediaStreamTrack) {
+    remoteTrackRef.current = track;
+    if (runningRef.current) connectRemoteTrack(track);
+  }
+
+  function connectRemoteTrack(track: MediaStreamTrack) {
     // Simulado: el guion de MOCK_SESSION ya cubre al paciente, no hay pista
     // real que transcribir vía Deepgram.
     if (transcriptionMode !== "video" || !sessionToken || isSimulatedTranscript) return;
@@ -318,7 +336,15 @@ export function LiveConsultation({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [chunks]);
 
-  function finalize() {
+  function startTranscription() {
+    runningRef.current = true;
+    setTranscription("running");
+    if (remoteTrackRef.current) connectRemoteTrack(remoteTrackRef.current);
+  }
+
+  /** Cierra las conexiones a Deepgram con CloseStream, para no perder el último tramo. */
+  function closeTranscription() {
+    runningRef.current = false;
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.stop();
     }
@@ -336,6 +362,15 @@ export function LiveConsultation({
       remoteWsRef.current.close();
     }
     remoteWsRef.current = null;
+  }
+
+  function stopTranscription() {
+    closeTranscription();
+    setTranscription("stopped");
+  }
+
+  function finalize() {
+    closeTranscription();
     setDone(true);
     startTransition(() => endConsultationAction(consultationId));
   }
@@ -348,6 +383,10 @@ export function LiveConsultation({
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             {done ? (
               <span className="text-mint">Transcripción finalizada</span>
+            ) : transcription === "stopped" ? (
+              <span>Transcripción detenida{transcriptionMode === "video" ? " · videollamada en curso" : ""}</span>
+            ) : transcription === "idle" && !quotaExceeded ? (
+              <span>Transcripción sin iniciar{transcriptionMode === "video" ? " · videollamada en curso" : ""}</span>
             ) : quotaExceeded ? (
               <span>
                 {transcriptionMode === "video"
@@ -369,20 +408,50 @@ export function LiveConsultation({
         <span className="font-mono text-lg font-semibold text-navy">{mmss(elapsed)}</span>
       </div>
 
-      {/* Recordatorio en el momento oportuno de lo que el paciente ya firmó en
-          el consentimiento. No lo sustituye: está para que el profesional pueda
-          decírselo en voz alta al empezar. Se oculta con la cuota agotada: no
-          hay sesión de transcripción que recordar. */}
-      {!done && !quotaExceeded && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
-          <p>
-            <strong className="font-medium text-navy">Esta sesión se está transcribiendo.</strong>{" "}
-            El audio no se graba ni se guarda: solo se conserva el texto, cifrado, y se borra
-            automáticamente una vez validas el reporte. El paciente puede pedir que se detenga en
-            cualquier momento.
-          </p>
+      {/* Pieza 3: aviso al paciente antes de iniciar la transcripción. Es un
+          recordatorio en el momento oportuno de lo que ya firmó en el
+          consentimiento; no lo sustituye, y por eso no se registra. Se oculta
+          con la cuota agotada: no hay transcripción que avisar. */}
+      {!done && !quotaExceeded && transcription === "idle" && (
+        <div className="space-y-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-sm text-navy/80">
+          <div className="flex items-start gap-2.5">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <p>
+              <strong className="font-medium text-navy">Esta sesión será transcrita.</strong> El
+              audio no se graba ni se guarda: se convierte a texto en vivo y solo se conserva el
+              texto, cifrado. La transcripción se borra automáticamente 7 días después de la
+              sesión. Usted puede pedir que se detenga la transcripción en cualquier momento.
+            </p>
+          </div>
+          <Button onClick={startTranscription} size="sm">
+            <Mic className="size-4" />
+            Iniciar transcripción
+          </Button>
         </div>
+      )}
+
+      {!done && running && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
+          <p className="flex items-start gap-2.5">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <span>
+              <strong className="font-medium text-navy">Esta sesión se está transcribiendo.</strong>{" "}
+              El paciente puede pedir que se detenga en cualquier momento.
+            </span>
+          </p>
+          <Button onClick={stopTranscription} size="sm" variant="outline">
+            <MicOff className="size-4" />
+            Detener transcripción
+          </Button>
+        </div>
+      )}
+
+      {!done && transcription === "stopped" && (
+        <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <MicOff className="size-3.5" />
+          Transcripción detenida. La sesión continúa; el reporte se generará con lo transcrito hasta
+          ahora.
+        </p>
       )}
 
       {!done && quotaExceeded && (
@@ -418,7 +487,7 @@ export function LiveConsultation({
         </p>
       )}
 
-      {!done && micTranscriptError && (
+      {!done && running && micTranscriptError && (
         <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <MicOff className="size-3.5" />
           Se interrumpió la transcripción de tu micrófono — la sesión continúa, pero esa parte no
@@ -426,7 +495,7 @@ export function LiveConsultation({
         </p>
       )}
 
-      {!done && remoteTranscriptError && (
+      {!done && running && remoteTranscriptError && (
         <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <MicOff className="size-3.5" />
           Se interrumpió la transcripción del audio del paciente — la videollamada continúa, pero
@@ -449,7 +518,13 @@ export function LiveConsultation({
       >
         {chunks.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {quotaExceeded ? "Transcripción no disponible: cuota del plan agotada." : "Escuchando…"}
+            {quotaExceeded
+              ? "Transcripción no disponible: cuota del plan agotada."
+              : transcription === "idle"
+                ? "Lee el aviso al paciente e inicia la transcripción."
+                : transcription === "stopped"
+                  ? "Transcripción detenida."
+                  : "Escuchando…"}
           </p>
         ) : (
           chunks.map((c, idx) => (
