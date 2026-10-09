@@ -57,7 +57,11 @@ function wrap(title: string, body: string): string {
  * por cuenta de una clínica. El pie de `wrap()` ("mensaje automático de tu
  * profesional de salud mental") es correcto para pacientes y falso aquí.
  */
-function wrapPlatform(title: string, body: string): string {
+function wrapPlatform(
+  title: string,
+  body: string,
+  footer = "Mensaje automático de E-Irene sobre tu cuenta profesional.",
+): string {
   return `<!doctype html><html><body style="margin:0;background:#f6f9fc;font-family:Arial,sans-serif">
   <div style="max-width:520px;margin:0 auto;padding:24px">
     <div style="background:#0a2540;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;font-weight:bold">E-Irene</div>
@@ -65,7 +69,7 @@ function wrapPlatform(title: string, body: string): string {
       <h2 style="margin-top:0;color:#0a2540">${title}</h2>
       ${body}
     </div>
-    <p style="color:#5b6b7c;font-size:12px;margin-top:16px">Mensaje automático de E-Irene sobre tu cuenta profesional.</p>
+    <p style="color:#5b6b7c;font-size:12px;margin-top:16px">${footer}</p>
   </div></body></html>`;
 }
 
@@ -389,6 +393,77 @@ export function buildLegacyDocumentsReturnedEmail(input: {
        </p>`
            : ""
        }`,
+    ),
+  };
+}
+
+const PQR_FOOTER = "Mensaje automático de E-Irene. Conserve este correo como constancia de su radicado.";
+
+/**
+ * Constancia para quien presenta una PQR: número de radicado y fecha y hora de
+ * presentación (Ley 1480, art. 50 lit. g), y el plazo de respuesta.
+ */
+export function buildPqrReceiptEmail(input: {
+  to: string;
+  fullName: string;
+  radicado: string;
+  kindLabel: string;
+  submittedAt: string;
+  dueDate: string;
+}): EmailMessage {
+  return {
+    to: input.to,
+    subject: `Radicamos su ${input.kindLabel.toLowerCase()}: ${input.radicado}`,
+    text:
+      `Hola ${input.fullName}, recibimos su ${input.kindLabel.toLowerCase()} con el radicado ` +
+      `${input.radicado}, presentada el ${input.submittedAt}. La responderemos a más tardar el ` +
+      `${input.dueDate} (15 días hábiles). También puede acudir a la Superintendencia de ` +
+      `Industria y Comercio.`,
+    html: wrapPlatform(
+      "Recibimos su solicitud",
+      `<p>Hola <strong>${escapeHtml(input.fullName)}</strong>,</p>
+       <p>Recibimos su ${escapeHtml(input.kindLabel.toLowerCase())}. Estos son sus datos de radicación:</p>
+       <p style="background:#f0f4f8;border-radius:8px;padding:12px;font-size:14px">
+         <strong>Radicado:</strong> ${escapeHtml(input.radicado)}<br />
+         <strong>Presentada:</strong> ${escapeHtml(input.submittedAt)}<br />
+         <strong>Respuesta a más tardar:</strong> ${escapeHtml(input.dueDate)}
+       </p>
+       <p style="font-size:13px;color:#5b6b7c">El plazo es de quince (15) días hábiles, sin perjuicio de su derecho a acudir directamente a la Superintendencia de Industria y Comercio.</p>`,
+      PQR_FOOTER,
+    ),
+  };
+}
+
+/** Aviso al buzón de PQR: llegó una nueva, con su plazo. */
+export function buildPqrNotificationEmail(input: {
+  to: string;
+  radicado: string;
+  kindLabel: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  submittedAt: string;
+  dueDate: string;
+  adminUrl: string;
+}): EmailMessage {
+  const href = safeHref(input.adminUrl);
+  return {
+    to: input.to,
+    subject: `Nueva PQR ${input.radicado} (${input.kindLabel}) · responder antes del ${input.dueDate}`,
+    text:
+      `${input.kindLabel} ${input.radicado} de ${input.fullName} <${input.email}>` +
+      (input.phone ? `, tel. ${input.phone}` : "") +
+      `, presentada el ${input.submittedAt}. Responder a más tardar el ${input.dueDate}.\n\n` +
+      `${input.message}\n\n${input.adminUrl}`,
+    html: wrapPlatform(
+      `Nueva PQR: ${escapeHtml(input.radicado)}`,
+      `<p><strong>${escapeHtml(input.kindLabel)}</strong> de ${escapeHtml(input.fullName)}
+         &lt;${escapeHtml(input.email)}&gt;${input.phone ? `, tel. ${escapeHtml(input.phone)}` : ""}.</p>
+       <p>Presentada el ${escapeHtml(input.submittedAt)}. <strong>Responder a más tardar el ${escapeHtml(input.dueDate)}.</strong></p>
+       <p style="background:#f0f4f8;border-radius:8px;padding:12px;font-size:14px;white-space:pre-wrap">${escapeHtml(input.message)}</p>
+       ${href ? `<p><a href="${href}">Ver en la consola</a></p>` : ""}`,
+      "Aviso automático de E-Irene para el buzón de PQR.",
     ),
   };
 }

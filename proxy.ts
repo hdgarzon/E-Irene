@@ -22,7 +22,8 @@ import { supabaseConnectSources } from "@/lib/csp";
 // privacidad que exige iniciar sesión no informa a nadie. Lo mismo vale para
 // los demás documentos legales publicados (lib/legal-documents): la política de
 // tratamiento, los términos de uso y los de vinculación del profesional, que la
-// casilla del registro enlaza antes de que exista la cuenta. Sus PDF
+// casilla del registro enlaza antes de que exista la cuenta. `/pqr` es el
+// formulario de PQR de los Términos de Uso: lo usa cualquier visitante. Sus PDF
 // (/documentos/<slug>.pdf) no pasan por aquí: el matcher excluye los .pdf.
 // `/sw.js`: el service worker debe poder registrarse sin sesión (se registra
 // en cualquier página pública). Un service worker script NUNCA puede llegar
@@ -37,6 +38,7 @@ const PUBLIC_PATHS = new Set([
   "/politica-de-datos",
   "/terminos-y-condiciones",
   "/vinculacion-profesional",
+  "/pqr",
   "/sw.js",
 ]);
 // Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
