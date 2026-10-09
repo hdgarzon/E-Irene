@@ -6,7 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getPatientLinkByToken, markPatientLinkCompleted } from "@/lib/db/patient-links";
 import { createConsentViaLink } from "@/lib/db/consents";
 import { createAssessmentViaLink } from "@/lib/db/assessments";
-import { CONSENT_VERSION, CONSENT_HASH } from "@/lib/consent";
+import { CONSENT_VERSION, CONSENT_HASH, requiresRepresentativeByBirthDate } from "@/lib/consent";
+import { getPatientForLink } from "@/lib/db/patients";
 import { scoreAssessment, questionsFor, type AssessmentType } from "@/lib/psychometrics";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { logAuditPublic } from "@/lib/db/audit";
@@ -35,6 +36,13 @@ export async function submitPublicConsentAction(
   const isMinor = formData.get("isMinor") === "on";
   const representativeDocument = String(formData.get("representativeDocument") ?? "").trim();
   const representativeRelationship = String(formData.get("representativeRelationship") ?? "").trim();
+
+  // La regla de edad se aplica aquí, no solo en el formulario: el campo oculto
+  // lo controla el navegador. Menor de 14 → firma el representante legal.
+  const patient = await getPatientForLink(link.patientId);
+  if (requiresRepresentativeByBirthDate(patient?.birthDate) === true && !isMinor) {
+    return { error: "El paciente es menor de 14 años: debe firmar su representante legal." };
+  }
 
   const fieldErrors: Record<string, string> = {};
   if (signerName.length < 3) fieldErrors.signerName = "Ingresa el nombre completo de quien firma";

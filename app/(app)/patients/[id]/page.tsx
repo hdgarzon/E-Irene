@@ -225,6 +225,8 @@ export default async function PatientDetailPage({
             {consent.isMinor && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Documento del representante: {consent.representativeDocument}
+                {consent.minorAssent !== null &&
+                  ` · Asentimiento del menor: ${consent.minorAssent ? "sí" : "no"}`}
               </p>
             )}
           </>

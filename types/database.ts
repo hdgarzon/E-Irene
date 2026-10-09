@@ -416,6 +416,7 @@ export type Database = {
           id: string
           ip: string | null
           is_minor: boolean
+          minor_assent: boolean | null
           link_id: string | null
           patient_id: string
           representative_document_enc: string | null
@@ -433,6 +434,7 @@ export type Database = {
           id?: string
           ip?: string | null
           is_minor?: boolean
+          minor_assent?: boolean | null
           link_id?: string | null
           patient_id: string
           representative_document_enc?: string | null
@@ -450,6 +452,7 @@ export type Database = {
           id?: string
           ip?: string | null
           is_minor?: boolean
+          minor_assent?: boolean | null
           link_id?: string | null
           patient_id?: string
           representative_document_enc?: string | null

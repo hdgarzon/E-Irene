@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { getPatientLinkByToken } from "@/lib/db/patient-links";
 import { getPatientForLink } from "@/lib/db/patients";
-import { CONSENT_TEXT, CONSENT_VERSION, isMinorByBirthDate } from "@/lib/consent";
+import { CONSENT_VERSION, requiresRepresentativeByBirthDate } from "@/lib/consent";
+import { CONSENTIMIENTO_PACIENTE } from "@/lib/legal-documents";
+import { LegalDocumentBody } from "@/components/legal-document";
 import { questionsFor, RESPONSE_OPTIONS, ASSESSMENT_LABEL, type AssessmentType } from "@/lib/psychometrics";
 import { ConsentForm } from "@/components/consent-form";
 import { Button } from "@/components/ui/button";
@@ -48,8 +50,8 @@ export default async function PatientLinkPage({
             Paciente: {patient.fullName} · Versión {CONSENT_VERSION}
           </p>
         </div>
-        <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-2xl border border-gray-line bg-card p-5 text-sm leading-relaxed text-foreground/90">
-          {CONSENT_TEXT}
+        <div className="max-h-96 overflow-y-auto rounded-2xl border border-gray-line bg-card p-5">
+          <LegalDocumentBody doc={CONSENTIMIENTO_PACIENTE} />
         </div>
         <div className="rounded-2xl border border-gray-line bg-card p-6">
           <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
@@ -59,7 +61,7 @@ export default async function PatientLinkPage({
           <ConsentForm
             action={action}
             defaultSignerName={patient.fullName}
-            isMinorByBirthDate={isMinorByBirthDate(patient.birthDate)}
+            requiresRepresentativeByBirthDate={requiresRepresentativeByBirthDate(patient.birthDate)}
           />
         </div>
       </div>

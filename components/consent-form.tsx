@@ -14,44 +14,56 @@ type Action = (prev: ConsentState, formData: FormData) => Promise<ConsentState>;
 export function ConsentForm({
   action,
   defaultSignerName,
-  isMinorByBirthDate,
+  requiresRepresentativeByBirthDate,
+  askMinorAssent = false,
 }: {
   action: Action;
   defaultSignerName?: string;
-  /** true/false si se conoce la fecha de nacimiento; null si no se conoce. */
-  isMinorByBirthDate: boolean | null;
+  /**
+   * true si por la edad (menor de 14) firma el representante legal; false si
+   * el paciente puede firmar por sí mismo; null si no hay fecha de nacimiento.
+   */
+  requiresRepresentativeByBirthDate: boolean | null;
+  /**
+   * Pide registrar el asentimiento del menor. Solo en el flujo del profesional:
+   * el asentimiento lo evalúa él en la consulta, no quien abre el enlace.
+   */
+  askMinorAssent?: boolean;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ConsentState, FormData>(action, {});
-  const [manualMinor, setManualMinor] = useState(false);
-  const minorMode = isMinorByBirthDate === true || manualMinor;
+  const [substitute, setSubstitute] = useState(false);
+  const minorMode = requiresRepresentativeByBirthDate === true || substitute;
 
   return (
     <form action={formAction} className="space-y-5">
-      {isMinorByBirthDate === true && (
+      {requiresRepresentativeByBirthDate === true ? (
         <>
           <input type="hidden" name="isMinor" value="on" />
           <div className="flex items-start gap-3 rounded-2xl border border-coral/30 bg-coral/5 p-4">
             <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
             <p className="text-sm text-foreground/90">
-              <span className="font-semibold text-navy">Paciente menor de edad.</span> Según su
-              fecha de nacimiento registrada, se requiere el consentimiento de su representante
-              legal (Ley 1098 de 2006).
+              <span className="font-semibold text-navy">Paciente menor de 14 años.</span> Según su
+              fecha de nacimiento registrada, la autorización la otorga su representante legal, y el
+              profesional registra el asentimiento del menor (Resolución 309 de 2025).
             </p>
           </div>
         </>
-      )}
-
-      {isMinorByBirthDate === null && (
+      ) : (
         <label className="flex items-start gap-2.5 text-sm">
           <input
             type="checkbox"
             name="isMinor"
-            checked={manualMinor}
-            onChange={(e) => setManualMinor(e.target.checked)}
+            checked={substitute}
+            onChange={(e) => setSubstitute(e.target.checked)}
             className="mt-0.5 size-4 accent-brand"
           />
-          <span>Este paciente es menor de edad (no hay fecha de nacimiento registrada).</span>
+          <span>
+            Firma el representante legal
+            {requiresRepresentativeByBirthDate === null
+              ? " (paciente menor de 14 años sin fecha de nacimiento registrada, o que requiere consentimiento sustituto)."
+              : " (el paciente requiere consentimiento sustituto). Desde los 14 años el paciente puede firmar por sí mismo."}
+          </span>
         </label>
       )}
 
@@ -103,6 +115,27 @@ export function ConsentForm({
         </div>
       )}
 
+      {minorMode && askMinorAssent && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">¿El menor manifestó su asentimiento? *</legend>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="minorAssent" value="yes" className="accent-brand" /> Sí
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="minorAssent" value="no" className="accent-brand" /> No
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Registre en la historia clínica el criterio de valoración de capacidad utilizado
+            (comunicación de la decisión, comprensión, razonamiento y juicio).
+          </p>
+          {state.fieldErrors?.minorAssent && (
+            <p className="text-sm text-destructive">{state.fieldErrors.minorAssent}</p>
+          )}
+        </fieldset>
+      )}
+
       <div className="space-y-1.5">
         <Label>Firma *</Label>
         <SignaturePad name="signature" />
@@ -115,8 +148,8 @@ export function ConsentForm({
         <input type="checkbox" name="accepted" className="mt-0.5 size-4 accent-brand" />
         <span>
           {minorMode
-            ? "Declaro ser el representante legal del paciente menor de edad identificado y, en su nombre, he leído y acepto el consentimiento informado, autorizando el tratamiento de sus datos conforme a la Ley 1581 de 2012."
-            : "He leído y acepto el consentimiento informado, y autorizo el tratamiento de mis datos conforme a la Ley 1581 de 2012."}
+            ? "Declaro ser el representante legal del paciente identificado y, en su nombre, he leído y acepto el consentimiento informado, y autorizo de forma libre, previa, expresa e informada el tratamiento de sus datos personales, incluidos sus datos de salud, y la transferencia internacional descrita."
+            : "He leído y acepto el consentimiento informado, y autorizo de forma libre, previa, expresa e informada el tratamiento de mis datos personales, incluidos mis datos de salud, y la transferencia internacional descrita."}
         </span>
       </label>
       {state.fieldErrors?.accepted && (
