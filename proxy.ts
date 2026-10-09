@@ -19,12 +19,26 @@ import { supabaseConnectSources } from "@/lib/csp";
 // Rutas accesibles SIN sesión.
 // `/privacidad` es público a propósito: el aviso debe poder leerse ANTES de
 // crear una cuenta, y el login y el registro enlazan a él. Un aviso de
-// privacidad que exige iniciar sesión no informa a nadie.
+// privacidad que exige iniciar sesión no informa a nadie. Lo mismo vale para
+// los demás documentos legales publicados (lib/legal-documents): la política de
+// tratamiento, los términos de uso y los de vinculación del profesional, que la
+// casilla del registro enlaza antes de que exista la cuenta. Sus PDF
+// (/documentos/<slug>.pdf) no pasan por aquí: el matcher excluye los .pdf.
 // `/sw.js`: el service worker debe poder registrarse sin sesión (se registra
 // en cualquier página pública). Un service worker script NUNCA puede llegar
 // como redirect (aquí, hacia /login) — el navegador rechaza directamente esa
 // respuesta ("script resource is behind a redirect, which is disallowed").
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/seguridad", "/privacidad", "/sw.js"]);
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/signup",
+  "/seguridad",
+  "/privacidad",
+  "/politica-de-datos",
+  "/terminos-y-condiciones",
+  "/vinculacion-profesional",
+  "/sw.js",
+]);
 // Prefijos públicos (flujos de auth: confirm, set-password, auth-code-error…;
 // /enlace: links de paciente con token, ver app/enlace/[token];
 // /join: sala de videollamada del paciente, ver app/join/[token];
