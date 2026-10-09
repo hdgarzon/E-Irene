@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { setPasswordAction, type SetPasswordState } from "@/app/auth/set-password/actions";
 import { LandingLiquidGlassButton } from "@/components/landing-liquid-glass-button";
+import { ProfessionalAcceptanceFields } from "@/components/professional-acceptance-fields";
 
 export function SetPasswordForm({
   clinicName,
@@ -66,10 +67,16 @@ export function SetPasswordForm({
         </p>
       </div>
 
+      {/* Pieza 2: casillas bajo el botón de registro. Aquí, y no en /signup,
+          porque es donde se crea la cuenta y ya hay sesión para guardar la
+          prueba (IP, user-agent, hash) a nombre del profesional. */}
+      <ProfessionalAcceptanceFields />
+      {state.fieldErrors?.accepted && <p className="landing-field-error">{state.fieldErrors.accepted}</p>}
+
       {state.error && <p className="landing-form-error">{state.error}</p>}
 
       <LandingLiquidGlassButton type="submit" disabled={pending} className="w-full">
-        {pending ? "Guardando…" : "Guardar y entrar"}
+        {pending ? "Creando tu cuenta…" : "Crear cuenta y entrar"}
       </LandingLiquidGlassButton>
     </form>
   );

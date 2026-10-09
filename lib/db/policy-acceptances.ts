@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { POLICY_HASH, POLICY_VERSION } from "@/lib/legal";
+import { logAudit } from "@/lib/db/audit";
 
 /** ¿El usuario ya aceptó la versión vigente de la política? */
 export async function hasAcceptedCurrentPolicy(userId: string): Promise<boolean> {
@@ -40,6 +41,29 @@ export async function recordAcceptance(params: {
     marketing_opt_in: params.marketingOptIn,
   });
   if (error) throw error;
+}
+
+/**
+ * Registra la aceptación de la versión vigente y la deja en el audit trail, salvo
+ * que ya exista: reaceptar la misma versión no aporta prueba nueva y ensuciaría
+ * el historial. La usan el registro (/auth/set-password) y la compuerta de
+ * /terminos.
+ */
+export async function acceptCurrentPolicy(params: {
+  userId: string;
+  clinicId: string;
+  marketingOptIn: boolean;
+}): Promise<void> {
+  if (await hasAcceptedCurrentPolicy(params.userId)) return;
+  await recordAcceptance(params);
+  await logAudit({
+    clinicId: params.clinicId,
+    actorId: params.userId,
+    action: "policy.accepted",
+    entityType: "policy_acceptances",
+    entityId: params.userId,
+    metadata: { version: POLICY_VERSION },
+  });
 }
 
 export interface AcceptanceRecord {

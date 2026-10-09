@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { acceptCurrentPolicy } from "@/lib/db/policy-acceptances";
+import { logger } from "@/lib/logger";
 
 export type SetPasswordState = { error?: string; fieldErrors?: Record<string, string> };
 
@@ -33,6 +35,9 @@ export async function setPasswordAction(
   if (!parsed.success) {
     return { fieldErrors: flattenFieldErrors(parsed.error) };
   }
+  if (formData.get("accepted") !== "on") {
+    return { fieldErrors: { accepted: "Debes marcar la declaración y la aceptación para crear la cuenta." } };
+  }
 
   const supabase = await createClient();
   const {
@@ -52,6 +57,26 @@ export async function setPasswordAction(
   // Si ya se bootstrapeó antes (p. ej. enlace reutilizado), no es un error real.
   if (rpcError && !/ya pertenece/i.test(rpcError.message)) {
     return { error: rpcError.message };
+  }
+
+  // La prueba de la aceptación se guarda aquí, recién creada la cuenta. Si falla,
+  // no se bloquea el registro: la compuerta de /terminos la vuelve a pedir antes
+  // de dar acceso a la app (app/(app)/layout.tsx).
+  const { data: profile } = await supabase
+    .from("users")
+    .select("clinic_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.clinic_id) {
+    try {
+      await acceptCurrentPolicy({
+        userId: user.id,
+        clinicId: profile.clinic_id,
+        marketingOptIn: formData.get("marketing") === "on",
+      });
+    } catch (error) {
+      logger.error("policy.accept_at_signup_failed", { userId: user.id, error });
+    }
   }
 
   redirect("/dashboard");
