@@ -34,7 +34,7 @@ const sections = [
   {
     icon: Trash2,
     title: "Retención y eliminación de datos",
-    body: "Las transcripciones completas de las sesiones se eliminan automáticamente 30 días después de finalizada la consulta. El resumen clínico, las notas y el reporte firmado por el profesional permanecen como parte de la historia clínica.",
+    body: "Las transcripciones completas de las sesiones se eliminan automáticamente 7 días después de la sesión, se haya validado o no el reporte. El resumen clínico, las notas y el reporte firmado por el profesional permanecen como parte de la historia clínica.",
   },
   {
     icon: LifeBuoy,
