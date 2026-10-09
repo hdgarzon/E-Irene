@@ -1,15 +1,21 @@
 import { createHash } from "node:crypto";
 import { CONSENTIMIENTO_PACIENTE, serializeDocument } from "@/lib/legal-documents";
+import { dayKey } from "@/lib/dates";
 
-/** Edad en años a partir de la fecha de nacimiento (ISO yyyy-mm-dd). */
-export function calculateAge(birthDate: string): number {
-  const birth = new Date(birthDate);
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const hasHadBirthdayThisYear =
-    now.getMonth() > birth.getMonth() ||
-    (now.getMonth() === birth.getMonth() && now.getDate() >= birth.getDate());
-  if (!hasHadBirthdayThisYear) age--;
+/**
+ * Edad en años a partir de la fecha de nacimiento (ISO yyyy-mm-dd), cumplida en
+ * el día de hoy de Bogotá.
+ *
+ * Se compara como fecha de calendario, sin pasar por Date: `new Date("2012-10-11")`
+ * es la medianoche UTC, que en Bogotá (UTC-5) cae el 10 a las 19:00, y con los
+ * getters locales el cumpleaños se contaba un día antes. Con el umbral de 14
+ * años, eso dejaba firmar solo a un paciente que aún tenía 13.
+ */
+export function calculateAge(birthDate: string, today: string = dayKey(new Date())): number {
+  const [by, bm, bd] = birthDate.slice(0, 10).split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
   return age;
 }
 
