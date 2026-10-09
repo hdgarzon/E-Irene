@@ -13,6 +13,7 @@ import {
   effectiveTranscriptionLimitSeconds,
   formatCop,
   limitLabel,
+  planFeatures,
   transcriptionHoursLabel,
   transcriptionLimitHours,
   transcriptionUsageLabel,
@@ -190,35 +191,6 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     hasPaidPeriod: subscriptionPaidPeriodEnd(state) !== null,
   });
   const videoAvailable = Math.max(0, videoCredits.available);
-
-  function features(plan: Plan) {
-    const l = PLANS[plan];
-    const extras = [
-      // En todos los planes: es el análisis que genera las alertas de riesgo (lib/plans.ts).
-      "Análisis con IA",
-      l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
-      l.video === "included"
-        ? "Videollamadas incluidas"
-        : l.video === "addon"
-          ? "Videollamadas como adicional"
-          : "Sin videollamadas",
-    ];
-    // Un plan a convenir no tiene topes en la app: los fija su contrato.
-    if (l.priceInCents === null) {
-      return [
-        "Profesionales y pacientes ilimitados",
-        "Consultas y transcripción según contrato",
-        ...extras,
-      ];
-    }
-    return [
-      `${limitLabel(l.maxDoctors)} profesional${l.maxDoctors === 1 ? "" : "es"}`,
-      `${limitLabel(l.maxPatients)} pacientes`,
-      `${limitLabel(l.consultationsPerMonth)} consultas por ciclo`,
-      `${limitLabel(l.transcriptionHours)} h de transcripción`,
-      ...extras,
-    ];
-  }
 
   /** Botón de un plan pago que no es el actual (regla en lib/billing/plan-change.ts). */
   function paidPlanAction(plan: Plan) {
@@ -516,7 +488,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               <h3 className="font-heading text-lg font-bold text-navy">{l.label}</h3>
               <p className="mb-3 text-2xl font-bold text-brand">{l.price}</p>
               <ul className="flex-1 space-y-1.5 text-xs text-muted-foreground">
-                {features(plan).map((f) => (
+                {planFeatures(plan).map((f) => (
                   <li key={f} className="flex items-start gap-1.5">
                     <Check className="mt-0.5 size-3 shrink-0 text-mint" />
                     {f}
