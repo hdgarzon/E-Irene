@@ -175,3 +175,101 @@ export function groupByDay<T extends { scheduledAt: string }>(
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([key, groupItems]) => ({ key, label: formatDayLabel(key), items: groupItems }));
 }
+
+// ── Días hábiles en Colombia ────────────────────────────────────────────────
+// Los plazos legales de respuesta (15 días hábiles para una PQR, Ley 1480;
+// 10 y 15 para consultas y reclamos de datos, Ley 1581) se cuentan en días
+// hábiles: sin sábados, domingos ni festivos nacionales.
+
+/** Fecha UTC a medianoche de un día de calendario (año, mes 1-12, día). */
+function utcDay(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addDaysUtc(d: Date, days: number): Date {
+  return new Date(d.getTime() + days * 86_400_000);
+}
+
+/** Domingo de Pascua (algoritmo anónimo gregoriano). */
+function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return utcDay(year, month, day);
+}
+
+/** Ley Emiliani (Ley 51 de 1983): el festivo que no cae en lunes pasa al lunes siguiente. */
+function nextMonday(d: Date): Date {
+  const offset = (8 - d.getUTCDay()) % 7;
+  return addDaysUtc(d, offset);
+}
+
+const holidayCache = new Map<number, Set<string>>();
+
+/** Festivos nacionales de Colombia de un año, como claves YYYY-MM-DD. */
+export function colombianHolidays(year: number): Set<string> {
+  const cached = holidayCache.get(year);
+  if (cached) return cached;
+
+  const easter = easterSunday(year);
+  const days = [
+    // No se trasladan.
+    utcDay(year, 1, 1),
+    utcDay(year, 5, 1),
+    utcDay(year, 7, 20),
+    utcDay(year, 8, 7),
+    utcDay(year, 12, 8),
+    utcDay(year, 12, 25),
+    addDaysUtc(easter, -3), // Jueves Santo
+    addDaysUtc(easter, -2), // Viernes Santo
+    // Se trasladan al lunes siguiente.
+    ...[
+      utcDay(year, 1, 6),
+      utcDay(year, 3, 19),
+      utcDay(year, 6, 29),
+      utcDay(year, 8, 15),
+      utcDay(year, 10, 12),
+      utcDay(year, 11, 1),
+      utcDay(year, 11, 11),
+    ].map(nextMonday),
+    // Ascensión, Corpus Christi y Sagrado Corazón: lunes fijos tras la Pascua.
+    addDaysUtc(easter, 43),
+    addDaysUtc(easter, 64),
+    addDaysUtc(easter, 71),
+  ];
+  const set = new Set(days.map((d) => d.toISOString().slice(0, 10)));
+  holidayCache.set(year, set);
+  return set;
+}
+
+/** true si el día de calendario (YYYY-MM-DD) es hábil en Colombia. */
+export function isBusinessDayColombia(key: string): boolean {
+  const [y, m, d] = key.split("-").map(Number);
+  const weekday = utcDay(y, m, d).getUTCDay();
+  return weekday !== 0 && weekday !== 6 && !colombianHolidays(y).has(key);
+}
+
+/**
+ * Último día del plazo: el día hábil número `days` contado desde el siguiente
+ * a la fecha de presentación (en hora de Bogotá). Devuelve YYYY-MM-DD.
+ */
+export function addBusinessDaysColombia(from: string | Date, days: number): string {
+  let cursor = new Date(`${dayKey(from)}T00:00:00Z`);
+  let counted = 0;
+  while (counted < days) {
+    cursor = addDaysUtc(cursor, 1);
+    if (isBusinessDayColombia(cursor.toISOString().slice(0, 10))) counted += 1;
+  }
+  return cursor.toISOString().slice(0, 10);
+}

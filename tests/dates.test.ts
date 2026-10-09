@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
+  addBusinessDaysColombia,
   addMonthsBogota,
   billingCycleBounds,
+  colombianHolidays,
   dayKey,
   formatDayLabel,
   formatLongDate,
   formatTime,
   groupByDay,
+  isBusinessDayColombia,
   toWompiUtcTimestamp,
 } from "@/lib/dates";
 
@@ -108,5 +111,48 @@ describe("expires_at de los links de Wompi", () => {
     expect(toWompiUtcTimestamp(new Date("2026-09-15T15:30:45.678Z"))).toBe("2026-09-15T15:30:45");
     // No se convierte a Bogotá: 02:00 UTC sigue siendo 02:00.
     expect(toWompiUtcTimestamp(new Date("2026-09-16T02:00:00Z"))).toBe("2026-09-16T02:00:00");
+  });
+});
+
+describe("días hábiles en Colombia", () => {
+  it("calcula los festivos de 2026 (fijos, Ley Emiliani y Semana Santa)", () => {
+    expect([...colombianHolidays(2026)].sort()).toEqual([
+      "2026-01-01",
+      "2026-01-12",
+      "2026-03-23",
+      "2026-04-02",
+      "2026-04-03",
+      "2026-05-01",
+      "2026-05-18",
+      "2026-06-08",
+      "2026-06-15",
+      "2026-06-29",
+      "2026-07-20",
+      "2026-08-07",
+      "2026-08-17",
+      "2026-10-12",
+      "2026-11-02",
+      "2026-11-16",
+      "2026-12-08",
+      "2026-12-25",
+    ]);
+  });
+
+  it("sábados, domingos y festivos no son hábiles", () => {
+    expect(isBusinessDayColombia("2026-10-10")).toBe(false); // sábado
+    expect(isBusinessDayColombia("2026-10-11")).toBe(false); // domingo
+    expect(isBusinessDayColombia("2026-10-12")).toBe(false); // festivo
+    expect(isBusinessDayColombia("2026-10-13")).toBe(true);
+  });
+
+  it("cuenta 15 días hábiles desde el día siguiente, saltando fines de semana y festivos", () => {
+    // Viernes 9-oct-2026: del 13 (el 12 es festivo) al 30 de octubre hay 14 días
+    // hábiles; el 15.º es el lunes 2-nov... que es festivo, así que cae el 3.
+    expect(addBusinessDaysColombia("2026-10-09T15:00:00Z", 15)).toBe("2026-11-03");
+  });
+
+  it("usa el día de Bogotá: las 23:00 del viernes no cuentan como sábado", () => {
+    // 04:00 UTC del sábado 10 = 23:00 del viernes 9 en Bogotá.
+    expect(addBusinessDaysColombia("2026-10-10T04:00:00Z", 1)).toBe("2026-10-13");
   });
 });
