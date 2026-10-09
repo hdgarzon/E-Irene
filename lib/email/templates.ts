@@ -467,3 +467,44 @@ export function buildPqrNotificationEmail(input: {
     ),
   };
 }
+
+/**
+ * Confirmación de la solicitud de eliminación de la cuenta (Términos de
+ * Vinculación, cláusula séptima, numeral 5): cuándo se suprime, que hay que
+ * exportar antes, y que se puede desistir hasta esa fecha.
+ */
+export function buildAccountDeletionRequestedEmail(input: {
+  to: string;
+  name: string;
+  clinicName: string;
+  scheduledFor: string;
+  settingsUrl: string;
+}): EmailMessage {
+  const nombre = input.name.split(" ")[0] || input.name;
+  const href = safeHref(input.settingsUrl);
+  return {
+    to: input.to,
+    subject: `Solicitud de eliminación de la cuenta de ${input.clinicName}`,
+    text:
+      `Hola ${nombre}, recibimos la solicitud de eliminar la cuenta de ${input.clinicName}. ` +
+      `El ${input.scheduledFor} suprimiremos de forma definitiva los datos de la cuenta y de sus ` +
+      `pacientes. Antes de esa fecha exporta la información de tus pacientes: como Responsable ` +
+      `debes conservar las historias clínicas por 15 años. Puedes desistir hasta esa fecha desde ` +
+      `Configuración: ${input.settingsUrl}`,
+    html: wrapPlatform(
+      "Solicitud de eliminación de la cuenta",
+      `<p>Hola <strong>${escapeHtml(nombre)}</strong>,</p>
+       <p>Recibimos la solicitud de eliminar la cuenta de <strong>${escapeHtml(input.clinicName)}</strong>.</p>
+       <p style="background:#fdecec;border-radius:8px;padding:12px;font-size:14px;color:#9b1c1c">
+         El <strong>${escapeHtml(input.scheduledFor)}</strong> suprimiremos de forma definitiva los datos de la cuenta y de sus pacientes.
+       </p>
+       <p><strong>Exporta antes la información de tus pacientes:</strong> como Responsable debes conservar las historias clínicas por 15 años (Resolución 839 de 2017).</p>
+       <p>Puedes desistir en cualquier momento antes de esa fecha.</p>
+       ${
+         href
+           ? `<p style="margin:20px 0"><a href="${href}" style="background:#635bff;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Exportar o desistir</a></p>`
+           : ""
+       }`,
+    ),
+  };
+}

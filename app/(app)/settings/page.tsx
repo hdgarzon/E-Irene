@@ -7,6 +7,8 @@ import { PLANS, transcriptionLimitHours, transcriptionUsageLabel } from "@/lib/p
 import { formatLongDate } from "@/lib/dates";
 import { subscriptionState } from "@/lib/billing/subscription-state";
 import { UsageBar } from "@/components/usage-bar";
+import { AccountDeletionSection } from "@/components/account-deletion-section";
+import { getOpenAccountDeletion } from "@/lib/db/account-deletion";
 
 /** Qué pasa con el plan y cuándo, en una línea. */
 function planStatusLine(overview: ClinicOverview): string {
@@ -28,7 +30,11 @@ function planStatusLine(overview: ClinicOverview): string {
 export default async function SettingsPage() {
   const user = await requireRole(["admin", "doctor"]);
   const isAdmin = user.role === "admin";
-  const [overview, usage] = await Promise.all([getClinicOverview(), getTranscriptionUsage()]);
+  const [overview, usage, deletion] = await Promise.all([
+    getClinicOverview(),
+    getTranscriptionUsage(),
+    isAdmin ? getOpenAccountDeletion(user.clinicId) : Promise.resolve(null),
+  ]);
   const limits = PLANS[overview.plan];
 
   return (
@@ -100,6 +106,13 @@ export default async function SettingsPage() {
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
       </div>
+
+      {isAdmin && (
+        <AccountDeletionSection
+          clinicName={user.clinicName}
+          scheduledForLabel={deletion ? formatLongDate(deletion.scheduledFor) : null}
+        />
+      )}
     </div>
   );
 }

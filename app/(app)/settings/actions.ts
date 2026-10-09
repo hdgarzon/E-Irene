@@ -35,6 +35,10 @@ import {
   createWompiCheckout,
 } from "@/lib/billing/wompi-checkout";
 import { appBaseUrl } from "@/lib/app-url";
+import { cancelAccountDeletion, requestAccountDeletion } from "@/lib/db/account-deletion";
+import { getEmailProvider } from "@/lib/email/providers";
+import { buildAccountDeletionRequestedEmail } from "@/lib/email/templates";
+import { formatLongDate } from "@/lib/dates";
 
 export type MemberState = {
   ok?: boolean;
@@ -449,5 +453,67 @@ export async function revertCancellationAction(): Promise<SubscriptionState> {
   }
   revalidatePath("/settings/plan");
   revalidatePath("/settings");
+  return { ok: true };
+}
+
+// ------------------------- Eliminación de la cuenta -------------------------
+
+export type AccountDeletionState = { ok?: boolean; error?: string };
+
+/**
+ * Pide eliminar la cuenta de la clínica (Términos de Vinculación, cláusula
+ * séptima, numeral 5). Se confirma escribiendo el nombre de la clínica: es la
+ * única acción de la app que termina en la supresión de historias clínicas.
+ */
+export async function requestAccountDeletionAction(
+  _prev: AccountDeletionState,
+  formData: FormData,
+): Promise<AccountDeletionState> {
+  const user = await requireRole(["admin"]);
+  const typed = String(formData.get("confirmation") ?? "").trim();
+  if (typed.toLocaleLowerCase("es-CO") !== user.clinicName.trim().toLocaleLowerCase("es-CO")) {
+    return { error: "Escribe el nombre de la clínica tal como aparece para confirmar." };
+  }
+
+  let request;
+  try {
+    request = await requestAccountDeletion();
+  } catch (error) {
+    logger.error("account_deletion.request_failed", { clinicId: user.clinicId, actorId: user.id, error });
+    return { error: "No se pudo registrar la solicitud. Intenta de nuevo o escríbenos." };
+  }
+
+  // La solicitud ya quedó registrada: el correo no la condiciona. El plazo y el
+  // botón de desistir se ven igual en la app.
+  try {
+    await getEmailProvider().send(
+      buildAccountDeletionRequestedEmail({
+        to: user.email,
+        name: user.fullName,
+        clinicName: user.clinicName,
+        scheduledFor: formatLongDate(request.scheduledFor),
+        settingsUrl: `${appBaseUrl()}/settings`,
+      }),
+    );
+  } catch (error) {
+    logger.error("account_deletion.email_failed", { clinicId: user.clinicId, error });
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function cancelAccountDeletionAction(): Promise<AccountDeletionState> {
+  const user = await requireRole(["admin"]);
+  try {
+    const cancelled = await cancelAccountDeletion();
+    if (!cancelled) {
+      return { error: "No hay una solicitud de eliminación vigente que desistir." };
+    }
+  } catch (error) {
+    logger.error("account_deletion.cancel_failed", { clinicId: user.clinicId, actorId: user.id, error });
+    return { error: "No se pudo desistir. Intenta de nuevo o escríbenos." };
+  }
+  revalidatePath("/", "layout");
   return { ok: true };
 }

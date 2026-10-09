@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          clinic_id: string
+          executed_at: string | null
+          id: string
+          requested_at: string
+          requested_by: string
+          scheduled_for: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          clinic_id: string
+          executed_at?: string | null
+          id?: string
+          requested_at?: string
+          requested_by: string
+          scheduled_for: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          clinic_id?: string
+          executed_at?: string | null
+          id?: string
+          requested_at?: string
+          requested_by?: string
+          scheduled_for?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           clinic_id: string
@@ -361,6 +394,7 @@ export type Database = {
           cancel_requested_at: string | null
           created_at: string
           current_period_end: string | null
+          deleted_at: string | null
           id: string
           name: string
           plan: Database["public"]["Enums"]["clinic_plan"]
@@ -378,6 +412,7 @@ export type Database = {
           cancel_requested_at?: string | null
           created_at?: string
           current_period_end?: string | null
+          deleted_at?: string | null
           id?: string
           name: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
@@ -395,6 +430,7 @@ export type Database = {
           cancel_requested_at?: string | null
           created_at?: string
           current_period_end?: string | null
+          deleted_at?: string | null
           id?: string
           name?: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
@@ -1815,6 +1851,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_deletion_grace: { Args: never; Returns: unknown }
+      cancel_account_deletion: { Args: never; Returns: boolean }
+      execute_account_deletion: { Args: { p_request: string }; Returns: number }
+      request_account_deletion: {
+        Args: never
+        Returns: Database["public"]["Tables"]["account_deletion_requests"]["Row"]
+      }
       activate_subscription: {
         Args: {
           p_clinic: string
