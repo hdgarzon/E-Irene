@@ -7,6 +7,8 @@ import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
 import { AccountDeletionBanner } from "@/components/account-deletion-banner";
 import { getOpenAccountDeletion } from "@/lib/db/account-deletion";
+import { LegalNoticeBanner } from "@/components/legal-notice-banner";
+import { listUpcomingLegalNotices } from "@/lib/db/legal-notices";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -16,7 +18,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // de este grupo de rutas, para no redirigirse a sí misma.
   if (!(await hasAcceptedCurrentPolicy(user.id))) redirect("/terminos");
 
-  const deletion = await getOpenAccountDeletion(user.clinicId);
+  const [deletion, notices] = await Promise.all([
+    getOpenAccountDeletion(user.clinicId),
+    listUpcomingLegalNotices(),
+  ]);
 
   return (
     // --font-heading y --font-sans se redefinen AQUÍ, no globalmente: por la
@@ -46,6 +51,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <UserMenu user={user} />
           </div>
         </header>
+        {notices.map((notice) => (
+          <LegalNoticeBanner key={notice.id} notice={notice} />
+        ))}
         {deletion && (
           <AccountDeletionBanner scheduledFor={deletion.scheduledFor} isAdmin={user.role === "admin"} />
         )}
