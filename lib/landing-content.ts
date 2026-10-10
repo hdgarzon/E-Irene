@@ -47,7 +47,7 @@ export const capabilitiesConfig: { sectionLabel: string; items: CapabilityItem[]
       title: "Transcripción en vivo",
       slug: "transcripcion",
       description:
-        "El audio se transcribe en tiempo real, directo en tu navegador, y nunca toca un servidor. Solo conservas texto cifrado, bajo tu control.",
+        "El audio se transcribe en tiempo real y no se graba ni se guarda en ningún momento. Solo queda el texto, cifrado, y se borra solo a los 7 días.",
       image: "/images/cap-transcripcion.jpg",
     },
     {
@@ -96,11 +96,11 @@ export const capabilityDetailConfig: {
   capabilities: {
     transcripcion: {
       title: "Transcripción en vivo",
-      subtitle: "Tu voz se convierte en texto sin salir del navegador.",
+      subtitle: "Tu voz se convierte en texto en vivo, sin grabaciones.",
       paragraphs: [
-        "La transcripción de E-Irene ocurre en tiempo real, mientras hablas con tu paciente. El audio se procesa en streaming y se descarta al instante: nunca se graba, nunca se sube a un servidor, nunca queda almacenado en ningún lado. Lo único que persiste es el texto, cifrado de extremo a extremo.",
-        "El motor reconoce habla clínica en español con alta precisión, distingue al profesional del paciente y marca marcas temporales por tema. Al terminar la sesión, la transcripción completa ya está lista para el análisis, sin pasos extra ni cargas manuales.",
-        "Puedes revisar, editar y anonimizar cualquier fragmento antes de guardarlo. Tú decides qué entra al expediente y qué se elimina para siempre, con un registro auditable de cada acción.",
+        "La transcripción de E-Irene ocurre en tiempo real, mientras hablas con tu paciente. El navegador envía el audio en directo al proveedor de transcripción y solo regresa texto: el audio no se graba ni se almacena en ningún momento, ni por E-Irene ni por el proveedor, y nadie lo usa para entrenar modelos. Lo único que persiste es el texto, cifrado con AES-256.",
+        "El motor reconoce habla clínica en español y distingue al profesional del paciente. Al terminar la sesión, la transcripción completa ya está lista para el análisis, sin pasos extra ni cargas manuales.",
+        "Nada entra a la historia clínica sin tu revisión: el reporte es un borrador que corriges y validas. La transcripción es un documento de trabajo y se borra automáticamente 7 días después de la sesión, con un registro auditable de cada supresión.",
       ],
     },
     analisis: {
@@ -125,9 +125,9 @@ export const capabilityDetailConfig: {
       title: "Cumplimiento legal",
       subtitle: "Diseñado para la norma colombiana desde el día uno.",
       paragraphs: [
-        "E-Irene opera bajo la Ley 1581 de Habeas Data: consentimiento expreso del paciente, finalidad clara en el tratamiento de datos, derechos de acceso y supresión, y políticas de retención configurables. El consentimiento digital se firma conforme a la Ley 527 de mensajes de datos.",
-        "La historia clínica electrónica cumple los lineamientos del Ministerio de Salud: registros íntegros, trazabilidad de cambios, control de acceso por rol y respaldo seguro. Cada acción sobre un expediente queda registrada en una bitácora auditable.",
-        "Los datos se cifran en tránsito y en reposo, y las llaves de cifrado las controla el profesional. Ni siquiera E-Irene puede leer tus notas: la privacidad no es una promesa comercial, es una consecuencia de la arquitectura.",
+        "E-Irene opera bajo la Ley 1581 de Habeas Data: consentimiento expreso del paciente, finalidad clara en el tratamiento de datos, derechos de acceso y supresión, y plazos de conservación definidos en la política de tratamiento. El consentimiento digital se firma conforme a la Ley 527 de mensajes de datos.",
+        "La historia clínica electrónica sigue los lineamientos del Ministerio de Salud: registros íntegros, trazabilidad, control de acceso por rol y respaldo seguro. Las acciones clave sobre un expediente —firmas, validaciones, supresiones— quedan en una bitácora auditable que no se puede modificar.",
+        "Los datos se cifran en tránsito y en reposo, y cada clínica queda aislada de las demás en la base de datos. E-Irene trata la información de tus pacientes solo por tu cuenta y para prestarte el servicio: no la usa para fines propios ni para entrenar modelos de inteligencia artificial.",
       ],
     },
   },
@@ -136,9 +136,9 @@ export const capabilityDetailConfig: {
 export const architectureConfig = {
   sectionLabel: "Privacidad",
   videoPath: "/videos/waveform.mp4",
-  title: "El audio nunca toca un servidor.",
+  title: "El audio nunca se graba.",
   description:
-    "La transcripción ocurre en tiempo real y el audio se descarta al instante: no se graba, no se sube, no se almacena. Solo permanece el texto, cifrado con llaves que controlas tú. El cumplimiento nace de la arquitectura, no de la letra pequeña.",
+    "La transcripción ocurre en tiempo real y el audio no se graba ni se almacena: ni E-Irene ni sus proveedores guardan una copia. Solo permanece el texto, cifrado, y se borra solo a los 7 días. El cumplimiento nace de la arquitectura, no de la letra pequeña.",
 };
 
 export interface ResearchProject {
