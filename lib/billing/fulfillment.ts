@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
+import { confirmCheckoutPayment } from "@/lib/billing/payment-confirmation";
 import { PLANS, type Plan } from "@/lib/plans";
 import type { CheckoutKind, CheckoutRecord } from "@/lib/db/billing-checkouts";
 
@@ -136,5 +137,17 @@ export async function fulfillCheckoutPayment(
     transactionId: transaction.id,
     alreadyProcessed,
   });
+  // Solo la primera vez: el webhook y la conciliación pueden traer la misma
+  // transacción, y la confirmación no debe llegar dos veces.
+  if (!alreadyProcessed) {
+    await confirmCheckoutPayment({
+      clinicId: owner.clinicId,
+      kind: owner.kind,
+      planLabel: PLANS[plan]?.label ?? plan,
+      quantity: owner.quantity,
+      amountInCents: transaction.amount_in_cents,
+      transactionId: transaction.id,
+    });
+  }
   return { outcome: "applied", kind: owner.kind, plan, alreadyProcessed };
 }
