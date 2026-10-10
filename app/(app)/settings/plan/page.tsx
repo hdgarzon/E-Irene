@@ -9,6 +9,7 @@ import {
   PLANS,
   PLAN_ORDER,
   TRANSCRIPTION_PACK,
+  VAT_NOTE,
   VIDEO_PACK_SIZES,
   effectiveTranscriptionLimitSeconds,
   formatCop,
@@ -470,6 +471,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           </>
         )}
       </section>
+
+      <p className="text-xs text-muted-foreground">
+        Precios mensuales en pesos colombianos, {VAT_NOTE.toLowerCase()}. Las horas adicionales y
+        los packs de videollamadas también incluyen IVA.
+      </p>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {PLAN_ORDER.map((plan) => {

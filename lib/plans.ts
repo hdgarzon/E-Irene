@@ -23,6 +23,12 @@ export interface PlanLimits {
   video: "none" | "addon" | "included";
 }
 
+/**
+ * Todos los precios publicados y cobrados incluyen IVA. Los Términos y
+ * Condiciones (cláusula undécima) exigen indicarlo junto a los precios.
+ */
+export const VAT_NOTE = "IVA incluido";
+
 /** Centavos de COP → "$59.000". */
 export function formatCop(priceInCents: number): string {
   const pesos = Math.round(priceInCents / 100);
