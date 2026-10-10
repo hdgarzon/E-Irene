@@ -447,7 +447,7 @@ export default async function DashboardPage({
         <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
         <p className="text-xs text-muted-foreground">
           {user?.clinicName} · Datos cifrados (AES-256), aislados por clínica. El audio de las
-          sesiones nunca se guarda en el servidor.
+          sesiones no se graba ni se guarda.
         </p>
       </div>
     </div>

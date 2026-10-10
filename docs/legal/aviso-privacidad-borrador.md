@@ -1,3 +1,5 @@
+> **Obsoleto.** Borrador anterior a los documentos vigentes desde el 6 de octubre de 2026, que están en `lib/legal-documents/` (páginas públicas y PDF). Los plazos que aparecen aquí (30 y 90 días para la transcripción) ya no aplican: la transcripción se suprime 7 días después de la sesión.
+
 # AVISO DE PRIVACIDAD — [E-IRENE] S.A.S.
 
 > **BORRADOR PRELIMINAR PARA REVISIÓN JURÍDICA — NO PUBLICAR**
