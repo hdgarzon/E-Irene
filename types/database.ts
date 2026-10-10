@@ -982,6 +982,51 @@ export type Database = {
           },
         ]
       }
+      pqr_requests: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          ip: string | null
+          kind: string
+          message: string
+          phone: string | null
+          radicado: string
+          responded_at: string | null
+          status: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          ip?: string | null
+          kind: string
+          message: string
+          phone?: string | null
+          radicado?: string
+          responded_at?: string | null
+          status?: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          ip?: string | null
+          kind?: string
+          message?: string
+          phone?: string | null
+          radicado?: string
+          responded_at?: string | null
+          status?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       psychometric_assessments: {
         Row: {
           administered_at: string

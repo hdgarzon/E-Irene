@@ -1,4 +1,4 @@
-import { POLICY_PATH, PRIVACY_NOTICE_PATH, SIC_URL, TERMS_OF_USE_PATH } from "@/lib/legal-documents/urls";
+import { POLICY_PATH, PQR_PATH, PRIVACY_NOTICE_PATH, SIC_URL, TERMS_OF_USE_PATH } from "@/lib/legal-documents/urls";
 
 // Contenido de la landing pública. Portado desde el diseño en `landing`
 // (zip) — mismo texto, misma estructura. Único cambio real: el diseño
@@ -193,6 +193,7 @@ export const footerConfig: {
         { label: "Política de tratamiento de datos personales", href: POLICY_PATH },
         { label: "Aviso de privacidad", href: PRIVACY_NOTICE_PATH },
         { label: "Términos y condiciones", href: TERMS_OF_USE_PATH },
+        { label: "Peticiones, quejas y reclamos", href: PQR_PATH },
         // Enlace visible a la SIC: art. 50 de la Ley 1480 de 2011.
         { label: "Superintendencia de Industria y Comercio", href: SIC_URL },
         { label: "Contacto", href: "mailto:hola@e-irene.co" },

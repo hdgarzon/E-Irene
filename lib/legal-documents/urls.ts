@@ -11,6 +11,8 @@ export const POLICY_PATH = "/politica-de-datos";
 export const PRIVACY_NOTICE_PATH = "/privacidad";
 export const TERMS_OF_USE_PATH = "/terminos-y-condiciones";
 export const PROFESSIONAL_TERMS_PATH = "/vinculacion-profesional";
+/** Formulario de PQR que citan los Términos de Uso (cláusula duodécima, numeral 3). */
+export const PQR_PATH = "/pqr";
 
 export const POLICY_URL = `${SITE_URL}${POLICY_PATH}`;
 export const PLANS_URL = `${SITE_URL}/#planes`;
@@ -20,3 +22,6 @@ export const SIC_URL = "https://sedeelectronica.sic.gov.co";
 
 export const DATA_PROTECTION_EMAIL = "protecciondedatos@e-irene.co";
 export const COMMERCIAL_EMAIL = "hola@e-irene.co";
+
+/** Buzón que recibe las PQR: el que citan los Términos de Uso (cláusula duodécima). */
+export const PQR_INBOX_EMAIL = DATA_PROTECTION_EMAIL;
