@@ -191,19 +191,24 @@ export interface OrphanSweepResult {
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-interface BucketObject {
+export interface BucketObject {
   path: string;
   /** Última escritura: la más reciente entre creación y actualización. */
   writtenAt: number;
 }
 
-async function listBucketObjects(admin: AdminClient, prefix?: string): Promise<BucketObject[]> {
+/** Lista los objetos de un bucket bajo un prefijo. También la usa la eliminación de cuentas. */
+export async function listBucketObjects(
+  admin: AdminClient,
+  prefix?: string,
+  bucket: string = DOCUMENTS_BUCKET,
+): Promise<BucketObject[]> {
   const objects: BucketObject[] = [];
   let cursor: string | undefined;
 
   for (;;) {
     const { data, error } = await admin.storage
-      .from(DOCUMENTS_BUCKET)
+      .from(bucket)
       .listV2({ prefix, cursor, limit: PAGE_SIZE });
     if (error) throw error;
 
