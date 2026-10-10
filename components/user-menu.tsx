@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, UserRound } from "lucide-react";
 import { signOutAction } from "@/app/(auth)/actions";
 import type { SessionUser } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -46,6 +47,11 @@ export function UserMenu({ user }: { user: SessionUser }) {
             <p className="mt-1 text-xs font-normal text-brand">{ROLE_LABEL[user.role]}</p>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/cuenta" />}>
+          <UserRound className="size-4" />
+          Mi cuenta
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOutAction}>
           <DropdownMenuItem
