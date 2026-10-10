@@ -17,7 +17,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
-import { getActiveConsent } from "@/lib/db/consents";
+import { getActiveConsent, listConsentsForPatient } from "@/lib/db/consents";
+import { RevokeConsentForm } from "@/components/revoke-consent-form";
 import { listConsultationsForPatient } from "@/lib/db/consultations";
 import { listAssessmentsForPatient } from "@/lib/db/assessments";
 import { getActivePlanForPatient } from "@/lib/db/treatment-plans";
@@ -57,12 +58,16 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const patient = await getPatient(id);
   if (!patient) notFound();
-  const [consent, consultations, assessments, treatmentPlan] = await Promise.all([
+  const [consent, consentHistory, consultations, assessments, treatmentPlan] = await Promise.all([
     getActiveConsent(id),
+    listConsentsForPatient(id),
     listConsultationsForPatient(id),
     listAssessmentsForPatient(id),
     getActivePlanForPatient(id),
   ]);
+  // Si la firma más reciente está revocada, se muestra la revocación en vez de
+  // un "pendiente" sin contexto.
+  const revoked = !consent && consentHistory[0]?.revokedAt ? consentHistory[0] : null;
   const latestByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
     type,
     latest: [...assessments].reverse().find((a) => a.type === type) ?? null,
@@ -207,6 +212,8 @@ export default async function PatientDetailPage({
           </h2>
           {consent ? (
             <Badge className="bg-mint/15 text-[#04342a]">Firmado</Badge>
+          ) : revoked ? (
+            <Badge className="bg-coral/15 text-destructive">Revocado</Badge>
           ) : (
             <Badge className="bg-coral/15 text-destructive">Pendiente</Badge>
           )}
@@ -229,11 +236,16 @@ export default async function PatientDetailPage({
                   ` · Asentimiento del menor: ${consent.minorAssent ? "sí" : "no"}`}
               </p>
             )}
+            <div className="mt-2">
+              <RevokeConsentForm patientId={id} />
+            </div>
           </>
         ) : (
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Requerido antes de iniciar una consulta.
+              {revoked
+                ? `El paciente revocó su consentimiento el ${new Date(revoked.revokedAt!).toLocaleDateString("es-CO")}${revoked.revocationNote ? ` (${revoked.revocationNote})` : ""}. Para volver a atenderlo por la plataforma debe firmar de nuevo.`
+                : "Requerido antes de iniciar una consulta."}
             </p>
             <div className="flex items-center gap-3">
               <GeneratePatientLinkButton
