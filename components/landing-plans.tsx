@@ -5,6 +5,7 @@ import {
   TRANSCRIPTION_PACK,
   VIDEO_CALL_PRICE_IN_CENTS,
   VIDEO_PACK_SIZES,
+  VAT_NOTE,
   formatCop,
   planFeatures,
 } from "@/lib/plans";
@@ -67,7 +68,7 @@ export function LandingPlans() {
                 <p style={{ fontFamily: "var(--font-landing-sans)", fontSize: 22, fontWeight: 400, color: "#12283f", marginTop: 8 }}>
                   {price}
                   {p.priceInCents !== null && p.priceInCents > 0 && (
-                    <span style={{ ...small, fontSize: 12 }}> COP/mes</span>
+                    <span style={{ ...small, fontSize: 12, display: "block" }}>COP/mes · {VAT_NOTE}</span>
                   )}
                 </p>
                 <ul style={{ ...small, marginTop: 16 }} className="space-y-1.5">
@@ -85,11 +86,11 @@ export function LandingPlans() {
             <p style={{ color: "#12283f", fontWeight: 400 }}>Adicionales</p>
             <p>
               Horas de transcripción: {TRANSCRIPTION_PACK.hours} h por{" "}
-              {formatCop(TRANSCRIPTION_PACK.priceInCents)} COP. Vencen al terminar el período de
+              {formatCop(TRANSCRIPTION_PACK.priceInCents)} COP, {VAT_NOTE.toLowerCase()}. Vencen al terminar el período de
               facturación en que se compran.
             </p>
             <p style={{ marginTop: 8 }}>
-              Videollamadas: {formatCop(VIDEO_CALL_PRICE_IN_CENTS)} COP cada una, en paquetes de{" "}
+              Videollamadas: {formatCop(VIDEO_CALL_PRICE_IN_CENTS)} COP cada una ({VAT_NOTE.toLowerCase()}), en paquetes de{" "}
               {VIDEO_PACK_SIZES.join(", ").replace(/, (\d+)$/, " o $1")}. Los paquetes no vencen y se
               conservan mientras la cuenta exista: si eliminas la cuenta, las videollamadas no usadas
               se pierden y no se reembolsan.
@@ -98,7 +99,7 @@ export function LandingPlans() {
           <div style={small}>
             <p style={{ color: "#12283f", fontWeight: 400 }}>Condiciones</p>
             <p>
-              Precios en pesos colombianos. Los planes pagos son mensuales, sin permanencia, y se
+              Precios en pesos colombianos, con IVA incluido. Los planes pagos son mensuales, sin permanencia, y se
               renuevan automáticamente hasta que los canceles. Las condiciones de suscripción,
               cambios de plan, compras adicionales, cancelación y reembolsos están en la cláusula
               duodécima de los{" "}
