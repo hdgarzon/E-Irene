@@ -456,6 +456,9 @@ export type Database = {
           ip: string | null
           is_minor: boolean
           minor_assent: boolean | null
+          revocation_note: string | null
+          revoked_at: string | null
+          revoked_by: string | null
           link_id: string | null
           patient_id: string
           representative_document_enc: string | null
@@ -474,6 +477,9 @@ export type Database = {
           ip?: string | null
           is_minor?: boolean
           minor_assent?: boolean | null
+          revocation_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           link_id?: string | null
           patient_id: string
           representative_document_enc?: string | null
@@ -492,6 +498,9 @@ export type Database = {
           ip?: string | null
           is_minor?: boolean
           minor_assent?: boolean | null
+          revocation_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           link_id?: string | null
           patient_id?: string
           representative_document_enc?: string | null
@@ -1854,6 +1863,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      revoke_patient_consent: { Args: { p_note?: string; p_patient: string }; Returns: number }
       account_identity_retention: { Args: never; Returns: unknown }
       purge_deleted_account_identity: { Args: { p_clinic: string }; Returns: string[] }
       account_deletion_grace: { Args: never; Returns: unknown }

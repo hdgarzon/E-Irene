@@ -18,6 +18,9 @@ export interface Consent {
   representativeRelationship: string | null;
   /** Asentimiento del menor evaluado por el profesional; null = no registrado. */
   minorAssent: boolean | null;
+  /** Revocación registrada (0064); null = vigente. */
+  revokedAt: string | null;
+  revocationNote: string | null;
 }
 
 interface ConsentRow {
@@ -34,6 +37,8 @@ interface ConsentRow {
   representative_document_enc: string | null;
   representative_relationship: string | null;
   minor_assent: boolean | null;
+  revoked_at: string | null;
+  revocation_note: string | null;
 }
 
 function mapRow(r: ConsentRow): Consent {
@@ -51,6 +56,8 @@ function mapRow(r: ConsentRow): Consent {
     representativeDocument: decryptNullable(r.representative_document_enc),
     representativeRelationship: r.representative_relationship,
     minorAssent: r.minor_assent,
+    revokedAt: r.revoked_at,
+    revocationNote: r.revocation_note,
   };
 }
 
@@ -66,7 +73,7 @@ export async function listConsentsForPatient(patientId: string): Promise<Consent
   return (data as ConsentRow[]).map(mapRow);
 }
 
-/** Consentimiento vigente del paciente (versión actual), o null. */
+/** Consentimiento vigente del paciente (versión actual y no revocado), o null. */
 export async function getActiveConsent(patientId: string): Promise<Consent | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -74,6 +81,7 @@ export async function getActiveConsent(patientId: string): Promise<Consent | nul
     .select("*")
     .eq("patient_id", patientId)
     .eq("document_version", CONSENT_VERSION)
+    .is("revoked_at", null)
     .order("signed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -90,7 +98,11 @@ export async function countPatientsWithoutConsent(): Promise<number> {
   const supabase = await createClient();
   const [patientsRes, consentsRes] = await Promise.all([
     supabase.from("patients").select("id"),
-    supabase.from("consents").select("patient_id").eq("document_version", CONSENT_VERSION),
+    supabase
+      .from("consents")
+      .select("patient_id")
+      .eq("document_version", CONSENT_VERSION)
+      .is("revoked_at", null),
   ]);
   if (patientsRes.error) throw patientsRes.error;
   if (consentsRes.error) throw consentsRes.error;
@@ -177,4 +189,19 @@ export async function createConsentViaLink(input: {
     .single();
   if (error) throw error;
   return mapRow(data as ConsentRow);
+}
+
+/**
+ * Registra la revocación del paciente (Consentimiento, cláusula novena): todas
+ * sus firmas vigentes quedan revocadas. Devuelve cuántas. La historia clínica no
+ * se toca.
+ */
+export async function revokePatientConsent(patientId: string, note: string | null): Promise<number> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("revoke_patient_consent", {
+    p_patient: patientId,
+    p_note: note ?? undefined,
+  });
+  if (error) throw error;
+  return data;
 }
