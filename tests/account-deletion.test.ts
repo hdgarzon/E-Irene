@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { encrypt } from "@/lib/crypto";
-import { runDueAccountDeletions } from "@/lib/db/account-deletion";
+import { purgeExpiredAccountIdentities, runDueAccountDeletions } from "@/lib/db/account-deletion";
 
 // Guarda de entorno: importar esto aborta la corrida si NEXT_PUBLIC_SUPABASE_URL
 // no apunta a un stack local. Estas pruebas escriben con service-role y
@@ -293,4 +293,95 @@ d("eliminación de la cuenta (migración 0062)", () => {
     const { data: auth } = await svc().auth.admin.getUserById(c.userId);
     expect(new Date(auth.user!.banned_until!).getTime()).toBeGreaterThan(Date.now());
   }, 60000);
+});
+
+/** Clínica ya eliminada, con una aceptación de la política, y fechada `dias` atrás. */
+async function clinicaEliminada(nombre: string, dias: number) {
+  const c = await clinica(nombre);
+  const { error: polErr } = await c.client.from("policy_acceptances").insert({
+    user_id: c.userId,
+    clinic_id: c.clinicId,
+    document_version: "v",
+    document_hash: "h",
+  });
+  expect(polErr).toBeNull();
+  const { data: req } = await c.client.rpc("request_account_deletion");
+  await vencer(req.id);
+  await ejecutar(req.id);
+  const { error } = await svc()
+    .from("clinics")
+    .update({ deleted_at: new Date(Date.now() - dias * 86_400_000).toISOString() })
+    .eq("id", c.clinicId);
+  expect(error).toBeNull();
+  return c;
+}
+
+d("supresión de la identificación 2 años después (migración 0063)", () => {
+  it("antes de 2 años conserva usuarios, cuentas de acceso y aceptaciones", async () => {
+    const c = await clinicaEliminada("Ident Reciente", 700);
+    const { data } = await svc().rpc("purge_deleted_account_identity", { p_clinic: c.clinicId });
+    expect(data).toEqual([]);
+    expect(await contar("users", c.clinicId)).toBe(1);
+    expect(await contar("policy_acceptances", c.clinicId)).toBe(1);
+  }, 60000);
+
+  it("vencidos los 2 años suprime usuarios, cuentas de acceso y aceptaciones, y conserva la clínica", async () => {
+    const c = await clinicaEliminada("Ident Vencida", 2 * 366);
+
+    const run = await purgeExpiredAccountIdentities();
+    expect(run.failed).toBe(0);
+
+    expect(await contar("users", c.clinicId)).toBe(0);
+    expect(await contar("policy_acceptances", c.clinicId)).toBe(0);
+    const { data: auth } = await svc().auth.admin.getUserById(c.userId);
+    expect(auth.user).toBeNull();
+
+    const { data: clinic } = await svc()
+      .from("clinics")
+      .select("identity_purged_at, deleted_at")
+      .eq("id", c.clinicId)
+      .single();
+    expect(clinic!.identity_purged_at).not.toBeNull();
+
+    // La solicitud de eliminación y la auditoría quedan, sin datos personales.
+    const { data: req } = await svc()
+      .from("account_deletion_requests")
+      .select("requested_by")
+      .eq("clinic_id", c.clinicId)
+      .single();
+    expect(req!.requested_by).toBeNull();
+    const { data: audit } = await svc()
+      .from("audit_logs")
+      .select("action")
+      .eq("clinic_id", c.clinicId)
+      .eq("action", "account.identity_purged");
+    expect(audit ?? []).toHaveLength(1);
+
+    // Idempotente.
+    const { data: again } = await svc().rpc("purge_deleted_account_identity", { p_clinic: c.clinicId });
+    expect(again).toEqual([]);
+  }, 60000);
+
+  it("no toca a un admin de plataforma de la clínica eliminada", async () => {
+    const c = await clinicaEliminada("Ident Admin", 2 * 366);
+    const { error } = await svc().from("platform_admins").insert({ user_id: c.userId });
+    expect(error).toBeNull();
+
+    const { data } = await svc().rpc("purge_deleted_account_identity", { p_clinic: c.clinicId });
+    expect(data).toEqual([]);
+    const { data: user } = await svc().from("users").select("full_name").eq("id", c.userId).single();
+    expect(user!.full_name).toBe("Doctor Demo");
+  }, 60000);
+
+  it("fuera de la supresión, las aceptaciones siguen siendo inmutables", async () => {
+    const c = await clinica("Ident Inmutable");
+    await c.client.from("policy_acceptances").insert({
+      user_id: c.userId,
+      clinic_id: c.clinicId,
+      document_version: "v",
+      document_hash: "h",
+    });
+    const { error } = await svc().from("policy_acceptances").delete().eq("clinic_id", c.clinicId);
+    expect(error?.message).toMatch(/inmutable/);
+  }, 30000);
 });

@@ -22,7 +22,7 @@ export type Database = {
           executed_at: string | null
           id: string
           requested_at: string
-          requested_by: string
+          requested_by: string | null
           scheduled_for: string
         }
         Insert: {
@@ -32,7 +32,7 @@ export type Database = {
           executed_at?: string | null
           id?: string
           requested_at?: string
-          requested_by: string
+          requested_by?: string | null
           scheduled_for: string
         }
         Update: {
@@ -42,7 +42,7 @@ export type Database = {
           executed_at?: string | null
           id?: string
           requested_at?: string
-          requested_by?: string
+          requested_by?: string | null
           scheduled_for?: string
         }
         Relationships: []
@@ -395,6 +395,7 @@ export type Database = {
           created_at: string
           current_period_end: string | null
           deleted_at: string | null
+          identity_purged_at: string | null
           id: string
           name: string
           plan: Database["public"]["Enums"]["clinic_plan"]
@@ -413,6 +414,7 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           deleted_at?: string | null
+          identity_purged_at?: string | null
           id?: string
           name: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
@@ -431,6 +433,7 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           deleted_at?: string | null
+          identity_purged_at?: string | null
           id?: string
           name?: string
           plan?: Database["public"]["Enums"]["clinic_plan"]
@@ -1851,6 +1854,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_identity_retention: { Args: never; Returns: unknown }
+      purge_deleted_account_identity: { Args: { p_clinic: string }; Returns: string[] }
       account_deletion_grace: { Args: never; Returns: unknown }
       cancel_account_deletion: { Args: never; Returns: boolean }
       execute_account_deletion: { Args: { p_request: string }; Returns: number }

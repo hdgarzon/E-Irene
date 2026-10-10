@@ -160,3 +160,56 @@ export async function runDueAccountDeletions(now: Date = new Date()): Promise<Ac
   }
   return run;
 }
+
+/** Plazo de la Política para la cuenta del profesional tras eliminarla (0063). */
+export const IDENTITY_RETENTION_YEARS = 2;
+
+export interface IdentityPurgeRun {
+  clinics: number;
+  usersDeleted: number;
+  failed: number;
+}
+
+/**
+ * Suprime la identificación de las clínicas eliminadas hace más de 2 años
+ * (Política de Tratamiento, sección 5: "Cuenta del profesional: mientras esté
+ * vigente la relación, más 2 años"). La base anonimiza a los usuarios y borra
+ * sus aceptaciones (purge_deleted_account_identity); aquí se borran sus cuentas
+ * de acceso, que arrastran las filas de `users`. Si un borrado falla, la
+ * clínica vuelve a aparecer mañana con los usuarios que le queden.
+ */
+export async function purgeExpiredAccountIdentities(now: Date = new Date()): Promise<IdentityPurgeRun> {
+  const admin = createAdminClient();
+  const cutoff = new Date(now);
+  cutoff.setFullYear(cutoff.getFullYear() - IDENTITY_RETENTION_YEARS);
+
+  const { data: clinics, error } = await admin
+    .from("clinics")
+    .select("id")
+    .not("deleted_at", "is", null)
+    .lte("deleted_at", cutoff.toISOString());
+  if (error) throw error;
+
+  const run: IdentityPurgeRun = { clinics: 0, usersDeleted: 0, failed: 0 };
+  for (const { id: clinicId } of clinics ?? []) {
+    try {
+      const { data: userIds, error: rpcError } = await admin.rpc("purge_deleted_account_identity", {
+        p_clinic: clinicId,
+      });
+      if (rpcError) throw rpcError;
+      if (!userIds?.length) continue;
+
+      run.clinics += 1;
+      for (const userId of userIds) {
+        const { error: delError } = await admin.auth.admin.deleteUser(userId);
+        if (delError) throw delError;
+        run.usersDeleted += 1;
+      }
+      logger.info("account_identity.purged", { clinicId, users: userIds.length });
+    } catch (err) {
+      run.failed += 1;
+      logger.error("account_identity.purge_failed", { clinicId, error: err });
+    }
+  }
+  return run;
+}

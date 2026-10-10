@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { runDueAccountDeletions } from "@/lib/db/account-deletion";
+import { purgeExpiredAccountIdentities, runDueAccountDeletions } from "@/lib/db/account-deletion";
 import { logger } from "@/lib/logger";
 
 /**
- * Ejecuta las eliminaciones de cuenta cuyo plazo de 30 días ya venció (ver
+ * Ejecuta las eliminaciones de cuenta cuyo plazo de 30 días ya venció, y
+ * suprime la identificación de las eliminadas hace más de 2 años (ver
  * lib/db/account-deletion.ts). Corre aquí y no en pg_cron porque los archivos
  * de la clínica se borran por la API de Storage.
  *
@@ -24,13 +25,28 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Independientes: que una falle no deja sin correr la otra.
+  let deletions = null;
   try {
-    const run = await runDueAccountDeletions();
-    logger.info("cron_account_deletions.done", { ...run });
-    if (run.failed > 0) return NextResponse.json({ error: "partial_failure", ...run }, { status: 500 });
-    return NextResponse.json({ ok: true, ...run });
+    deletions = await runDueAccountDeletions();
+    logger.info("cron_account_deletions.done", { ...deletions });
   } catch (error) {
     logger.error("cron_account_deletions.failed", { error });
-    return NextResponse.json({ error: "processing_failed" }, { status: 500 });
   }
+
+  let identities = null;
+  try {
+    identities = await purgeExpiredAccountIdentities();
+    logger.info("cron_account_identities.done", { ...identities });
+  } catch (error) {
+    logger.error("cron_account_identities.failed", { error });
+  }
+
+  if (!deletions || !identities) {
+    return NextResponse.json({ error: "processing_failed", deletions, identities }, { status: 500 });
+  }
+  if (deletions.failed > 0 || identities.failed > 0) {
+    return NextResponse.json({ error: "partial_failure", deletions, identities }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, deletions, identities });
 }
