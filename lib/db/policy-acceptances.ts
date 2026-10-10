@@ -89,3 +89,41 @@ export async function listMyAcceptances(userId: string): Promise<AcceptanceRecor
     acceptedAt: r.accepted_at,
   }));
 }
+
+/** Autorización comercial vigente: la de la aceptación más reciente. */
+export async function getMarketingOptIn(userId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("policy_acceptances")
+    .select("marketing_opt_in")
+    .eq("user_id", userId)
+    .order("accepted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.marketing_opt_in ?? false;
+}
+
+/**
+ * Da o retira la autorización de comunicaciones comerciales (Términos de
+ * Vinculación, cláusula novena: "revocable en cualquier momento"). Las
+ * aceptaciones son inmutables (0035): el cambio se registra como una aceptación
+ * nueva de la versión vigente, con su propia IP, user-agent y fecha, y la
+ * vigente es siempre la más reciente.
+ */
+export async function setMarketingOptIn(params: {
+  userId: string;
+  clinicId: string;
+  optIn: boolean;
+}): Promise<void> {
+  if ((await getMarketingOptIn(params.userId)) === params.optIn) return;
+  await recordAcceptance({ userId: params.userId, clinicId: params.clinicId, marketingOptIn: params.optIn });
+  await logAudit({
+    clinicId: params.clinicId,
+    actorId: params.userId,
+    action: params.optIn ? "marketing.opt_in" : "marketing.opt_out",
+    entityType: "policy_acceptances",
+    entityId: params.userId,
+    metadata: { version: POLICY_VERSION },
+  });
+}
