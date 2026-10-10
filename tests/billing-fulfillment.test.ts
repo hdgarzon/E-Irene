@@ -8,6 +8,10 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ rpc: (...a: unknown[]) => rpc(...a) }),
 }));
 vi.mock("@/lib/crypto", () => ({ encrypt: (value: string) => `enc(${value})` }));
+const confirm = vi.fn();
+vi.mock("@/lib/billing/payment-confirmation", () => ({
+  confirmCheckoutPayment: (...a: unknown[]) => confirm(...a),
+}));
 
 const { fulfillCheckoutPayment } = await import("@/lib/billing/fulfillment");
 const { logger } = await import("@/lib/logger");
@@ -37,6 +41,7 @@ const tx = {
 };
 
 beforeEach(() => {
+  confirm.mockReset();
   rpc.mockReset().mockResolvedValue({
     data: { outcome: "applied", plan: "pro", already_processed: false },
     error: null,
@@ -213,5 +218,32 @@ describe("fulfillCheckoutPayment", () => {
 
     const reports = errors.mock.calls.filter(([event]) => event === "billing.payment_rejected");
     expect(reports).toHaveLength(1);
+  });
+
+  // Términos y Condiciones, cláusula duodécima, numeral 5.
+  it("confirma por correo un pago aplicado por primera vez, con concepto, monto y referencia", async () => {
+    await fulfillCheckoutPayment(owner({ kind: "video_pack", quantity: 5 }), { ...tx, amount_in_cents: 4_500_000 });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledWith({
+      clinicId: CLINIC,
+      kind: "video_pack",
+      planLabel: PLANS.pro.label,
+      quantity: 5,
+      amountInCents: 4_500_000,
+      transactionId: "tx-demo-1",
+    });
+  });
+
+  it("no vuelve a confirmar una transacción ya aplicada (reintento del webhook o conciliación)", async () => {
+    rpc.mockResolvedValue({ data: { outcome: "applied", plan: "pro", already_processed: true }, error: null });
+    await fulfillCheckoutPayment(owner(), tx);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("no confirma un pago rechazado", async () => {
+    rpc.mockResolvedValue({ data: { outcome: "rejected", reason: "monto", already_processed: false }, error: null });
+    vi.spyOn(logger, "error").mockImplementation(() => {});
+    await fulfillCheckoutPayment(owner(), tx);
+    expect(confirm).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { PLANS } from "@/lib/plans";
 import { logger } from "@/lib/logger";
+import { confirmRenewal } from "@/lib/billing/payment-confirmation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getClinicsDueForCharge,
@@ -347,8 +348,19 @@ export async function processRecurringCharges(): Promise<ProcessRecurringCharges
         // Renueva el período que se cobró, no "desde hoy": el cron cobra hasta
         // 3 días antes del vencimiento y contar desde la fecha del cobro le
         // quitaba esos días al cliente en cada renovación.
-        await renewBilling(clinic.id, clinic.currentPeriodEnd, clinic.chargePlan);
+        const newPeriodEnd = await renewBilling(clinic.id, clinic.currentPeriodEnd, clinic.chargePlan);
         result.succeeded++;
+        // null = el período ya se había renovado (por el webhook): esa vía confirmó.
+        if (newPeriodEnd) {
+          await confirmRenewal({
+            clinicId: clinic.id,
+            planLabel: PLANS[clinic.chargePlan].label,
+            amountInCents,
+            previousPeriodEnd: clinic.currentPeriodEnd,
+            newPeriodEnd,
+            transactionId: chargeResult.transactionId,
+          });
+        }
       } catch (error) {
         logger.error("billing.renew_after_charge_failed", {
           clinicId: clinic.id,
@@ -497,7 +509,17 @@ export async function settleRenewalPayment(input: {
   }
 
   const periodEnd = await renewBilling(reference.clinicId, charge.dueAt, charge.plan);
-  if (periodEnd) return { result: "renewed", periodEnd };
+  if (periodEnd) {
+    await confirmRenewal({
+      clinicId: reference.clinicId,
+      planLabel: PLANS[charge.plan].label,
+      amountInCents: charge.amountInCents,
+      previousPeriodEnd: charge.dueAt,
+      newPeriodEnd: periodEnd,
+      transactionId: transaction.id,
+    });
+    return { result: "renewed", periodEnd };
+  }
 
   // No se renovó: o ese período ya se había renovado —lo normal, el cron y el
   // webhook del mismo cobro llegan los dos— o la suscripción terminó entre el
