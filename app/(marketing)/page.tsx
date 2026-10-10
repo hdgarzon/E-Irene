@@ -5,6 +5,7 @@ import { LandingHero } from "@/components/landing-hero";
 import { LandingCurriculum } from "@/components/landing-curriculum";
 import { LandingCinematicVision } from "@/components/landing-cinematic-vision";
 import { LandingAlumniArchives } from "@/components/landing-alumni-archives";
+import { LandingPlans } from "@/components/landing-plans";
 import { LandingFooter } from "@/components/landing-footer";
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default async function LandingPage() {
         <LandingCurriculum />
         <LandingCinematicVision />
         <LandingAlumniArchives />
+        <LandingPlans />
         <LandingFooter />
       </main>
     </div>

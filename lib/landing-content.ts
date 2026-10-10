@@ -1,3 +1,5 @@
+import { POLICY_PATH, PRIVACY_NOTICE_PATH, SIC_URL, TERMS_OF_USE_PATH } from "@/lib/legal-documents/urls";
+
 // Contenido de la landing pública. Portado desde el diseño en `landing`
 // (zip) — mismo texto, misma estructura. Único cambio real: el diseño
 // original no tenía ningún enlace funcional a /signup o /login (el CTA
@@ -18,6 +20,7 @@ export const navigationConfig: { links: NavLink[] } = {
     { label: "Plataforma", href: "#curriculum" },
     { label: "Privacidad", href: "#cinematic" },
     { label: "Recursos", href: "#alumni" },
+    { label: "Planes", href: "#planes" },
     { label: "Contacto", href: "#footer" },
   ],
 };
@@ -178,15 +181,20 @@ export const footerConfig: {
         { label: "Plataforma", href: "#curriculum" },
         { label: "Privacidad", href: "#cinematic" },
         { label: "Recursos", href: "#alumni" },
+        { label: "Planes y precios", href: "#planes" },
         { label: "Plan gratuito", href: "/signup" },
       ],
     },
     {
       title: "Legal",
       links: [
-        { label: "Habeas Data", href: "/privacidad" },
-        { label: "Consentimiento digital", href: "/terminos" },
-        { label: "Términos de servicio", href: "/terminos" },
+        // /terminos es la compuerta de aceptación (exige sesión), no un documento
+        // publicado: el pie enlaza a los documentos públicos (lib/legal-documents).
+        { label: "Política de tratamiento de datos personales", href: POLICY_PATH },
+        { label: "Aviso de privacidad", href: PRIVACY_NOTICE_PATH },
+        { label: "Términos y condiciones", href: TERMS_OF_USE_PATH },
+        // Enlace visible a la SIC: art. 50 de la Ley 1480 de 2011.
+        { label: "Superintendencia de Industria y Comercio", href: SIC_URL },
         { label: "Contacto", href: "mailto:hola@e-irene.co" },
       ],
     },

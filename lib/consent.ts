@@ -1,58 +1,52 @@
 import { createHash } from "node:crypto";
+import { CONSENTIMIENTO_PACIENTE, serializeDocument } from "@/lib/legal-documents";
+import { dayKey } from "@/lib/dates";
 
-/** Edad en años a partir de la fecha de nacimiento (ISO yyyy-mm-dd). */
-export function calculateAge(birthDate: string): number {
-  const birth = new Date(birthDate);
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const hasHadBirthdayThisYear =
-    now.getMonth() > birth.getMonth() ||
-    (now.getMonth() === birth.getMonth() && now.getDate() >= birth.getDate());
-  if (!hasHadBirthdayThisYear) age--;
+/**
+ * Edad en años a partir de la fecha de nacimiento (ISO yyyy-mm-dd), cumplida en
+ * el día de hoy de Bogotá.
+ *
+ * Se compara como fecha de calendario, sin pasar por Date: `new Date("2012-10-11")`
+ * es la medianoche UTC, que en Bogotá (UTC-5) cae el 10 a las 19:00, y con los
+ * getters locales el cumpleaños se contaba un día antes. Con el umbral de 14
+ * años, eso dejaba firmar solo a un paciente que aún tenía 13.
+ */
+export function calculateAge(birthDate: string, today: string = dayKey(new Date())): number {
+  const [by, bm, bd] = birthDate.slice(0, 10).split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
   return age;
 }
 
 /**
- * true/false si se conoce la fecha de nacimiento; null si no se conoce (el
- * profesional debe indicarlo manualmente en ese caso).
+ * Edad desde la cual el paciente autoriza por sí mismo (Resolución 309 de 2025,
+ * autonomía progresiva; cláusula octava del consentimiento). Por debajo, firma
+ * el representante legal y el profesional registra el asentimiento del menor.
  */
-export function isMinorByBirthDate(birthDate: string | null | undefined): boolean | null {
+export const SELF_CONSENT_MIN_AGE = 14;
+
+/**
+ * true si por la edad debe firmar el representante legal; false si el paciente
+ * puede firmar por sí mismo; null si no hay fecha de nacimiento. Aun con false,
+ * el profesional puede pedir consentimiento sustituto (p. ej. discapacidad).
+ */
+export function requiresRepresentativeByBirthDate(
+  birthDate: string | null | undefined,
+): boolean | null {
   if (!birthDate) return null;
-  return calculateAge(birthDate) < 18;
+  return calculateAge(birthDate) < SELF_CONSENT_MIN_AGE;
 }
 
 /** Versión del documento de consentimiento. Cambiar al modificar el texto. */
-export const CONSENT_VERSION = "2026-07-v2";
+export const CONSENT_VERSION = "2026-10-v1";
 
-/** Texto del consentimiento informado (salud mental, Colombia). */
-export const CONSENT_TEXT = `CONSENTIMIENTO INFORMADO PARA LA ATENCIÓN PSICOLÓGICA Y EL TRATAMIENTO DE DATOS
-
-1. Naturaleza del servicio. Declaro que recibo atención psicológica profesional de carácter
-voluntario y comprendo que sus resultados dependen de múltiples factores.
-
-2. Grabación y transcripción. Autorizo que mis sesiones —presenciales o por videollamada— sean
-transcritas en tiempo real para fines clínicos. El audio y el video NO se almacenan ni se
-graban en ningún momento: únicamente se conserva la transcripción en texto, cifrada. Cuando la
-sesión es por videollamada, la conexión se realiza a través de un proveedor externo especializado
-en videoconferencia, que únicamente transmite la llamada en vivo sin guardar ninguna copia.
-Puedo revocar esta autorización en cualquier momento.
-
-3. Análisis asistido por inteligencia artificial. Entiendo que la transcripción puede analizarse
-con herramientas de IA para apoyar al profesional (resumen, sentimiento, patrones). Dichas
-sugerencias NO constituyen un diagnóstico y son validadas por el profesional tratante.
-
-4. Tratamiento de datos personales (Ley 1581 de 2012). Autorizo el tratamiento de mis datos
-personales y sensibles de salud con fines de atención clínica, conforme a la política de
-privacidad. Mis datos se almacenan cifrados y aislados. Conozco mis derechos a conocer,
-actualizar, rectificar y suprimir mis datos.
-
-5. Historia clínica electrónica (Ley 2015 de 2020, Decreto 580 de 2024). Comprendo que la
-información se incorpora a una historia clínica electrónica con plena validez legal.
-
-6. Confidencialidad. La información está protegida por el secreto profesional, salvo las
-excepciones previstas por la ley.
-
-Manifiesto que he leído y comprendido este documento y que mis preguntas han sido resueltas.`;
+/**
+ * Texto del consentimiento informado (documento 05). Se deriva del mismo
+ * documento que se muestra en pantalla, para que el hash guardado con la firma
+ * corresponda exactamente a lo que el paciente leyó.
+ */
+export const CONSENT_TEXT = serializeDocument(CONSENTIMIENTO_PACIENTE);
 
 /** SHA-256 hex de un texto (prueba de integridad del documento firmado). */
 export function sha256(text: string): string {

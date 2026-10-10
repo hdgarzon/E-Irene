@@ -6,7 +6,8 @@ import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createConsent } from "@/lib/db/consents";
-import { CONSENT_VERSION, CONSENT_HASH } from "@/lib/consent";
+import { CONSENT_VERSION, CONSENT_HASH, requiresRepresentativeByBirthDate } from "@/lib/consent";
+import { getPatient } from "@/lib/db/patients";
 import { logAudit } from "@/lib/db/audit";
 import { logger } from "@/lib/logger";
 
@@ -24,6 +25,15 @@ export async function signConsentAction(
   const isMinor = formData.get("isMinor") === "on";
   const representativeDocument = String(formData.get("representativeDocument") ?? "").trim();
   const representativeRelationship = String(formData.get("representativeRelationship") ?? "").trim();
+  const minorAssentRaw = formData.get("minorAssent");
+
+  const patient = await getPatient(patientId);
+  if (!patient) return { error: "No se encontró el paciente." };
+  // La regla de edad se aplica aquí, no solo en el formulario: el campo oculto
+  // lo controla el navegador. Menor de 14 → firma el representante legal.
+  if (requiresRepresentativeByBirthDate(patient.birthDate) === true && !isMinor) {
+    return { error: "El paciente es menor de 14 años: debe firmar su representante legal." };
+  }
 
   const fieldErrors: Record<string, string> = {};
   if (signerName.length < 3) fieldErrors.signerName = "Ingresa el nombre completo de quien firma";
@@ -34,6 +44,9 @@ export async function signConsentAction(
   }
   if (isMinor && !representativeRelationship) {
     fieldErrors.representativeRelationship = "Indica el parentesco del representante legal";
+  }
+  if (isMinor && minorAssentRaw !== "yes" && minorAssentRaw !== "no") {
+    fieldErrors.minorAssent = "Indica si el menor manifestó su asentimiento";
   }
   if (Object.keys(fieldErrors).length) return { fieldErrors };
 
@@ -63,6 +76,7 @@ export async function signConsentAction(
       isMinor,
       representativeDocument: isMinor ? representativeDocument : null,
       representativeRelationship: isMinor ? representativeRelationship : null,
+      minorAssent: isMinor ? minorAssentRaw === "yes" : null,
     });
     await logAudit({
       clinicId: user.clinicId,

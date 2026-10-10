@@ -68,14 +68,9 @@ export async function signUpAndActivate(
 
   await expect(page).toHaveURL(/\/auth\/set-password/);
   await page.fill("#password", password);
-  await page.getByRole("button", { name: /guardar y entrar/i }).click();
-
-  // Sin aceptación vigente de la política, el layout de (app) redirige aquí
-  // (ver app/(app)/layout.tsx) — cubre por igual a quien se registra que a
-  // quien un admin da de alta directo, así que toda cuenta nueva pasa por acá.
-  await expect(page).toHaveURL(/\/terminos/);
-  await page.getByLabel(/he leído y acepto/i).check();
-  await page.getByRole("button", { name: /aceptar y continuar/i }).click();
+  // La aceptación (Pieza 2) va en este mismo paso: es donde se crea la cuenta.
+  await page.getByLabel(/declaro bajo la gravedad del juramento/i).check();
+  await page.getByRole("button", { name: /crear cuenta y entrar/i }).click();
 
   await expect(page).toHaveURL(/\/dashboard/);
 

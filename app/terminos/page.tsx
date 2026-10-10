@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Activity } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { hasAcceptedCurrentPolicy } from "@/lib/db/policy-acceptances";
-import { POLICY_TEXT, POLICY_VERSION } from "@/lib/legal";
+import { POLICY_VERSION } from "@/lib/legal";
 import { AcceptPolicyForm } from "@/components/accept-policy-form";
 
 /**
@@ -33,16 +33,11 @@ export default async function TerminosPage() {
             Antes de continuar
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Necesitamos tu aceptación del aviso de privacidad para poder darte acceso. Queda
-            registrada como prueba, con la fecha y la versión del documento.
+            Para darte acceso necesitamos tu declaración de habilitación profesional y tu
+            aceptación de los documentos que rigen el servicio. Si ya habías aceptado una versión
+            anterior, te la pedimos de nuevo porque los documentos cambiaron. Queda registrada como
+            prueba, con la fecha y la versión ({POLICY_VERSION}).
           </p>
-
-          <div className="mt-6 max-h-80 overflow-y-auto rounded-lg border border-gray-line bg-cloud p-4">
-            <p className="mb-3 text-xs text-muted-foreground">Versión {POLICY_VERSION}</p>
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-              {POLICY_TEXT}
-            </div>
-          </div>
 
           <div className="mt-6">
             <AcceptPolicyForm />

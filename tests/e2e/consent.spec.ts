@@ -68,12 +68,14 @@ test("consentimiento de menor de edad: requiere representante legal", async ({ p
   await expect(page).toHaveURL(/\/consent$/);
 
   // El aviso de menor de edad aparece automáticamente (sin checkbox manual)
-  await expect(page.getByText(/Paciente menor de edad/)).toBeVisible();
+  await expect(page.getByText(/Paciente menor de 14 años/)).toBeVisible();
   await expect(page.getByLabel(/Nombre del representante legal/)).toBeVisible();
 
   await page.fill('input[name="signerName"]', "Carolina Restrepo");
   await page.fill('input[name="representativeDocument"]', "CC1122334455");
   await page.selectOption('select[name="representativeRelationship"]', "Madre");
+  // Res. 309 de 2025: el profesional registra el asentimiento del menor de 14.
+  await page.check('input[name="minorAssent"][value="yes"]');
 
   const canvas = page.locator("canvas");
   await canvas.evaluate((el: HTMLCanvasElement) => {
@@ -94,4 +96,5 @@ test("consentimiento de menor de edad: requiere representante legal", async ({ p
   await expect(page).toHaveURL(/\/patients\/[^/]+$/);
   await expect(page.getByText(/Carolina Restrepo \(representante legal — Madre\)/)).toBeVisible();
   await expect(page.getByText(/Documento del representante: CC1122334455/)).toBeVisible();
+  await expect(page.getByText(/Asentimiento del menor: sí/)).toBeVisible();
 });

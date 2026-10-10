@@ -125,6 +125,7 @@ test("telehealth: cita de video → iniciar videollamada → finalizar → repor
   await page.getByRole("button", { name: /iniciar videollamada/i }).click();
   await expect(page).toHaveURL(/consultations\/.+\/live/);
   await expect(page.getByText(/videollamada en curso/i)).toBeVisible();
+  await page.getByRole("button", { name: /iniciar transcripción/i }).click();
 
   // Sin DEEPGRAM_API_KEY, el modo video transmite el mismo guion simulado que
   // el modo in-person (MOCK_SESSION, una línea cada 700ms). El texto aparece

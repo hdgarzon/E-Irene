@@ -142,6 +142,36 @@ export function limitLabel(n: number): string {
 }
 
 /**
+ * Lo que incluye un plan, en el orden en que se muestra. Lo usan la página de
+ * planes del sitio público (#planes, a la que remiten los Términos) y la de Plan
+ * y facturación: lo publicado y lo que ve el cliente dentro no pueden diferir.
+ */
+export function planFeatures(plan: Plan): string[] {
+  const l = PLANS[plan];
+  const extras = [
+    // En todos los planes: es el análisis que genera las alertas de riesgo.
+    "Análisis con IA",
+    l.whatsapp ? "Recordatorios por WhatsApp" : "Recordatorios por correo",
+    l.video === "included"
+      ? "Videollamadas incluidas"
+      : l.video === "addon"
+        ? "Videollamadas como adicional"
+        : "Sin videollamadas",
+  ];
+  // Un plan a convenir no tiene topes en la app: los fija su contrato.
+  if (l.priceInCents === null) {
+    return ["Profesionales y pacientes ilimitados", "Consultas y transcripción según contrato", ...extras];
+  }
+  return [
+    `${limitLabel(l.maxDoctors)} profesional${l.maxDoctors === 1 ? "" : "es"}`,
+    Number.isFinite(l.maxPatients) ? `${l.maxPatients} pacientes` : "Pacientes ilimitados",
+    `${limitLabel(l.consultationsPerMonth)} consultas por ciclo`,
+    `${limitLabel(l.transcriptionHours)} h de transcripción`,
+    ...extras,
+  ];
+}
+
+/**
  * Cuota de transcripción por ciclo, en segundos; null = ilimitado (enterprise).
  * Es el valor que se pasa a begin_transcription_session (ver migración 0039):
  * el límite de cumplimiento vive aquí, no en la base de datos (criterio de la

@@ -16,6 +16,8 @@ export interface Consent {
   isMinor: boolean;
   representativeDocument: string | null;
   representativeRelationship: string | null;
+  /** Asentimiento del menor evaluado por el profesional; null = no registrado. */
+  minorAssent: boolean | null;
 }
 
 interface ConsentRow {
@@ -31,6 +33,7 @@ interface ConsentRow {
   is_minor: boolean;
   representative_document_enc: string | null;
   representative_relationship: string | null;
+  minor_assent: boolean | null;
 }
 
 function mapRow(r: ConsentRow): Consent {
@@ -47,6 +50,7 @@ function mapRow(r: ConsentRow): Consent {
     isMinor: r.is_minor,
     representativeDocument: decryptNullable(r.representative_document_enc),
     representativeRelationship: r.representative_relationship,
+    minorAssent: r.minor_assent,
   };
 }
 
@@ -94,6 +98,7 @@ export async function createConsent(input: {
   isMinor: boolean;
   representativeDocument?: string | null;
   representativeRelationship?: string | null;
+  minorAssent?: boolean | null;
 }): Promise<Consent> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -110,6 +115,7 @@ export async function createConsent(input: {
       is_minor: input.isMinor,
       representative_document_enc: encryptNullable(input.representativeDocument ?? null),
       representative_relationship: input.representativeRelationship ?? null,
+      minor_assent: input.minorAssent ?? null,
     })
     .select("*")
     .single();
@@ -135,6 +141,7 @@ export async function createConsentViaLink(input: {
   isMinor: boolean;
   representativeDocument?: string | null;
   representativeRelationship?: string | null;
+  minorAssent?: boolean | null;
 }): Promise<Consent> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -152,6 +159,7 @@ export async function createConsentViaLink(input: {
       is_minor: input.isMinor,
       representative_document_enc: encryptNullable(input.representativeDocument ?? null),
       representative_relationship: input.representativeRelationship ?? null,
+      minor_assent: input.minorAssent ?? null,
     })
     .select("*")
     .single();

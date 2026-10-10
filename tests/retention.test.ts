@@ -12,7 +12,7 @@ const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const d = URL && SERVICE ? describe : describe.skip;
 
 /**
- * Purga de transcripciones (migración 0033).
+ * Purga de transcripciones (migración 0059: 7 días desde la sesión).
  *
  * Se ejecuta con service-role porque replica lo que hace el cron de las 03:00,
  * no una acción de usuario.
@@ -122,13 +122,9 @@ async function estado(f: Awaited<ReturnType<typeof fixture>>, id: string) {
 }
 
 d("purga de transcripciones", () => {
-  it("borra la transcripción 30 días después de validar el reporte", async () => {
-    const f = await fixture("Ret Validada");
-    const id = await consultaCon(f, {
-      startedAt: hace(40),
-      endedAt: hace(40),
-      validatedAt: hace(31),
-    });
+  it("borra la transcripción 7 días después de la sesión", async () => {
+    const f = await fixture("Ret Siete Dias");
+    const id = await consultaCon(f, { startedAt: hace(8), endedAt: hace(8) });
 
     expect((await estado(f, id)).chunks).toBe(2);
     await purgar(f);
@@ -139,42 +135,53 @@ d("purga de transcripciones", () => {
     expect(e.purgedAt).not.toBeNull();
   }, 30000);
 
-  it("NO borra si el reporte se validó hace menos de 30 días", async () => {
+  it("validar el reporte no alarga el plazo: se borra igual a los 7 días", async () => {
+    const f = await fixture("Ret Validada");
+    const id = await consultaCon(f, { startedAt: hace(8), endedAt: hace(8), validatedAt: hace(1) });
+
+    await purgar(f);
+
+    const e = await estado(f, id);
+    expect(e.transcript).toBeNull();
+    expect(e.chunks).toBe(0);
+  }, 30000);
+
+  it("NO borra antes de 7 días, se haya validado o no el reporte", async () => {
     const f = await fixture("Ret Reciente");
-    const id = await consultaCon(f, {
-      startedAt: hace(40),
-      endedAt: hace(40),
-      validatedAt: hace(10),
-    });
+    const validada = await consultaCon(f, { startedAt: hace(5), endedAt: hace(5), validatedAt: hace(4) });
+    const sinValidar = await consultaCon(f, { startedAt: hace(5), endedAt: hace(5) });
 
     await purgar(f);
 
-    const e = await estado(f, id);
-    expect(e.transcript).not.toBeNull();
-    expect(e.chunks).toBe(2);
-    expect(e.purgedAt).toBeNull();
+    for (const id of [validada, sinValidar]) {
+      const e = await estado(f, id);
+      expect(e.transcript).not.toBeNull();
+      expect(e.chunks).toBe(2);
+      expect(e.purgedAt).toBeNull();
+    }
   }, 30000);
 
-  it("aplica el techo de 90 días aunque el reporte nunca se valide", async () => {
-    const f = await fixture("Ret Techo");
-    const id = await consultaCon(f, { startedAt: hace(100), endedAt: hace(100) });
+  it("cuenta desde el cierre, no desde el inicio", async () => {
+    const f = await fixture("Ret Cierre");
+    // Empezó hace 8 días pero se cerró hace 6: aún no vence.
+    const id = await consultaCon(f, { startedAt: hace(8), endedAt: hace(6) });
 
     await purgar(f);
 
-    const e = await estado(f, id);
-    expect(e.transcript).toBeNull();
-    expect(e.chunks).toBe(0);
+    expect((await estado(f, id)).transcript).not.toBeNull();
   }, 30000);
 
-  it("purga consultas abandonadas, que nunca se cerraron (fuga de 0021)", async () => {
+  it("purga consultas abandonadas, que nunca se cerraron, a los 7 días de iniciadas", async () => {
     const f = await fixture("Ret Abandonada");
-    const id = await consultaCon(f, { startedAt: hace(100), endedAt: null });
+    const vieja = await consultaCon(f, { startedAt: hace(8), endedAt: null });
+    const reciente = await consultaCon(f, { startedAt: hace(3), endedAt: null });
 
     await purgar(f);
 
-    const e = await estado(f, id);
+    const e = await estado(f, vieja);
     expect(e.transcript).toBeNull();
     expect(e.chunks).toBe(0);
+    expect((await estado(f, reciente)).chunks).toBe(2);
   }, 30000);
 
   it("borra los fragmentos huérfanos aunque transcript_enc ya fuera null (fuga de 0021)", async () => {
