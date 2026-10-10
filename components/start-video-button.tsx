@@ -4,9 +4,12 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Video } from "lucide-react";
 import { startVideoConsultationAction } from "@/app/(app)/appointments/actions";
+import { useHydrated } from "@/lib/use-hydrated";
 
 export function StartVideoButton({ appointmentId }: { appointmentId: string }) {
   const [pending, startTransition] = useTransition();
+  // Antes de hidratar, el clic no inicia la videollamada.
+  const hydrated = useHydrated();
 
   function start() {
     startTransition(async () => {
@@ -19,7 +22,7 @@ export function StartVideoButton({ appointmentId }: { appointmentId: string }) {
     <button
       type="button"
       onClick={start}
-      disabled={pending}
+      disabled={pending || !hydrated}
       className="text-muted-foreground hover:text-brand disabled:opacity-50"
       aria-label="Iniciar videollamada"
       title="Iniciar videollamada"

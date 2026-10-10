@@ -12,6 +12,7 @@ import {
   appendChunkAction,
   endConsultationAction,
 } from "@/app/(app)/consultations/actions";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { VideoCall } from "@/components/video-call";
 
@@ -74,6 +75,8 @@ export function LiveConsultation({
   const [micTranscriptError, setMicTranscriptError] = useState(false);
   const [remoteTranscriptError, setRemoteTranscriptError] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Antes de hidratar, finalizar no cierra la consulta en el servidor.
+  const hydrated = useHydrated();
   const streamRef = useRef<MediaStream | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -550,7 +553,7 @@ export function LiveConsultation({
         <p className="text-xs text-muted-foreground">
           {done ? "🔒 El audio no se almacenó. Solo el texto, cifrado." : ""}
         </p>
-        <Button onClick={finalize} disabled={pending} variant="default">
+        <Button onClick={finalize} disabled={pending || !hydrated} variant="default">
           <Square className="size-4" />
           {pending ? "Generando reporte…" : "Finalizar consulta"}
         </Button>

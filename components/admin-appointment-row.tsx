@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/actions";
 import type { AdminAppointment } from "@/lib/db/platform-console";
 import { toInputDateTime } from "@/lib/dates";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -23,6 +24,9 @@ const STATUS = [
 export function AdminAppointmentRow({ appt }: { appt: AdminAppointment }) {
   const [pending, startTransition] = useTransition();
   const [when, setWhen] = useState(toInputDateTime(appt.scheduledAt));
+  // Antes de hidratar, reagendar, cambiar el estado o eliminar no llega al servidor.
+  const hydrated = useHydrated();
+  const locked = pending || !hydrated;
 
   return (
     <tr className="border-b border-gray-line last:border-0 align-top">
@@ -42,7 +46,7 @@ export function AdminAppointmentRow({ appt }: { appt: AdminAppointment }) {
             type="button"
             size="sm"
             variant="outline"
-            disabled={pending}
+            disabled={locked}
             onClick={() =>
               startTransition(() =>
                 rescheduleAppointmentAction(appt.id, new Date(when).toISOString()),
@@ -56,7 +60,7 @@ export function AdminAppointmentRow({ appt }: { appt: AdminAppointment }) {
       <td className="px-3 py-3">
         <select
           value={appt.status}
-          disabled={pending}
+          disabled={locked}
           onChange={(e) =>
             startTransition(() => setAppointmentStatusAdminAction(appt.id, e.target.value))
           }
@@ -74,7 +78,7 @@ export function AdminAppointmentRow({ appt }: { appt: AdminAppointment }) {
           type="button"
           size="sm"
           variant="destructive"
-          disabled={pending}
+          disabled={locked}
           onClick={() => {
             if (confirm("¿Eliminar esta cita?")) {
               startTransition(() => deleteAppointmentAdminAction(appt.id));
