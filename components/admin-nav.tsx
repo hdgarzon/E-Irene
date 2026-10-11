@@ -12,6 +12,7 @@ import {
   Settings2,
   SignalHigh,
   Inbox,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/admin/citas", label: "Citas", icon: CalendarDays },
   { href: "/admin/planes", label: "Planes", icon: CreditCard },
   { href: "/admin/pqr", label: "PQR", icon: Inbox },
+  { href: "/admin/avisos", label: "Avisos legales", icon: ScrollText },
   { href: "/admin/canales", label: "Canales", icon: SignalHigh },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings2 },
 ];

@@ -627,6 +627,39 @@ export type Database = {
           },
         ]
       }
+      legal_notices: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          effective_at: string
+          emailed_at: string | null
+          emailed_count: number | null
+          id: string
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          effective_at: string
+          emailed_at?: string | null
+          emailed_count?: number | null
+          id?: string
+          title: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          effective_at?: string
+          emailed_at?: string | null
+          emailed_count?: number | null
+          id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           appointment_id: string | null
