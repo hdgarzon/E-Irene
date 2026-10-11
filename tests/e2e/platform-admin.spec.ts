@@ -52,6 +52,13 @@ test("admin de plataforma: no accesible por defecto, solo tras concederlo direct
 test("admin de plataforma: suspender una clínica bloquea su acceso y es reversible", async ({
   browser,
 }) => {
+  // Dos signUpAndActivate completos — cada uno, solo, ya justifica los 60s de
+  // admin-console.spec.ts — más dos vueltas por la consola de admin y el
+  // retraso deliberado de hidratación de más abajo: contra el tope por
+  // defecto de 30s, el test medía entre 13s y 25s en una corrida sana y
+  // murió a mitad del cambio de plan el 15-sep-2026 sin que hubiera ningún
+  // cuelgue real, solo falta de margen.
+  test.setTimeout(90_000);
   const stamp = Date.now();
 
   // Clínica maestra (será platform admin), en su propio contexto.
@@ -107,16 +114,24 @@ test("admin de plataforma: suspender una clínica bloquea su acceso y es reversi
   // cambio en esa ventana no llegaba al servidor aunque el <select> mostrara el
   // plan nuevo, y así falló main el 15-sep-2026. La tarjeta deshabilita sus
   // controles hasta hidratar; con el retraso, esta prueba falla siempre si no.
+  //
+  // Para confirmar que el cambio llegó al servidor (y no solo al <select> del
+  // DOM) se espera el ciclo de "pending" de la tarjeta en vez de adivinar la
+  // URL/método del POST: AdminClinicCard deshabilita el <select> mientras la
+  // transición está en curso (locked = pending || !hydrated, ver
+  // components/admin-clinic-card.tsx) y lo rehabilita solo cuando el server
+  // action — con su revalidación — ya resolvió.
   await adminPage.route("**/_next/static/**", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     await route.continue();
   });
   await adminPage.goto(clinicasUrl(targetClinic), { waitUntil: "commit" });
-  const cardPlan = adminPage.locator("[data-testid=clinic-card]", { hasText: targetClinic });
-  await Promise.all([
-    adminPage.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin/clinicas")),
-    cardPlan.locator("select").selectOption("pro"),
-  ]);
+  const planSelect = adminPage
+    .locator("[data-testid=clinic-card]", { hasText: targetClinic })
+    .locator("select");
+  await planSelect.selectOption("pro");
+  await expect(planSelect).toBeDisabled();
+  await expect(planSelect).toBeEnabled({ timeout: 15_000 });
   await adminPage.unroute("**/_next/static/**");
   await adminPage.goto(clinicasUrl(targetClinic));
   await expect(
