@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { normalizeSearchText } from "@/lib/text-normalize";
+import { activeKeyMaterial } from "@/lib/crypto";
 
 /** Mínimo de caracteres para activar la búsqueda por trigramas (ver computeTrigrams). */
 export const MIN_QUERY_LENGTH = 3;
@@ -7,14 +8,13 @@ export const MIN_QUERY_LENGTH = 3;
 const HMAC_CONTEXT = "e-irene-search-index-v1";
 
 /**
- * Deriva la clave del HMAC de trigramas a partir de ENCRYPTION_KEY (misma
- * clave de cifrado, distinto propósito vía HMAC con contexto fijo — evita una
- * env var adicional sin reutilizar la clave AES directamente).
+ * Deriva la clave del HMAC de trigramas a partir de la clave de cifrado activa
+ * (misma clave, distinto propósito vía HMAC con contexto fijo — evita una env
+ * var adicional sin reutilizar la clave AES directamente). En una rotación es la
+ * nueva: los pacientes se reindexan con ella (lib/key-rotation.ts).
  */
 function deriveSearchKey(): Buffer {
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (!encryptionKey) throw new Error("ENCRYPTION_KEY no está configurada");
-  return createHmac("sha256", Buffer.from(encryptionKey, "base64")).update(HMAC_CONTEXT).digest();
+  return createHmac("sha256", Buffer.from(activeKeyMaterial(), "base64")).update(HMAC_CONTEXT).digest();
 }
 
 function hmacTrigram(trigram: string, key: Buffer): string {
