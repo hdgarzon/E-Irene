@@ -13,6 +13,7 @@ import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listTodayAppointments } from "@/lib/db/appointments";
 import { countPendingReports } from "@/lib/db/reports";
+import { countUnreviewedConsultations } from "@/lib/db/consultations";
 import {
   listOpenRiskAlerts,
   reconcilePendingPhq9RiskAlerts,
@@ -180,6 +181,33 @@ function Phq9CheckNotice({ check }: { check: Phq9ReconcileResult | null }) {
 }
 
 /**
+ * Consultas cuyo análisis falló: no fueron revisadas en busca de riesgo.
+ *
+ * Sin este aviso, un dashboard sin alertas se lee como "ninguna sesión tiene
+ * riesgo", cuando puede significar "ninguna sesión llegó a evaluarse" —
+ * p. ej. si el proveedor de IA está caído o sin cupo. Mismo criterio que
+ * Phq9CheckNotice: una cola incompleta se declara, no se presenta completa.
+ */
+function UnreviewedConsultationsNotice({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p
+      role="alert"
+      className="mt-4 flex items-start gap-2 rounded-xl border border-coral/40 bg-card p-3 text-xs text-destructive"
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <span>
+        {count === 1
+          ? "1 consulta no pudo analizarse y quedó sin revisar en busca de riesgo"
+          : `${count} consultas no pudieron analizarse y quedaron sin revisar en busca de riesgo`}
+        : que no aparezcan alertas de esas sesiones no significa que no haya riesgo. Ábrelas y
+        reintenta el análisis, o revisa la transcripción con tu criterio.
+      </span>
+    </p>
+  );
+}
+
+/**
  * Cola PHQ-9: primero concilia, para que todo PHQ-9 de riesgo tenga su alerta
  * en risk_alerts (ver reconcilePendingPhq9RiskAlerts), y recién después la
  * lee. Si la conciliación falla, la cola se lee igual y la página lo avisa.
@@ -214,6 +242,7 @@ export default async function DashboardPage({
     todayAppts,
     pendingReports,
     patientsNoConsent,
+    unreviewedConsultations,
     sessionAlerts,
     phq9,
     billing,
@@ -224,6 +253,17 @@ export default async function DashboardPage({
       listTodayAppointments(),
       isClinician ? countPendingReports() : Promise.resolve(0),
       countPatientsWithoutConsent(),
+      // Igual que el aviso de cobro: si esta consulta falla, no debe tumbar el
+      // dashboard. Se registra y la página sigue (sin el aviso).
+      isClinician
+        ? countUnreviewedConsultations().catch((error) => {
+            logger.error("dashboard.unreviewed_consultations_failed", {
+              clinicId: user?.clinicId,
+              error,
+            });
+            return 0;
+          })
+        : Promise.resolve(0),
       // Una consulta por fuente, cada una con su total: el encabezado suma
       // totales reales y cada lista dice cuántas deja fuera. Filtrar por fuente
       // en la base también evita que una alerta PHQ-9 (consultationId null)
@@ -285,7 +325,8 @@ export default async function DashboardPage({
       {billing && <BillingOverdueBanner plan={billing.plan} subscription={billing.subscription} />}
 
       {/* Alertas de riesgo — lo más importante arriba */}
-      {isClinician && (totalRiskAlerts > 0 || phq9CheckIncomplete) && (
+      {isClinician &&
+        (totalRiskAlerts > 0 || phq9CheckIncomplete || unreviewedConsultations > 0) && (
         <section className="rounded-2xl border border-coral/40 bg-coral/5 p-5">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <ShieldAlert className="size-5 text-destructive" />
@@ -355,6 +396,7 @@ export default async function DashboardPage({
             </>
           )}
           {phq9 && <Phq9CheckNotice check={phq9.check} />}
+          <UnreviewedConsultationsNotice count={unreviewedConsultations} />
         </section>
       )}
 

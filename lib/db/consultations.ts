@@ -233,3 +233,26 @@ export async function getTranscript(consultationId: string): Promise<string | nu
   if (error) throw error;
   return data?.transcript_enc ? decrypt(data.transcript_enc) : null;
 }
+
+/**
+ * Consultas cuyo análisis de IA falló y que por tanto NO fueron revisadas en
+ * busca de riesgo.
+ *
+ * La detección de riesgo (ideación suicida, autolesión, consumo, riesgo a
+ * terceros) sale del mismo análisis que genera el reporte: si ese análisis
+ * falla, la sesión queda sin evaluar. Un dashboard sin alertas se lee como
+ * "no hay riesgo", y esa lectura es falsa mientras haya sesiones sin
+ * analizar. Mismo criterio que la conciliación de PHQ-9
+ * (ver reconcilePendingPhq9RiskAlerts).
+ *
+ * RLS scoped: solo cuenta las consultas de la clínica del usuario.
+ */
+export async function countUnreviewedConsultations(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("consultations")
+    .select("*", { count: "exact", head: true })
+    .eq("analysis_status", "failed");
+  if (error) throw error;
+  return count ?? 0;
+}
