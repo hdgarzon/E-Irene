@@ -30,9 +30,9 @@ export default async function ConsultationPage({
     getReportByConsultation(id),
     getSoapNoteByConsultation(id),
   ]);
-  const transcriptPurged = Boolean(
-    consultation.endedAt && isMoreThanDaysAgo(consultation.endedAt, 30),
-  );
+  // Mismo plazo y punto de partida que purge_expired_transcripts() (migración
+  // 0059): 7 días desde el cierre, o desde el inicio si nunca se cerró.
+  const transcriptPurged = isMoreThanDaysAgo(consultation.endedAt ?? consultation.startedAt, 7);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
