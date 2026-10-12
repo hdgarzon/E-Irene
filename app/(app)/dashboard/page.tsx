@@ -2,9 +2,10 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CalendarDays,
-  CheckCircle2,
+  ChevronRight,
   ClipboardCheck,
   FileWarning,
+  Lock,
   Plus,
   ShieldAlert,
   Users,
@@ -29,8 +30,10 @@ import { logger } from "@/lib/logger";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
 import { formatTime, formatFullDate } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { VerificationBanner } from "@/components/verification-banner";
+import { PageHeader } from "@/components/ui/page-header";
 import { BillingOverdueBanner } from "@/components/billing-overdue-banner";
 import { cn } from "@/lib/utils";
 import { acknowledgeRiskAlertAction } from "./actions";
@@ -41,6 +44,26 @@ const APPT_STATUS_LABEL: Record<string, string> = {
   completed: "Completada",
   no_show: "No asistió",
 };
+
+const APPT_STATUS_TONE: Record<string, StatusTone> = {
+  scheduled: "neutral",
+  confirmed: "info",
+  completed: "success",
+  no_show: "warning",
+};
+
+/** Tratamientos que se escriben antes del nombre ("Dra. Ana Gómez"). */
+const HONORIFIC = /^(dra?|lic|psic?|ps|mg|mag)\.?$/i;
+
+/**
+ * Cómo saludar: "Dra. Ana" en vez de "Dra." a secas. Si el nombre empieza con
+ * un tratamiento, se conserva junto al nombre de pila.
+ */
+function greetingName(fullName: string): string {
+  const parts = fullName.split(" ").filter(Boolean);
+  if (parts.length > 1 && HONORIFIC.test(parts[0])) return `${parts[0]} ${parts[1]}`;
+  return parts[0] ?? "";
+}
 
 /** Alertas por fuente en la vista normal del dashboard. */
 const RISK_ALERT_PREVIEW = 5;
@@ -62,7 +85,7 @@ function AcknowledgeRiskAlertButton({ alertId }: { alertId: string }) {
     <form action={acknowledgeRiskAlertAction.bind(null, alertId)}>
       <button
         type="submit"
-        className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-success"
+        className="h-8 shrink-0 rounded-lg border border-gray-line bg-card px-3 text-xs font-medium text-navy transition-colors hover:border-success-border hover:bg-success-soft hover:text-success"
       >
         Acusar recibo
       </button>
@@ -72,28 +95,19 @@ function AcknowledgeRiskAlertButton({ alertId }: { alertId: string }) {
 
 function SessionRiskAlertItem({ alert, href }: { alert: RiskAlert; href: string }) {
   return (
-    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm">
-      <Link href={href} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <span className="font-medium text-navy">{alert.patientName}</span>
+    <li className="flex flex-col items-start gap-3 rounded-xl border border-danger-border bg-card p-3 transition-shadow hover:shadow-sm sm:flex-row sm:items-center">
+      <Link href={href} className="flex w-full min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md">
+        <span className="font-semibold text-navy">{alert.patientName}</span>
         <span className="flex flex-wrap gap-1.5">
           {alert.categories ? (
             alert.categories.map((c) => (
-              <Badge
-                key={c.key}
-                variant="secondary"
-                className={cn(
-                  "text-[11px]",
-                  c.level === "alto" ? "bg-coral/15 text-destructive" : "bg-amber-100 text-amber-800",
-                )}
-              >
+              <StatusBadge key={c.key} tone={c.level === "alto" ? "danger" : "warning"} dot>
                 {RISK_CATEGORY_LABEL[c.key]} · {c.level}
-              </Badge>
+              </StatusBadge>
             ))
           ) : (
             // No descifró (ver listOpenRiskAlerts): la alerta sigue abierta y se muestra igual.
-            <Badge variant="secondary" className="text-[11px]">
-              Detalle no disponible
-            </Badge>
+            <StatusBadge>Detalle no disponible</StatusBadge>
           )}
         </span>
       </Link>
@@ -106,12 +120,12 @@ function Phq9RiskAlertItem({ alert }: { alert: RiskAlert }) {
   // Esta fuente no tiene consulta (consultationId es null): se enlaza a la
   // ficha del paciente, donde está el historial de escalas.
   return (
-    <li className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-line bg-card p-3 transition-shadow hover:shadow-sm">
-      <Link href={`/patients/${alert.patientId}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <span className="font-medium text-navy">{alert.patientName}</span>
-        <Badge variant="secondary" className="bg-coral/15 text-[11px] text-destructive">
+    <li className="flex flex-col items-start gap-3 rounded-xl border border-danger-border bg-card p-3 transition-shadow hover:shadow-sm sm:flex-row sm:items-center">
+      <Link href={`/patients/${alert.patientId}`} className="flex w-full min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md">
+        <span className="font-semibold text-navy">{alert.patientName}</span>
+        <StatusBadge tone="danger" dot>
           Autolesión · PHQ-9
-        </Badge>
+        </StatusBadge>
       </Link>
       <AcknowledgeRiskAlertButton alertId={alert.id} />
     </li>
@@ -138,7 +152,7 @@ function HiddenRiskAlerts({
   const noun = hidden === 1 ? "alerta" : "alertas";
   if (showAll) {
     return (
-      <p className="mt-2 text-xs font-medium text-destructive">
+      <p className="mt-2 text-sm font-medium text-destructive">
         Se muestran las {queue.alerts.length} más recientes: hay {hidden} {noun} {label} más{" "}
         {hidden === 1 ? "antigua" : "antiguas"} sin mostrar.
       </p>
@@ -147,7 +161,7 @@ function HiddenRiskAlerts({
   return (
     <Link
       href={`/dashboard?alerts=all#${anchor}`}
-      className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
+      className="mt-2 inline-block rounded-md text-sm font-medium text-brand hover:underline"
     >
       Ver {hidden} {noun} más {label}
     </Link>
@@ -169,9 +183,9 @@ function Phq9CheckNotice({ check }: { check: Phq9ReconcileResult | null }) {
   return (
     <p
       role="alert"
-      className="mt-4 flex items-start gap-2 rounded-xl border border-coral/40 bg-card p-3 text-xs text-destructive"
+      className="mt-4 flex items-start gap-2 rounded-xl border border-danger-border bg-card p-3 text-sm text-destructive"
     >
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <span>
         {what}: puede haber alertas que todavía no aparecen aquí. Recarga la página; si el aviso
         sigue, contacta a soporte.
@@ -193,9 +207,9 @@ function UnreviewedConsultationsNotice({ count }: { count: number }) {
   return (
     <p
       role="alert"
-      className="mt-4 flex items-start gap-2 rounded-xl border border-coral/40 bg-card p-3 text-xs text-destructive"
+      className="mt-4 flex items-start gap-2 rounded-xl border border-danger-border bg-card p-3 text-sm text-destructive"
     >
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <span>
         {count === 1
           ? "1 consulta no pudo analizarse y quedó sin revisar en busca de riesgo"
@@ -294,20 +308,34 @@ export default async function DashboardPage({
   const phq9CheckIncomplete = phq9 !== null && (phq9.check === null || phq9.check.failed > 0);
   const totalRiskAlerts = sessionAlerts.total + phq9Alerts.total;
 
-  const firstName = user?.fullName.split(" ")[0] ?? "";
+  const name = greetingName(user?.fullName ?? "");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Hola, {firstName} 👋</h1>
-        {/* first-letter y no capitalize: formatFullDate devuelve "jueves, 20 de
-            agosto de 2026" —en español los días y meses van en minúscula— y
-            `capitalize` capitaliza CADA palabra, produciendo "Jueves, 20 De
-            Agosto De 2026". Solo hace falta la inicial de la frase. */}
-        <p className="text-sm text-muted-foreground first-letter:uppercase">
-          {formatFullDate(new Date().toISOString())}
-        </p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-8">
+      <PageHeader
+        title={<>Hola, {name}</>}
+        description={
+          // first-letter y no capitalize: formatFullDate devuelve "jueves, 20 de
+          // agosto de 2026" —en español los días y meses van en minúscula— y
+          // `capitalize` capitaliza CADA palabra. Solo hace falta la inicial.
+          <p className="first-letter:uppercase">
+            {formatFullDate(new Date().toISOString())}
+            {user?.clinicName && <span className="text-muted-foreground"> · {user.clinicName}</span>}
+          </p>
+        }
+        actions={
+          <>
+            <Link href="/appointments/new" className={cn(buttonVariants({ variant: "outline" }))}>
+              <CalendarDays className="size-4" />
+              Agendar cita
+            </Link>
+            <Link href="/patients/new" className={cn(buttonVariants())}>
+              <Plus className="size-4" />
+              Nuevo paciente
+            </Link>
+          </>
+        }
+      />
 
       {/* Verificación pendiente: sin ella las rutas clínicas redirigen sin más
           contexto, así que el aviso va antes que nada. */}
@@ -327,208 +355,232 @@ export default async function DashboardPage({
       {/* Alertas de riesgo — lo más importante arriba */}
       {isClinician &&
         (totalRiskAlerts > 0 || phq9CheckIncomplete || unreviewedConsultations > 0) && (
-        <section className="rounded-2xl border border-coral/40 bg-coral/5 p-5">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <ShieldAlert className="size-5 text-destructive" />
-            <h2 className="font-heading font-semibold text-navy">
-              Alertas de riesgo ({totalRiskAlerts})
-            </h2>
+        <section
+          aria-labelledby="risk-alerts-heading"
+          className="overflow-hidden rounded-2xl border border-danger-border bg-danger-soft"
+        >
+          <div className="flex flex-wrap items-center gap-3 border-b border-danger-border px-5 py-4">
+            <span className="grid size-9 place-items-center rounded-lg bg-card text-destructive">
+              <ShieldAlert className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 id="risk-alerts-heading" className="font-semibold text-destructive">
+                Alertas de riesgo ({totalRiskAlerts})
+              </h2>
+              <p className="text-xs text-foreground/80">Revisa cada paciente y acusa recibo cuando lo hayas atendido.</p>
+            </div>
             {showAllAlerts && (
-              <Link href="/dashboard" className="ml-auto text-xs text-brand hover:underline">
+              <Link href="/dashboard" className="rounded-md text-sm font-medium text-brand hover:underline">
                 Ver solo las más recientes
               </Link>
             )}
           </div>
-          {sessionAlerts.total > 0 && (
-            <>
-              <h3
-                id="risk-alerts-ia-heading"
-                className="mb-1.5 scroll-mt-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                De consultas (IA)
-              </h3>
-              <ul className="space-y-2" aria-labelledby="risk-alerts-ia-heading">
-                {sessionAlerts.alerts.map((a) => (
-                  <SessionRiskAlertItem
-                    key={a.id}
-                    alert={a}
-                    href={`/consultations/${a.consultationId}`}
-                  />
-                ))}
-              </ul>
-              <HiddenRiskAlerts
-                queue={sessionAlerts}
-                showAll={showAllAlerts}
-                anchor="risk-alerts-ia-heading"
-                label="de consultas"
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                Detección temprana por IA — apoyo a tu criterio, nunca un diagnóstico.
-              </p>
-            </>
-          )}
-          {phq9Alerts.total > 0 && (
-            <>
-              <h3
-                id="risk-alerts-phq9-heading"
-                className={cn(
-                  "mb-1.5 scroll-mt-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                  sessionAlerts.total > 0 && "mt-4",
-                )}
-              >
-                De cuestionarios (PHQ-9)
-              </h3>
-              <ul className="space-y-2" aria-labelledby="risk-alerts-phq9-heading">
-                {phq9Alerts.alerts.map((a) => (
-                  <Phq9RiskAlertItem key={a.id} alert={a} />
-                ))}
-              </ul>
-              <HiddenRiskAlerts
-                queue={phq9Alerts}
-                showAll={showAllAlerts}
-                anchor="risk-alerts-phq9-heading"
-                label="de cuestionarios"
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                Autolesión reportada directamente por el paciente en el PHQ-9 — no es una
-                detección por IA.
-              </p>
-            </>
-          )}
-          {phq9 && <Phq9CheckNotice check={phq9.check} />}
-          <UnreviewedConsultationsNotice count={unreviewedConsultations} />
+          <div className="space-y-5 p-5">
+            {sessionAlerts.total > 0 && (
+              <div>
+                <h3
+                  id="risk-alerts-ia-heading"
+                  className="mb-2 scroll-mt-24 text-xs font-semibold tracking-wide text-foreground/80 uppercase"
+                >
+                  De consultas (IA)
+                </h3>
+                <ul className="space-y-2" aria-labelledby="risk-alerts-ia-heading">
+                  {sessionAlerts.alerts.map((a) => (
+                    <SessionRiskAlertItem
+                      key={a.id}
+                      alert={a}
+                      href={`/consultations/${a.consultationId}`}
+                    />
+                  ))}
+                </ul>
+                <HiddenRiskAlerts
+                  queue={sessionAlerts}
+                  showAll={showAllAlerts}
+                  anchor="risk-alerts-ia-heading"
+                  label="de consultas"
+                />
+                <p className="mt-3 text-xs text-foreground/80">
+                  Detección temprana por IA — apoyo a tu criterio, nunca un diagnóstico.
+                </p>
+              </div>
+            )}
+            {phq9Alerts.total > 0 && (
+              <div>
+                <h3
+                  id="risk-alerts-phq9-heading"
+                  className="mb-2 scroll-mt-24 text-xs font-semibold tracking-wide text-foreground/80 uppercase"
+                >
+                  De cuestionarios (PHQ-9)
+                </h3>
+                <ul className="space-y-2" aria-labelledby="risk-alerts-phq9-heading">
+                  {phq9Alerts.alerts.map((a) => (
+                    <Phq9RiskAlertItem key={a.id} alert={a} />
+                  ))}
+                </ul>
+                <HiddenRiskAlerts
+                  queue={phq9Alerts}
+                  showAll={showAllAlerts}
+                  anchor="risk-alerts-phq9-heading"
+                  label="de cuestionarios"
+                />
+                <p className="mt-3 text-xs text-foreground/80">
+                  Autolesión reportada directamente por el paciente en el PHQ-9 — no es una
+                  detección por IA.
+                </p>
+              </div>
+            )}
+            {phq9 && <Phq9CheckNotice check={phq9.check} />}
+            <UnreviewedConsultationsNotice count={unreviewedConsultations} />
+          </div>
         </section>
       )}
 
-      {/* Pendientes */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatLink
-          href="/patients"
-          icon={Users}
-          label="Pacientes"
-          value={patients}
-          accent="text-brand"
-        />
-        <StatLink
-          href="/appointments"
-          icon={CalendarDays}
-          label="Citas hoy"
-          value={todayAppts.length}
-          accent="text-brand"
-        />
-        <StatLink
-          href="/patients"
-          icon={FileWarning}
-          label="Sin consentimiento"
-          value={patientsNoConsent}
-          accent={patientsNoConsent > 0 ? "text-destructive" : "text-success"}
-          muted={patientsNoConsent === 0}
-        />
+      {/* Pendientes primero, contexto después */}
+      <section aria-label="Resumen" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {isClinician && (
           <StatLink
             href="/reports"
             icon={ClipboardCheck}
             label="Reportes por validar"
             value={pendingReports}
-            accent={pendingReports > 0 ? "text-destructive" : "text-success"}
-            muted={pendingReports === 0}
+            pending
+            doneLabel="Todos validados"
+            pendingLabel="Esperan tu firma"
           />
         )}
-      </div>
-
-      {/* Agenda de hoy */}
-      <section className="rounded-2xl border border-gray-line bg-card p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-navy">Agenda de hoy</h2>
-          <Link href="/appointments" className="text-sm text-brand hover:underline">
-            Ver toda la agenda
-          </Link>
-        </div>
-        {todayAppts.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <CalendarDays className="size-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">No tienes citas para hoy.</p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-line">
-            {todayAppts.map((a) => (
-              <li key={a.id} className="flex items-center gap-4 py-3">
-                <span className="w-14 shrink-0 font-heading font-semibold tabular-nums text-navy">
-                  {formatTime(a.scheduledAt)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-navy">{a.patientName}</p>
-                  <p className="truncate text-xs text-muted-foreground">{a.doctorName}</p>
-                </div>
-                <Badge variant="secondary" className="shrink-0 text-[11px]">
-                  {APPT_STATUS_LABEL[a.status] ?? a.status}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
+        <StatLink
+          href="/patients"
+          icon={FileWarning}
+          label="Sin consentimiento"
+          value={patientsNoConsent}
+          pending
+          doneLabel="Todos firmados"
+          pendingLabel="No pueden iniciar consulta"
+        />
+        <StatLink
+          href="/appointments"
+          icon={CalendarDays}
+          label="Citas hoy"
+          value={todayAppts.length}
+        />
+        <StatLink href="/patients" icon={Users} label="Pacientes" value={patients} />
       </section>
 
-      {/* Acciones rápidas */}
-      <div className="rounded-2xl border border-gray-line bg-card p-6">
-        <h2 className="font-heading font-semibold text-navy">Acciones rápidas</h2>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link href="/patients/new" className={cn(buttonVariants())}>
-            <Plus className="size-4" />
-            Nuevo paciente
-          </Link>
-          <Link href="/appointments/new" className={cn(buttonVariants({ variant: "outline" }))}>
-            <CalendarDays className="size-4" />
-            Agendar cita
-          </Link>
-        </div>
-      </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Agenda de hoy */}
+        <section className="rounded-2xl border border-gray-line bg-card lg:col-span-2">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-line px-5 py-4 md:px-6">
+            <h2 className="font-semibold text-navy">Agenda de hoy</h2>
+            <Link href="/appointments" className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-brand hover:underline">
+              Ver toda la agenda
+              <ChevronRight className="size-4" />
+            </Link>
+          </div>
+          {todayAppts.length === 0 ? (
+            <EmptyState
+              compact
+              icon={CalendarDays}
+              title="No tienes citas para hoy."
+              description="Las citas que agendes para hoy aparecerán aquí en orden."
+              action={
+                <Link href="/appointments/new" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                  <Plus className="size-4" />
+                  Agendar cita
+                </Link>
+              }
+            />
+          ) : (
+            <ul className="divide-y divide-gray-line">
+              {todayAppts.map((a) => (
+                <li key={a.id} className="flex items-center gap-4 px-5 py-3.5 md:px-6">
+                  <span className="w-14 shrink-0 text-base font-semibold tabular-nums text-navy">
+                    {formatTime(a.scheduledAt)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-navy">{a.patientName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{a.doctorName}</p>
+                  </div>
+                  <StatusBadge tone={APPT_STATUS_TONE[a.status] ?? "neutral"}>
+                    {APPT_STATUS_LABEL[a.status] ?? a.status}
+                  </StatusBadge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      {/* Nota de seguridad, discreta al fondo */}
-      <div className="flex items-start gap-3 rounded-2xl border border-mint/30 bg-soft-mint/20 p-4">
-        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-        <p className="text-xs text-muted-foreground">
-          {user?.clinicName} · Datos cifrados (AES-256), aislados por clínica. El audio de las
-          sesiones no se graba ni se guarda.
-        </p>
+        {/* Garantías de seguridad: discretas, pero visibles en la primera pantalla */}
+        <section className="h-fit rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+          <h2 className="flex items-center gap-2 font-semibold text-navy">
+            <Lock className="size-4 text-success" />
+            Protección de datos
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">{user?.clinicName}</p>
+          <ul className="mt-4 space-y-3 text-sm text-foreground/85">
+            <li className="flex gap-2.5">
+              <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-success" />
+              Datos cifrados (AES-256), aislados por clínica.
+            </li>
+            <li className="flex gap-2.5">
+              <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-success" />
+              El audio de las sesiones no se graba ni se guarda.
+            </li>
+          </ul>
+        </section>
       </div>
     </div>
   );
 }
 
+/**
+ * Tarjeta de resumen. Las `pending` son tareas: con valor > 0 se marcan en
+ * ámbar y dicen qué falta; en 0 confirman que están al día. Las demás son
+ * contexto y se muestran neutras.
+ */
 function StatLink({
   href,
   icon: Icon,
   label,
   value,
-  accent,
-  muted = false,
+  pending = false,
+  pendingLabel,
+  doneLabel,
 }: {
   href: string;
   icon: typeof Users;
   label: string;
   value: number;
-  accent: string;
-  muted?: boolean;
+  pending?: boolean;
+  pendingLabel?: string;
+  doneLabel?: string;
 }) {
+  const needsAttention = pending && value > 0;
+  const done = pending && value === 0;
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-gray-line bg-card p-5 transition-shadow hover:shadow-md"
+      className={cn(
+        "group flex flex-col rounded-2xl border bg-card p-4 transition-shadow hover:shadow-md sm:p-5",
+        needsAttention ? "border-warning-border" : "border-gray-line",
+      )}
     >
-      <div className="flex items-center justify-between">
-        <span className="grid size-10 place-items-center rounded-xl bg-cloud">
-          {muted ? (
-            <Icon className="size-5 text-success" />
-          ) : value > 0 && accent.includes("destructive") ? (
-            <AlertTriangle className={cn("size-5", accent)} />
-          ) : (
-            <Icon className={cn("size-5", accent)} />
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm leading-snug font-medium text-muted-foreground">{label}</span>
+        <span
+          className={cn(
+            "grid size-9 shrink-0 place-items-center rounded-lg",
+            needsAttention ? "bg-warning-soft text-warning" : done ? "bg-success-soft text-success" : "bg-info-soft text-brand",
           )}
+        >
+          {needsAttention ? <AlertTriangle className="size-[18px]" /> : <Icon className="size-[18px]" />}
         </span>
-        <span className="font-heading text-3xl font-bold text-navy tabular-nums">{value}</span>
       </div>
-      <p className="mt-3 text-sm font-medium text-muted-foreground">{label}</p>
+      <span className="mt-3 text-3xl font-semibold tracking-tight tabular-nums text-navy">{value}</span>
+      {pending && (
+        <span className={cn("mt-1 text-xs font-medium", needsAttention ? "text-warning" : "text-success")}>
+          {needsAttention ? pendingLabel : doneLabel}
+        </span>
+      )}
     </Link>
   );
 }
