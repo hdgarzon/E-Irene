@@ -1,4 +1,4 @@
-import { encrypt, decrypt, encryptNullable, decryptNullable } from "@/lib/crypto";
+import { activeKeyId, encrypt, decrypt, encryptNullable, decryptNullable } from "@/lib/crypto";
 import { computeTrigrams, patientSearchText } from "@/lib/search-index";
 import { logger } from "@/lib/logger";
 
@@ -55,6 +55,8 @@ export function encryptPatient(input: PatientInput) {
     emergency_contact_relationship_enc: encryptNullable(input.emergencyContactRelationship),
     history_enc: encryptNullable(input.history),
     search_trigrams: computeTrigrams(patientSearchText(input)),
+    // Con qué clave se calculó el índice: la rotación reindexa los que no sean la activa.
+    search_index_key: activeKeyId(),
   };
 }
 

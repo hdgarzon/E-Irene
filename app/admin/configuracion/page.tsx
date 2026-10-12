@@ -1,4 +1,5 @@
-import { ExternalLink, KeyRound, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, KeyRound, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const VERCEL_ENV_URL =
@@ -33,7 +34,10 @@ const GROUPS: { title: string; vars: EnvVar[] }[] = [
   {
     title: "Infraestructura (no cambiar sin cuidado)",
     vars: [
-      { name: "ENCRYPTION_KEY", desc: "Clave AES de la PII. Rotarla invalida los datos existentes.", secret: true },
+      { name: "ENCRYPTION_KEY", desc: "Clave AES activa de la PII. Para cambiarla, sigue la rotación (no basta con reemplazarla).", secret: true },
+      { name: "ENCRYPTION_KEY_ID", desc: "Id de la clave activa (por defecto 1). Cambia en cada rotación.", secret: false },
+      { name: "ENCRYPTION_KEY_NEXT", desc: "Clave nueva, solo durante una rotación: pasa a ser la activa.", secret: true },
+      { name: "ENCRYPTION_KEY_NEXT_ID", desc: "Id de la clave nueva durante una rotación.", secret: false },
       { name: "SUPABASE_SERVICE_ROLE_KEY", desc: "Clave service-role de Supabase.", secret: true },
       { name: "NEXT_PUBLIC_SUPABASE_URL", desc: "URL del proyecto Supabase.", secret: false },
     ],
@@ -66,7 +70,14 @@ export default function AdminConfiguracionPage() {
       >
         <ExternalLink className="size-4" />
         Editar variables en Vercel
-      </a>
+      </a>{" "}
+      <Link
+        href="/admin/rotacion-clave"
+        className="ml-2 inline-flex items-center gap-2 rounded-lg border border-gray-line px-4 py-2 text-sm font-medium text-navy hover:bg-cloud"
+      >
+        <RefreshCw className="size-4" />
+        Rotación de la clave de cifrado
+      </Link>
 
       {GROUPS.map((group) => (
         <section key={group.title} className="space-y-3">

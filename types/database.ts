@@ -909,6 +909,7 @@ export type Database = {
           id: string
           notes_enc: string | null
           phone_enc: string | null
+          search_index_key: string
           search_trigrams: string[]
           updated_at: string
         }
@@ -928,6 +929,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_index_key?: string
           search_trigrams?: string[]
           updated_at?: string
         }
@@ -947,6 +949,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_index_key?: string
           search_trigrams?: string[]
           updated_at?: string
         }
@@ -1896,6 +1899,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      encryption_key_status: {
+        Args: { p_active_id: string }
+        Returns: { column_name: string; pending: number; table_name: string }[]
+      }
+      reencrypt_values: { Args: { p_column: string; p_items: Json; p_table: string }; Returns: number }
+      reindex_patient_search: { Args: { p_items: Json; p_key: string }; Returns: number }
       revoke_patient_consent: { Args: { p_note?: string; p_patient: string }; Returns: number }
       account_identity_retention: { Args: never; Returns: unknown }
       purge_deleted_account_identity: { Args: { p_clinic: string }; Returns: string[] }
