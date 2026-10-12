@@ -140,7 +140,7 @@ export default async function PatientDetailPage({
       {(patient.emergencyContactName || patient.emergencyContactPhone) && (
         <div className="rounded-2xl border border-gray-line bg-card p-6">
           <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
-            <Siren className="size-4 text-coral" />
+            <Siren className="size-4 text-destructive" />
             Contacto de emergencia
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">

@@ -62,7 +62,7 @@ function AcknowledgeRiskAlertButton({ alertId }: { alertId: string }) {
     <form action={acknowledgeRiskAlertAction.bind(null, alertId)}>
       <button
         type="submit"
-        className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-mint"
+        className="shrink-0 rounded-lg border border-gray-line px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-mint hover:text-success"
       >
         Acusar recibo
       </button>
@@ -421,7 +421,7 @@ export default async function DashboardPage({
           icon={FileWarning}
           label="Sin consentimiento"
           value={patientsNoConsent}
-          accent={patientsNoConsent > 0 ? "text-destructive" : "text-mint"}
+          accent={patientsNoConsent > 0 ? "text-destructive" : "text-success"}
           muted={patientsNoConsent === 0}
         />
         {isClinician && (
@@ -430,7 +430,7 @@ export default async function DashboardPage({
             icon={ClipboardCheck}
             label="Reportes por validar"
             value={pendingReports}
-            accent={pendingReports > 0 ? "text-destructive" : "text-mint"}
+            accent={pendingReports > 0 ? "text-destructive" : "text-success"}
             muted={pendingReports === 0}
           />
         )}
@@ -486,7 +486,7 @@ export default async function DashboardPage({
 
       {/* Nota de seguridad, discreta al fondo */}
       <div className="flex items-start gap-3 rounded-2xl border border-mint/30 bg-soft-mint/20 p-4">
-        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
         <p className="text-xs text-muted-foreground">
           {user?.clinicName} · Datos cifrados (AES-256), aislados por clínica. El audio de las
           sesiones no se graba ni se guarda.
@@ -519,7 +519,7 @@ function StatLink({
       <div className="flex items-center justify-between">
         <span className="grid size-10 place-items-center rounded-xl bg-cloud">
           {muted ? (
-            <Icon className="size-5 text-mint" />
+            <Icon className="size-5 text-success" />
           ) : value > 0 && accent.includes("destructive") ? (
             <AlertTriangle className={cn("size-5", accent)} />
           ) : (

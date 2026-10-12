@@ -151,7 +151,7 @@ export function ReportView({
 
       <Section title="Validación del profesional">
         {report.validatedAt ? (
-          <p className="flex items-center gap-2 text-sm text-mint">
+          <p className="flex items-center gap-2 text-sm text-success">
             <BadgeCheck className="size-4" />
             Reporte validado el {new Date(report.validatedAt).toLocaleString("es-CO")}
           </p>

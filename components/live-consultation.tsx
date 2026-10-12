@@ -382,7 +382,7 @@ export function LiveConsultation({
           <p className="font-heading font-semibold text-navy">{patientName}</p>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             {done ? (
-              <span className="text-mint">Transcripción finalizada</span>
+              <span className="text-success">Transcripción finalizada</span>
             ) : transcription === "stopped" ? (
               <span>Transcripción detenida{transcriptionMode === "video" ? " · videollamada en curso" : ""}</span>
             ) : transcription === "idle" && !quotaExceeded ? (
@@ -415,7 +415,7 @@ export function LiveConsultation({
       {!done && !quotaExceeded && transcription === "idle" && (
         <div className="space-y-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-sm text-navy/80">
           <div className="flex items-start gap-2.5">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               <strong className="font-medium text-navy">Esta sesión será transcrita.</strong> El
               audio no se graba ni se guarda: se convierte a texto en vivo y solo se conserva el
@@ -433,7 +433,7 @@ export function LiveConsultation({
       {!done && running && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
           <p className="flex items-start gap-2.5">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
             <span>
               <strong className="font-medium text-navy">Esta sesión se está transcribiendo.</strong>{" "}
               El paciente puede pedir que se detenga en cualquier momento.

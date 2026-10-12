@@ -40,7 +40,7 @@ export function ReportsList({ reports }: { reports: ReportListItem[] }) {
                 </div>
 
                 {r.validated ? (
-                  <span className="flex items-center gap-1 text-xs text-mint">
+                  <span className="flex items-center gap-1 text-xs text-success">
                     <ShieldCheck className="size-3.5" />
                     Validado
                   </span>
