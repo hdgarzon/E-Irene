@@ -45,19 +45,24 @@ export default async function NewAssessmentPage({
         </p>
       </div>
 
-      <form action={action} className="space-y-6">
+      <form action={action} className="space-y-4">
         {questions.map((q, i) => (
-          <fieldset key={i} className="rounded-2xl border border-gray-line bg-card p-5">
-            <legend className="mb-3 text-sm font-medium text-navy">
-              {i + 1}. {q}
+          <fieldset key={i} className="rounded-2xl border border-gray-line bg-card p-4 md:p-5">
+            {/* float + w-full: sin esto el navegador monta la leyenda sobre el
+                borde del fieldset y la pregunta queda cortada por la línea. */}
+            <legend className="float-left mb-3 flex w-full gap-2 text-[0.9375rem] leading-snug font-medium text-navy">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-info-soft text-xs font-semibold text-brand">
+                {i + 1}
+              </span>
+              <span className="pt-0.5">{q}</span>
             </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="clear-both grid gap-2 sm:grid-cols-2">
               {RESPONSE_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex items-center gap-2 rounded-lg border border-gray-line px-3 py-2 text-sm has-[:checked]:border-brand has-[:checked]:bg-brand/5"
+                  className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-gray-line px-3 py-2 text-sm transition-colors hover:bg-cloud has-[:checked]:border-brand has-[:checked]:bg-info-soft has-[:checked]:font-medium has-[:checked]:text-navy has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
                 >
-                  <input type="radio" name={`q${i}`} value={opt.value} required className="accent-brand" />
+                  <input type="radio" name={`q${i}`} value={opt.value} required className="size-4 accent-brand" />
                   {opt.label}
                 </label>
               ))}
