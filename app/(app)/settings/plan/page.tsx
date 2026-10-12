@@ -279,7 +279,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {(reconciled?.result === "activated" || reconciled?.result === "already_processed") && (
         <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               <span className="font-semibold text-navy">Pago confirmado.</span>{" "}
               {reconciled.kind === "upgrade"
@@ -329,7 +329,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {wompi === "return" && !reconciled && (
         <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
-            <Info className="mt-0.5 size-4 shrink-0 text-mint" />
+            <Info className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               Si el pago fue aprobado, tu plan se actualizará en unos segundos. Revisá tu correo
               para confirmar.
@@ -496,7 +496,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               <ul className="flex-1 space-y-1.5 text-xs text-muted-foreground">
                 {planFeatures(plan).map((f) => (
                   <li key={f} className="flex items-start gap-1.5">
-                    <Check className="mt-0.5 size-3 shrink-0 text-mint" />
+                    <Check className="mt-0.5 size-3 shrink-0 text-success" />
                     {f}
                   </li>
                 ))}

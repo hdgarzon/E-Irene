@@ -55,7 +55,7 @@ export function SoapNoteEditor({
             {pending ? "Guardando…" : "Guardar nota SOAP"}
           </Button>
           {state.ok && (
-            <span className="flex items-center gap-1 text-xs text-mint">
+            <span className="flex items-center gap-1 text-xs text-success">
               <Check className="size-3.5" /> Guardado
             </span>
           )}

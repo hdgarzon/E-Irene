@@ -34,10 +34,13 @@ function initials(name: string) {
 export function UserMenu({ user }: { user: SessionUser }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <Avatar className="size-9">
-          <AvatarFallback className="bg-brand text-white">{initials(user.fullName)}</AvatarFallback>
+      <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:rounded-lg md:py-1 md:pr-2 md:pl-1 md:hover:bg-cloud">
+        <Avatar className="size-8">
+          <AvatarFallback className="bg-brand text-xs font-semibold text-white">{initials(user.fullName)}</AvatarFallback>
         </Avatar>
+        <span aria-hidden className="hidden text-left leading-tight md:block">
+          <span className="block max-w-44 truncate text-sm font-medium text-navy">{user.fullName}</span>
+        </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>

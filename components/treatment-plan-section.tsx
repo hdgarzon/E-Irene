@@ -93,7 +93,7 @@ export function TreatmentPlanSection({
                 <form action={toggle}>
                   <button type="submit" className="mt-0.5" aria-label="Cambiar estado">
                     {done ? (
-                      <CheckCircle2 className="size-4 text-mint" />
+                      <CheckCircle2 className="size-4 text-success" />
                     ) : (
                       <Circle className="size-4 text-muted-foreground" />
                     )}
