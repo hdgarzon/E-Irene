@@ -247,6 +247,18 @@ export async function getTranscript(consultationId: string): Promise<string | nu
  *
  * RLS scoped: solo cuenta las consultas de la clínica del usuario.
  */
+/** Igual que countUnreviewedConsultations, acotado a un paciente. */
+export async function countUnreviewedConsultationsForPatient(patientId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("consultations")
+    .select("*", { count: "exact", head: true })
+    .eq("patient_id", patientId)
+    .eq("analysis_status", "failed");
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function countUnreviewedConsultations(): Promise<number> {
   const supabase = await createClient();
   const { count, error } = await supabase

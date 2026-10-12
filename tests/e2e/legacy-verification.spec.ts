@@ -27,9 +27,15 @@ test("verificación heredada: avisa el plazo y deja subir documentos sin perder 
   if (error) throw error;
 
   await page.goto("/dashboard");
-  await expect(
-    page.getByText(/Confirma tu habilitación profesional antes del 18 de octubre de 2026/),
-  ).toBeVisible();
+  // El encabezado del aviso cambia al acercarse el plazo ("Quedan N días…"),
+  // así que se comprueba lo invariante: enlaza a /verificacion, nombra la
+  // fecha límite y dice qué se pierde. Los umbrales de urgencia los cubre
+  // tests/verification-deadline-urgency.test.ts.
+  const aviso = page.locator('a[href="/verificacion"]', {
+    hasText: /18 de octubre de 2026/,
+  });
+  await expect(aviso).toBeVisible();
+  await expect(aviso).toContainText(/pacientes y consultas/);
   if (SHOTS_DIR) await page.screenshot({ path: `${SHOTS_DIR}/7-aviso-heredada.png` });
 
   await page.goto("/verificacion");
@@ -52,5 +58,7 @@ test("verificación heredada: avisa el plazo y deja subir documentos sin perder 
 
   // Con los documentos enviados, el aviso del plazo desaparece.
   await page.goto("/dashboard");
-  await expect(page.getByText(/Confirma tu habilitación profesional antes del/)).toHaveCount(0);
+  await expect(page.locator('a[href="/verificacion"]', { hasText: /18 de octubre de 2026/ })).toHaveCount(
+    0,
+  );
 });

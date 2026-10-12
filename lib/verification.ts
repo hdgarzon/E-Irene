@@ -211,6 +211,48 @@ export function legacyVerificationState(v: {
   return v.hasIdDocument || v.hasLicenseDocument ? "awaiting_review" : "needs_documents";
 }
 
+/**
+ * Días calendario que faltan para el plazo, contados en hora de Bogotá (el
+ * plazo es local, no UTC). Negativo si ya venció.
+ */
+export function daysUntilLegacyDeadline(now: Date = new Date()): number {
+  // El plazo es una fecha local de Bogotá, no UTC: se comparan días de
+  // calendario en esa zona para que "faltan N días" no cambie según dónde
+  // corra el servidor.
+  const bogotaDay = (d: Date) => {
+    const [y, m, dd] = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Bogota",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .format(d)
+      .split("-")
+      .map(Number);
+    return Date.UTC(y, m - 1, dd);
+  };
+  return Math.round(
+    (bogotaDay(new Date(LEGACY_VERIFICATION_DEADLINE)) - bogotaDay(now)) / 86_400_000,
+  );
+}
+
+/**
+ * Cuán urgente es el aviso de la cuenta heredada.
+ *
+ * El plazo se comunica SOLO dentro de la app: el correo no está configurado en
+ * producción, y esa es justamente la razón por la que el plazo ya se prorrogó
+ * una vez (migración 0043 — "nadie les avisó"). Si el único canal que queda no
+ * transmite que la fecha está encima, se repite.
+ */
+export type LegacyDeadlineUrgency = "lejano" | "proximo" | "inminente";
+
+export function legacyDeadlineUrgency(now: Date = new Date()): LegacyDeadlineUrgency {
+  const days = daysUntilLegacyDeadline(now);
+  if (days <= 2) return "inminente";
+  if (days <= 10) return "proximo";
+  return "lejano";
+}
+
 // ==================== Cola de revisión (consola de admin) ===================
 //
 // Condiciones de PostgREST (para `.or()` sobre `users`) que parten a los
