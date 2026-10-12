@@ -49,7 +49,7 @@ export default async function VerificacionPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Verificación profesional</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Verificación profesional</h1>
         <p className="text-sm text-muted-foreground">
           Antes de atender pacientes verificamos que seas un profesional habilitado. Es lo que
           protege la historia clínica de quienes te consultan.
@@ -142,7 +142,7 @@ export default async function VerificacionPage() {
 
       {(canSubmitDocuments(status) || legacy === "needs_documents") &&
         roleRequiresVerification(user.role) && (
-        <div className="rounded-2xl border border-gray-line bg-card p-6">
+        <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
           <h2 className="mb-4 font-heading text-lg font-semibold text-navy">
             {status === "pending_documents" || legacy === "needs_documents"
               ? "Envía tus documentos"

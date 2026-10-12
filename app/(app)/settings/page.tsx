@@ -40,13 +40,13 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Configuración</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Configuración</h1>
         <p className="text-sm text-muted-foreground">{user.clinicName}</p>
       </div>
 
-      <div className="rounded-2xl border border-gray-line bg-card p-6">
+      <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-navy">Plan actual</h2>
+          <h2 className="font-semibold text-navy">Plan actual</h2>
           <span className="rounded-full bg-brand/15 px-3 py-1 text-sm font-medium text-brand">
             {limits.label} · {limits.price}
           </span>

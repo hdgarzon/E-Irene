@@ -21,7 +21,7 @@ export function ReminderButton({ appointmentId }: { appointmentId: string }) {
       type="button"
       onClick={send}
       disabled={pending}
-      className="text-muted-foreground hover:text-brand disabled:opacity-50"
+      className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-cloud hover:text-brand disabled:opacity-50"
       aria-label="Enviar recordatorio"
       title="Enviar recordatorio por correo"
     >

@@ -72,7 +72,7 @@ export function PatientsTable({
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <Search className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Ningún paciente coincide</h3>
+          <h3 className="font-semibold text-navy">Ningún paciente coincide</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             Prueba con otro nombre, documento o teléfono.
           </p>

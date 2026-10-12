@@ -379,7 +379,7 @@ export function LiveConsultation({
     <div className="mx-auto flex h-[calc(100dvh-7rem)] max-w-3xl flex-col gap-4">
       <div className="flex items-center justify-between rounded-2xl border border-gray-line bg-card px-5 py-4">
         <div>
-          <p className="font-heading font-semibold text-navy">{patientName}</p>
+          <p className="font-semibold text-navy">{patientName}</p>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             {done ? (
               <span className="text-success">Transcripción finalizada</span>

@@ -20,14 +20,14 @@ export default async function TeamPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
         href="/settings"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Configuración
       </Link>
 
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Equipo</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Equipo</h1>
         <p className="text-sm text-muted-foreground">Gestiona los miembros de tu clínica.</p>
       </div>
 
@@ -45,8 +45,8 @@ export default async function TeamPage() {
         </ul>
       </div>
 
-      <div className="rounded-2xl border border-gray-line bg-card p-6">
-        <h2 className="mb-4 font-heading font-semibold text-navy">Agregar miembro</h2>
+      <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+        <h2 className="mb-4 font-semibold text-navy">Agregar miembro</h2>
         <MemberForm />
       </div>
     </div>

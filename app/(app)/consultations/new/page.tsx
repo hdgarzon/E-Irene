@@ -36,7 +36,7 @@ export default async function NewConsultationPage({
       <div className="flex items-center justify-between gap-4">
         <Link
           href={`/patients/${patientId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
         >
           <ArrowLeft className="size-4" />
           Volver a la ficha
@@ -54,7 +54,7 @@ export default async function NewConsultationPage({
         <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-cloud">
           <Mic className="size-7 text-brand" />
         </div>
-        <h1 className="font-heading text-xl font-bold text-navy">
+        <h1 className="font-display text-2xl leading-tight font-semibold text-navy">
           Iniciar consulta con {patient.fullName}
         </h1>
 
