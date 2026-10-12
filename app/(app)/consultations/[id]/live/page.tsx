@@ -109,7 +109,7 @@ export default async function LiveConsultationPage({
       {videoBlocked && (
         <div
           role="status"
-          className="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-foreground/90"
+          className="mb-4 rounded-2xl border border-warning-border bg-warning-soft p-4 text-sm text-foreground/90"
         >
           {videoBlocked === "plan"
             ? "Tu plan no incluye videollamadas: esta consulta sigue sin video."
