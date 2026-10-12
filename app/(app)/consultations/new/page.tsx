@@ -61,7 +61,7 @@ export default async function NewConsultationPage({
         {!consent ? (
           <>
             <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
-              <ShieldCheck className="size-4 text-coral" />
+              <ShieldCheck className="size-4 text-warning" />
               Este paciente aún no tiene consentimiento firmado.
             </p>
             <Link
@@ -74,7 +74,7 @@ export default async function NewConsultationPage({
         ) : limitReached ? (
           <>
             <p className="mx-auto mt-2 flex items-center justify-center gap-1.5 max-w-sm text-sm text-muted-foreground">
-              <TriangleAlert className="size-4 text-coral" />
+              <TriangleAlert className="size-4 text-warning" />
               Alcanzaste el límite de {limitLabel(PLANS[overview.plan].consultationsPerMonth)}{" "}
               consultas de este ciclo en el plan {PLANS[overview.plan].label}. Se reinicia el{" "}
               {formatLongDate(overview.cycleEnd)}.

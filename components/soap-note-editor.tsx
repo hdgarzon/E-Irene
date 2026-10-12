@@ -28,8 +28,8 @@ export function SoapNoteEditor({
   const [state, formAction, pending] = useActionState<SoapNoteState, FormData>(action, {});
 
   return (
-    <div className="rounded-2xl border border-gray-line bg-card p-6">
-      <div className="mb-1 flex items-center gap-2 font-heading font-semibold text-navy">
+    <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+      <div className="mb-1 flex items-center gap-2 font-semibold text-navy">
         <NotebookText className="size-4 text-brand" />
         Nota SOAP
       </div>
@@ -55,7 +55,7 @@ export function SoapNoteEditor({
             {pending ? "Guardando…" : "Guardar nota SOAP"}
           </Button>
           {state.ok && (
-            <span className="flex items-center gap-1 text-xs text-mint">
+            <span className="flex items-center gap-1 text-xs text-success">
               <Check className="size-3.5" /> Guardado
             </span>
           )}

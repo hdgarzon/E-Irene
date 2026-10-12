@@ -2,7 +2,7 @@
 export function ScoreTrendChart({
   points,
   max,
-  color = "#635bff",
+  color = "#0d5ab0",
 }: {
   points: { date: string; score: number }[];
   max: number;

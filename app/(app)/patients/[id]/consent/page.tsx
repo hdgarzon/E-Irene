@@ -42,7 +42,7 @@ export default async function ConsentPage({
 
       <div className="rounded-2xl border border-gray-line bg-card p-6">
         <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-          <ShieldCheck className="size-4 text-mint" />
+          <ShieldCheck className="size-4 text-success" />
           La firma se almacena con hash del documento, IP y fecha como prueba legal (Ley 527).
         </div>
         <ConsentForm
