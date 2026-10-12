@@ -57,7 +57,7 @@ export function MobileNav({ role, clinicName }: { role: UserRole; clinicName: st
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Cerrar menú"
-                className="grid size-9 place-items-center rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+                className="grid size-9 place-items-center rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-white focus-visible:outline-mint"
               >
                 <X className="size-5" />
               </button>
@@ -74,7 +74,7 @@ export function MobileNav({ role, clinicName }: { role: UserRole; clinicName: st
                     aria-current={active ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors focus-visible:outline-mint",
                       active
                         ? "bg-sidebar-accent font-medium text-white shadow-[inset_3px_0_0_var(--color-mint)]"
                         : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-white",

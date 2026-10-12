@@ -41,6 +41,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         } as React.CSSProperties
       }
     >
+      {/* Con teclado, sin esto hay que atravesar todo el menú en cada página. */}
+      <a
+        href="#contenido"
+        className="sr-only z-50 rounded-lg bg-card px-4 py-2 text-sm font-medium text-navy shadow-md focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Saltar al contenido
+      </a>
       <AppSidebar role={user.role} clinicName={user.clinicName} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-gray-line bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:px-8">
@@ -59,7 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {deletion && (
           <AccountDeletionBanner scheduledFor={deletion.scheduledFor} isAdmin={user.role === "admin"} />
         )}
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main id="contenido" tabIndex={-1} className="flex-1 px-4 py-6 outline-none md:px-8 md:py-8">{children}</main>
       </div>
     </div>
   );
