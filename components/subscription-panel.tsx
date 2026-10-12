@@ -97,7 +97,7 @@ export function SubscriptionPanel({
           )}
         </span>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 className="font-heading font-semibold text-navy">Suscripción</h2>
+          <h2 className="font-semibold text-navy">Suscripción</h2>
           {state.kind === "renewing" && !scheduledChange && (
             <p className="text-sm text-foreground/90">
               Plan {planLabel} · se renueva el {state.periodEnd}. Puedes cancelar cuando quieras y

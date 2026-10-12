@@ -28,14 +28,14 @@ export default async function NewAssessmentPage({
     <div className="mx-auto max-w-2xl space-y-6">
       <Link
         href={`/patients/${id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Volver a la ficha
       </Link>
 
       <div>
-        <h1 className="flex items-center gap-2 font-heading text-2xl font-bold text-navy">
+        <h1 className="flex items-center gap-2 font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">
           <ClipboardCheck className="size-6 text-brand" />
           {ASSESSMENT_LABEL[assessmentType]}
         </h1>

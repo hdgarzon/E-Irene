@@ -29,18 +29,18 @@ export default async function EditAppointmentPage({
     <div className="mx-auto max-w-2xl space-y-6">
       <Link
         href="/appointments"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Volver a la agenda
       </Link>
 
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Editar cita</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Editar cita</h1>
         <p className="text-sm text-muted-foreground">{appt.patientName}</p>
       </div>
 
-      <div className="rounded-2xl border border-gray-line bg-card p-6">
+      <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
         <AppointmentForm
           action={action}
           patients={patients.map((p) => ({ id: p.id, fullName: p.fullName }))}
