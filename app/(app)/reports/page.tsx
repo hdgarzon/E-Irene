@@ -8,9 +8,9 @@ export default async function ReportsPage() {
   const reports = await listReports();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Reportes</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Reportes</h1>
         <p className="text-sm text-muted-foreground">
           {reports.length} {reports.length === 1 ? "reporte generado" : "reportes generados"}
         </p>
@@ -21,7 +21,7 @@ export default async function ReportsPage() {
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <FileText className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Aún no hay reportes</h3>
+          <h3 className="font-semibold text-navy">Aún no hay reportes</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             El reporte con análisis de IA se genera automáticamente al finalizar una consulta.
           </p>

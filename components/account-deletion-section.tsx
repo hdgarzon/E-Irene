@@ -43,9 +43,9 @@ export function AccountDeletionSection({
   );
 
   return (
-    <div className="space-y-4 rounded-2xl border border-gray-line bg-card p-6">
+    <div className="space-y-4 rounded-2xl border border-gray-line bg-card p-5 md:p-6">
       <div>
-        <h2 className="font-heading font-semibold text-navy">Exportar datos</h2>
+        <h2 className="font-semibold text-navy">Exportar datos</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Descarga todos tus pacientes con su historia clínica en un archivo JSON. Como responsable de
           las historias clínicas, debes conservarlas 15 años (Resolución 839 de 2017).

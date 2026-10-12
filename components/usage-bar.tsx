@@ -22,11 +22,12 @@ export function UsageBar({
     <div>
       <div className="flex justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
-        <span className="text-navy">{display ?? `${used} / ${limitLabel(max)}`}</span>
+        <span className="font-medium tabular-nums text-navy">{display ?? `${used} / ${limitLabel(max)}`}</span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-brand"}`}
+          // Llegar al tope no es un error: se marca en ámbar, no en rojo.
+          className={`h-full rounded-full ${pct >= 100 ? "bg-warning" : "bg-brand"}`}
           style={{ width: `${Number.isFinite(max) ? pct : 25}%` }}
         />
       </div>

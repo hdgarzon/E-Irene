@@ -22,14 +22,14 @@ export default async function CuentaPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Mi cuenta</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Mi cuenta</h1>
         <p className="text-sm text-muted-foreground">
           {user.fullName} · {user.email}
         </p>
       </div>
 
-      <section className="space-y-3 rounded-2xl border border-gray-line bg-card p-6">
-        <h2 className="font-heading font-semibold text-navy">Comunicaciones comerciales</h2>
+      <section className="space-y-3 rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+        <h2 className="font-semibold text-navy">Comunicaciones comerciales</h2>
         <p className="text-sm text-muted-foreground">
           &ldquo;{MARKETING_OPT_IN_TEXT}&rdquo; — Estado actual:{" "}
           <strong className="text-navy">{optedIn ? "autorizadas" : "no autorizadas"}</strong>. Es
@@ -38,8 +38,8 @@ export default async function CuentaPage() {
         <MarketingPreferenceForm optedIn={optedIn} />
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-gray-line bg-card p-6">
-        <h2 className="font-heading font-semibold text-navy">Documentos aceptados</h2>
+      <section className="space-y-3 rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+        <h2 className="font-semibold text-navy">Documentos aceptados</h2>
         <p className="text-sm text-muted-foreground">
           Cada aceptación queda registrada con la versión y la huella del texto aceptado:{" "}
           <Link href={PROFESSIONAL_TERMS_PATH} className="text-primary hover:underline">Términos de Vinculación</Link>,{" "}

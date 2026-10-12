@@ -5,7 +5,7 @@ import { ChevronRight, ShieldCheck } from "lucide-react";
 import { useSearchFilter } from "@/lib/use-search-filter";
 import { SearchInput } from "@/components/search-input";
 import { formatFullDate, formatTime } from "@/lib/dates";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { ReportListItem } from "@/lib/db/reports";
 
 export function ReportsList({ reports }: { reports: ReportListItem[] }) {
@@ -26,10 +26,12 @@ export function ReportsList({ reports }: { reports: ReportListItem[] }) {
               <Link
                 key={r.id}
                 href={`/consultations/${r.consultationId}`}
-                className="flex items-center gap-4 p-4 transition-colors hover:bg-cloud/60"
+                className="flex items-center gap-3 p-4 transition-colors hover:bg-cloud/60 sm:gap-4"
               >
-                <div className="flex w-24 shrink-0 flex-col">
-                  <span className="font-heading text-sm font-bold text-navy">
+                {/* En móvil la fecha va bajo el nombre: en columna propia dejaba
+                    el nombre del paciente en tres letras. */}
+                <div className="hidden w-32 shrink-0 flex-col sm:flex">
+                  <span className="text-sm font-semibold tabular-nums text-navy">
                     {formatTime(r.date)}
                   </span>
                   <span className="text-xs text-muted-foreground">{formatFullDate(r.date)}</span>
@@ -37,15 +39,18 @@ export function ReportsList({ reports }: { reports: ReportListItem[] }) {
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-navy">{r.patientName}</p>
+                  <p className="text-xs text-muted-foreground sm:hidden">
+                    {formatTime(r.date)} · {formatFullDate(r.date)}
+                  </p>
                 </div>
 
                 {r.validated ? (
-                  <span className="flex items-center gap-1 text-xs text-success">
+                  <StatusBadge tone="success">
                     <ShieldCheck className="size-3.5" />
                     Validado
-                  </span>
+                  </StatusBadge>
                 ) : (
-                  <Badge variant="secondary">Sin validar</Badge>
+                  <StatusBadge tone="warning">Sin validar</StatusBadge>
                 )}
 
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" />

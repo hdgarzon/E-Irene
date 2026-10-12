@@ -8,9 +8,9 @@ export default async function ConsultationsPage() {
   const consultations = await listConsultations();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Consultas</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Consultas</h1>
         <p className="text-sm text-muted-foreground">
           {consultations.length}{" "}
           {consultations.length === 1 ? "consulta registrada" : "consultas registradas"}
@@ -22,7 +22,7 @@ export default async function ConsultationsPage() {
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <Mic className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Aún no hay consultas</h3>
+          <h3 className="font-semibold text-navy">Aún no hay consultas</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             Inicia una consulta desde la ficha de un paciente con consentimiento firmado.
           </p>
