@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { countUnreviewedConsultationsForPatient } from "@/lib/db/consultations";
 import { getLatestClinicalStateSnapshot } from "@/lib/db/clinical-state";
 import { whatsNewInSession, type ClinicalState } from "@/lib/clinical-state";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
@@ -78,9 +79,10 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
   const patient = await getPatient(id);
   if (!patient) notFound();
 
-  const [snapshot, assessments] = await Promise.all([
+  const [snapshot, assessments, unreviewed] = await Promise.all([
     getLatestClinicalStateSnapshot(id),
     listAssessmentsForPatient(id),
+    countUnreviewedConsultationsForPatient(id),
   ]);
 
   const assessmentsByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
@@ -127,10 +129,24 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
             <Sparkles className="size-6 text-brand" />
           </div>
           <h3 className="font-heading font-semibold text-navy">Aún no hay estado clínico</h3>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            El brief se construye con lo que la IA identifica en cada sesión analizada. Realiza la
-            primera consulta con este paciente para empezar a verlo.
-          </p>
+          {/* El vacío tiene dos causas muy distintas y conviene no confundirlas:
+              que no haya habido sesiones, o que las haya habido y su análisis
+              fallara. En el segundo caso, invitar a "realizar la primera
+              consulta" es falso y sugiere que la IA miró y no encontró nada. */}
+          {unreviewed > 0 ? (
+            <p className="mx-auto mt-1 max-w-sm text-sm text-destructive">
+              {unreviewed === 1
+                ? "Hay 1 consulta de este paciente que no pudo analizarse"
+                : `Hay ${unreviewed} consultas de este paciente que no pudieron analizarse`}
+              , así que el brief está vacío por un fallo del análisis, no porque no haya hallazgos.
+              Ábrelas y reintenta el análisis, o revisa sus transcripciones.
+            </p>
+          ) : (
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+              El brief se construye con lo que la IA identifica en cada sesión analizada. Realiza la
+              primera consulta con este paciente para empezar a verlo.
+            </p>
+          )}
         </div>
       ) : (
         <>
