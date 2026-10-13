@@ -34,6 +34,15 @@ test("consentimiento: firmar, revocar y volver a firmar", async ({ page }) => {
 
   await signConsent(page);
 
+  // Se abre una consulta con el consentimiento vigente, sin iniciar la transcripción.
+  const patientPage = page.url();
+  await page.getByRole("link", { name: /iniciar consulta/i }).click();
+  await page.fill('textarea[name="reason"]', "Seguimiento.");
+  await page.getByRole("button", { name: /iniciar y grabar/i }).click();
+  await expect(page).toHaveURL(/consultations\/.+\/live/);
+  const liveUrl = page.url();
+  await page.goto(patientPage);
+
   await page.getByRole("button", { name: /registrar revocación/i }).click();
   await page.fill('textarea[name="note"]', "Lo pidió en consulta");
   await page.check('input[name="confirm"]');
@@ -41,6 +50,12 @@ test("consentimiento: firmar, revocar y volver a firmar", async ({ page }) => {
 
   await expect(page.getByText("Revocado", { exact: true })).toBeVisible();
   await expect(page.getByText(/revocó su consentimiento el .*Lo pidió en consulta/)).toBeVisible();
+
+  // Pieza 3: la consulta que quedó abierta ya no deja iniciar la transcripción.
+  await page.goto(liveUrl);
+  await expect(page.getByRole("button", { name: /iniciar transcripción/i })).toBeDisabled();
+  await expect(page.getByText(/no tiene un consentimiento vigente/i)).toBeVisible();
+  await page.goto(patientPage);
 
   // Sin consentimiento vigente, iniciar una consulta lleva a firmar.
   const patientUrl = page.url();
