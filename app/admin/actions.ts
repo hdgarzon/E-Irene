@@ -8,7 +8,6 @@ import {
   deleteStaff,
   updateAppointmentAdmin,
   deleteAppointmentAdmin,
-  setPlanConfig,
 } from "@/lib/db/platform-console";
 import type { UserRole } from "@/lib/auth";
 import { logger } from "@/lib/logger";
@@ -87,28 +86,6 @@ export async function deleteAppointmentAdminAction(id: string): Promise<void> {
   await requirePlatformAdmin();
   await deleteAppointmentAdmin(id);
   revalidatePath("/admin/citas");
-}
-
-// --------------------------------- Planes ----------------------------------
-
-export async function setPlanConfigAction(
-  plan: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const admin = await requirePlatformAdmin();
-  const label = String(formData.get("label") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const price = String(formData.get("price") ?? "").trim();
-  if (label.length < 1) return { error: "El título es obligatorio." };
-  try {
-    await setPlanConfig(plan, { label, description, price });
-  } catch (error) {
-    logger.error("admin.plan_config_save_failed", { actorId: admin.id, plan, error });
-    return { error: "No se pudo guardar el plan." };
-  }
-  revalidatePath("/admin/planes");
-  return { ok: true };
 }
 
 // ------------------------------ Videollamadas ------------------------------

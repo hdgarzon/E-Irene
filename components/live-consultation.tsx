@@ -36,6 +36,8 @@ export function LiveConsultation({
   videoToken,
   quotaExceeded,
   canManagePlan,
+  consentActive = true,
+  patientId,
 }: {
   consultationId: string;
   patientName: string;
@@ -55,6 +57,12 @@ export function LiveConsultation({
   quotaExceeded?: boolean;
   /** true = el usuario puede cambiar el plan (admin) → se enlaza a /settings/plan. */
   canManagePlan?: boolean;
+  /**
+   * Hay consentimiento vigente. Sin él (revocado con la consulta abierta), el
+   * botón de iniciar no se habilita (Pieza 3).
+   */
+  consentActive?: boolean;
+  patientId?: string;
 }) {
   const [chunks, setChunks] = useState<{ speaker: string; text: string }[]>([]);
   // Pieza 3 de los documentos legales: el aviso al paciente va ANTES de que
@@ -428,10 +436,31 @@ export function LiveConsultation({
               sesión. Usted puede pedir que se detenga la transcripción en cualquier momento.
             </p>
           </div>
-          <Button onClick={startTranscription} size="sm">
-            <Mic className="size-4" />
-            Iniciar transcripción
-          </Button>
+          {consentActive ? (
+            <Button onClick={startTranscription} size="sm">
+              <Mic className="size-4" />
+              Iniciar transcripción
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <Button size="sm" disabled>
+                <Mic className="size-4" />
+                Iniciar transcripción
+              </Button>
+              <p className="text-xs text-destructive">
+                El paciente no tiene un consentimiento vigente (pudo haberlo revocado): no se puede
+                transcribir hasta que firme de nuevo.
+                {patientId && (
+                  <>
+                    {" "}
+                    <Link href={`/patients/${patientId}/consent`} className="underline">
+                      Capturar consentimiento
+                    </Link>
+                  </>
+                )}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
