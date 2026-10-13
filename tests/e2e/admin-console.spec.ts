@@ -96,12 +96,11 @@ test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI
   await apptRow.locator("select").selectOption("completed");
   await expect(apptRow.locator("select")).toHaveValue("completed");
 
-  // Planes: editar el precio del plan Free.
+  // Planes: solo lectura, con los precios que se cobran (lib/plans.ts).
   await page.goto("/admin/planes");
-  const freeForm = page.locator("form", { hasText: "free" }).first();
-  await freeForm.locator('input[name="price"]').fill("$0 / siempre");
-  await freeForm.getByRole("button", { name: /guardar/i }).click();
-  await expect(freeForm.getByText("Guardado")).toBeVisible();
+  await expect(page.getByText("$99.000 COP/mes")).toBeVisible();
+  await expect(page.getByText(/Para cambiar un precio o un límite/)).toBeVisible();
+  await expect(page.locator('input[name="price"]')).toHaveCount(0);
 
   // Configuración: referencia de variables.
   await page.goto("/admin/configuracion");

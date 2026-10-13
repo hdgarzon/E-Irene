@@ -185,53 +185,6 @@ export async function deleteAppointmentAdmin(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// ================================== Planes ==================================
-
-export interface PlanConfig {
-  plan: string;
-  label: string;
-  description: string;
-  price: string;
-  sortOrder: number;
-}
-
-export async function getPlanConfigs(): Promise<PlanConfig[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("plan_configs")
-    .select("plan, label, description, price, sort_order")
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return (
-    data as unknown as {
-      plan: string;
-      label: string;
-      description: string;
-      price: string;
-      sort_order: number;
-    }[]
-  ).map((r) => ({
-    plan: r.plan,
-    label: r.label,
-    description: r.description,
-    price: r.price,
-    sortOrder: r.sort_order,
-  }));
-}
-
-export async function setPlanConfig(
-  plan: string,
-  input: { label: string; description: string; price: string },
-): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("platform_set_plan_config", {
-    p_plan: plan,
-    p_label: input.label,
-    p_description: input.description,
-    p_price: input.price,
-  });
-  if (error) throw error;
-}
 
 // ============================= Mapa de clínicas =============================
 
