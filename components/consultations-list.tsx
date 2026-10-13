@@ -5,13 +5,13 @@ import { ChevronRight } from "lucide-react";
 import { useSearchFilter } from "@/lib/use-search-filter";
 import { SearchInput } from "@/components/search-input";
 import { formatFullDate, formatTime } from "@/lib/dates";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import type { Consultation } from "@/lib/db/consultations";
 
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  in_progress: { label: "En curso", className: "bg-destructive/15 text-destructive" },
-  ended: { label: "Finalizada", className: "bg-secondary text-secondary-foreground" },
-  analyzed: { label: "Analizada", className: "bg-mint/15 text-[#04342a]" },
+const STATUS_META: Record<string, { label: string; tone: StatusTone }> = {
+  in_progress: { label: "En curso", tone: "info" },
+  ended: { label: "Finalizada", tone: "neutral" },
+  analyzed: { label: "Analizada", tone: "success" },
 };
 
 export function ConsultationsList({ consultations }: { consultations: Consultation[] }) {
@@ -33,18 +33,20 @@ export function ConsultationsList({ consultations }: { consultations: Consultati
           {filtered.map((c) => {
             const meta =
               c.analysisStatus === "failed"
-                ? { label: "Análisis fallido", className: "bg-destructive/15 text-destructive" }
+                ? { label: "Análisis fallido", tone: "danger" as StatusTone }
                 : c.analysisStatus === "pending" || c.analysisStatus === "processing"
-                  ? { label: "Analizando…", className: "bg-secondary text-secondary-foreground" }
+                  ? { label: "Analizando…", tone: "neutral" as StatusTone }
                   : (STATUS_META[c.status] ?? STATUS_META.ended);
             return (
               <Link
                 key={c.id}
                 href={`/consultations/${c.id}`}
-                className="flex items-center gap-4 p-4 transition-colors hover:bg-cloud/60"
+                className="flex items-center gap-3 p-4 transition-colors hover:bg-cloud/60 sm:gap-4"
               >
-                <div className="flex w-24 shrink-0 flex-col">
-                  <span className="font-heading text-sm font-bold text-navy">
+                {/* En móvil la fecha va bajo el nombre: en columna propia dejaba
+                    el nombre del paciente en tres letras. */}
+                <div className="hidden w-32 shrink-0 flex-col sm:flex">
+                  <span className="text-sm font-semibold tabular-nums text-navy">
                     {formatTime(c.startedAt)}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -54,10 +56,13 @@ export function ConsultationsList({ consultations }: { consultations: Consultati
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-navy">{c.patientName}</p>
+                  <p className="text-xs text-muted-foreground sm:hidden">
+                    {formatTime(c.startedAt)} · {formatFullDate(c.startedAt)}
+                  </p>
                   <p className="truncate text-sm text-muted-foreground">{c.doctorName}</p>
                 </div>
 
-                <Badge className={meta.className}>{meta.label}</Badge>
+                <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
               </Link>
             );

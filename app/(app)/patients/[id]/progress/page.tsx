@@ -86,14 +86,14 @@ export default async function ProgressPage({
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
         href={`/patients/${id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Volver a la ficha
       </Link>
 
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">
           Evolución de {patient.fullName}
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -107,7 +107,7 @@ export default async function ProgressPage({
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <TrendingUp className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Aún no hay sesiones analizadas</h3>
+          <h3 className="font-semibold text-navy">Aún no hay sesiones analizadas</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             Realiza una consulta para empezar a ver la evolución del paciente.
           </p>
@@ -115,8 +115,8 @@ export default async function ProgressPage({
       ) : (
         <>
           {state && (
-            <div className="rounded-2xl border border-gray-line bg-card p-6">
-              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+            <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-semibold text-navy">
                 <Target className="size-4 text-brand" />
                 Objetivos terapéuticos
               </h2>
@@ -147,8 +147,8 @@ export default async function ProgressPage({
           )}
 
           {state && (
-            <div className="rounded-2xl border border-gray-line bg-card p-6">
-              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+            <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-semibold text-navy">
                 <ShieldAlert className="size-4 text-brand" />
                 Riesgos identificados a lo largo del tratamiento
               </h2>
@@ -175,8 +175,8 @@ export default async function ProgressPage({
           )}
 
           {temasByFrequency.length > 0 && (
-            <div className="rounded-2xl border border-gray-line bg-card p-6">
-              <h2 className="mb-4 flex items-center gap-2 font-heading font-semibold text-navy">
+            <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+              <h2 className="mb-4 flex items-center gap-2 font-semibold text-navy">
                 <Tags className="size-4 text-brand" />
                 Temas recurrentes
               </h2>
@@ -197,12 +197,12 @@ export default async function ProgressPage({
           {assessmentsByType.map(
             ({ type, points }) =>
               points.length > 0 && (
-                <div key={type} className="rounded-2xl border border-gray-line bg-card p-6">
-                  <h2 className="mb-4 font-heading font-semibold text-navy">
+                <div key={type} className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+                  <h2 className="mb-4 font-semibold text-navy">
                     Evolución {ASSESSMENT_LABEL[type]}
                   </h2>
-                  <ScoreTrendChart points={points} max={ASSESSMENT_MAX_SCORE[type]} />
-                  <div className="mt-2 flex justify-between px-4 text-xs text-muted-foreground">
+                  <ScoreTrendChart points={points} max={ASSESSMENT_MAX_SCORE[type]} type={type} />
+                  <div className="mt-2 ml-8 flex justify-between text-xs text-muted-foreground">
                     {points.map((p, i) => (
                       <span key={i}>{shortDate(p.date)}</span>
                     ))}
@@ -222,8 +222,8 @@ export default async function ProgressPage({
           )}
 
           {reports.length > 0 && (
-            <div className="rounded-2xl border border-gray-line bg-card p-6">
-              <h2 className="mb-3 font-heading font-semibold text-navy">Sesiones</h2>
+            <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+              <h2 className="mb-3 font-semibold text-navy">Sesiones</h2>
               <ul className="divide-y divide-gray-line">
                 {reports.map((r) => (
                   <li key={r.consultationId}>

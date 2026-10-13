@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { CircleAlert, Mic, MicOff, Square, ShieldCheck } from "lucide-react";
+import { CircleAlert, Lock, Mic, MicOff, Square, ShieldCheck } from "lucide-react";
 import { MOCK_SESSION } from "@/lib/providers/mock-transcript";
 // Imports directos a los módulos (no al barrel @/lib/providers, que re-exporta
 // mock.ts → node:crypto, incompatible con el bundle del cliente).
@@ -376,13 +376,13 @@ export function LiveConsultation({
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-7rem)] max-w-3xl flex-col gap-4">
-      <div className="flex items-center justify-between rounded-2xl border border-gray-line bg-card px-5 py-4">
-        <div>
-          <p className="font-heading font-semibold text-navy">{patientName}</p>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="mx-auto flex h-[calc(100dvh-6.5rem)] max-w-3xl flex-col gap-3 md:h-[calc(100dvh-7.5rem)] md:gap-4">
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-line bg-card px-4 py-3 md:px-5 md:py-4">
+        <div className="min-w-0">
+          <p className="font-display truncate text-xl leading-tight font-semibold text-navy">{patientName}</p>
+          <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
             {done ? (
-              <span className="text-mint">Transcripción finalizada</span>
+              <span className="text-success">Transcripción finalizada</span>
             ) : transcription === "stopped" ? (
               <span>Transcripción detenida{transcriptionMode === "video" ? " · videollamada en curso" : ""}</span>
             ) : transcription === "idle" && !quotaExceeded ? (
@@ -395,7 +395,7 @@ export function LiveConsultation({
               </span>
             ) : (
               <>
-                <span className="inline-block size-2 animate-pulse rounded-full bg-destructive" />
+                <span aria-hidden className="inline-block size-2 shrink-0 animate-pulse rounded-full bg-destructive" />
                 {transcriptionMode === "deepgram"
                   ? "Grabando · identificando Doctor y Paciente"
                   : transcriptionMode === "video"
@@ -405,7 +405,12 @@ export function LiveConsultation({
             )}
           </p>
         </div>
-        <span className="font-mono text-lg font-semibold text-navy">{mmss(elapsed)}</span>
+        <span className="shrink-0 text-right">
+          <span className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Duración
+          </span>
+          <span className="font-mono text-2xl font-semibold tabular-nums text-navy">{mmss(elapsed)}</span>
+        </span>
       </div>
 
       {/* Pieza 3: aviso al paciente antes de iniciar la transcripción. Es un
@@ -413,9 +418,9 @@ export function LiveConsultation({
           consentimiento; no lo sustituye, y por eso no se registra. Se oculta
           con la cuota agotada: no hay transcripción que avisar. */}
       {!done && !quotaExceeded && transcription === "idle" && (
-        <div className="space-y-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-sm text-navy/80">
+        <div className="space-y-3 rounded-xl border border-success-border bg-success-soft px-4 py-3 text-sm text-foreground/85">
           <div className="flex items-start gap-2.5">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               <strong className="font-medium text-navy">Esta sesión será transcrita.</strong> El
               audio no se graba ni se guarda: se convierte a texto en vivo y solo se conserva el
@@ -431,9 +436,9 @@ export function LiveConsultation({
       )}
 
       {!done && running && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/40 bg-mint/5 px-4 py-3 text-xs text-navy/80">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-success-border bg-success-soft px-4 py-3 text-sm text-foreground/85">
           <p className="flex items-start gap-2.5">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-mint" />
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
             <span>
               <strong className="font-medium text-navy">Esta sesión se está transcribiendo.</strong>{" "}
               El paciente puede pedir que se detenga en cualquier momento.
@@ -447,16 +452,16 @@ export function LiveConsultation({
       )}
 
       {!done && transcription === "stopped" && (
-        <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <MicOff className="size-3.5" />
+        <p className="flex items-center gap-2 rounded-xl border border-gray-line bg-cloud px-4 py-2.5 text-sm text-muted-foreground">
+          <MicOff className="size-4 shrink-0" />
           Transcripción detenida. La sesión continúa; el reporte se generará con lo transcrito hasta
           ahora.
         </p>
       )}
 
       {!done && quotaExceeded && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs">
-          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+        <div className="flex items-start gap-2 rounded-xl border border-danger-border bg-danger-soft px-4 py-3 text-sm">
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div>
             <p className="font-medium text-navy">
               Se agotaron las horas de transcripción de este ciclo
@@ -481,23 +486,23 @@ export function LiveConsultation({
       )}
 
       {micOk === false && (
-        <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <MicOff className="size-3.5" />
+        <p className="flex items-center gap-2 rounded-xl border border-gray-line bg-cloud px-4 py-2.5 text-sm text-muted-foreground">
+          <MicOff className="size-4 shrink-0" />
           Sin acceso al micrófono — la sesión continúa en modo demostración.
         </p>
       )}
 
       {!done && running && micTranscriptError && (
-        <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <MicOff className="size-3.5" />
+        <p className="flex items-center gap-2 rounded-xl border border-gray-line bg-cloud px-4 py-2.5 text-sm text-muted-foreground">
+          <MicOff className="size-4 shrink-0" />
           Se interrumpió la transcripción de tu micrófono — la sesión continúa, pero esa parte no
           quedará en el reporte.
         </p>
       )}
 
       {!done && running && remoteTranscriptError && (
-        <p className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <MicOff className="size-3.5" />
+        <p className="flex items-center gap-2 rounded-xl border border-gray-line bg-cloud px-4 py-2.5 text-sm text-muted-foreground">
+          <MicOff className="size-4 shrink-0" />
           Se interrumpió la transcripción del audio del paciente — la videollamada continúa, pero
           esa parte no quedará en el reporte.
         </p>
@@ -514,7 +519,9 @@ export function LiveConsultation({
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-gray-line bg-card p-5"
+        role="region"
+        aria-label="Transcripción en vivo"
+        className="min-h-48 flex-1 space-y-4 overflow-y-auto rounded-2xl border border-gray-line bg-card p-4 md:p-5"
       >
         {chunks.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -529,12 +536,14 @@ export function LiveConsultation({
         ) : (
           chunks.map((c, idx) => (
             <div key={idx} className={c.speaker === "Doctor" ? "" : "flex flex-col items-end"}>
-              <span className="text-xs font-medium text-muted-foreground">{c.speaker}</span>
+              <span className="mb-1 block text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {c.speaker}
+              </span>
               <p
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
+                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[0.9375rem] leading-relaxed ${
                   c.speaker === "Doctor"
-                    ? "bg-cloud text-navy"
-                    : "bg-brand/10 text-navy"
+                    ? "rounded-tl-sm bg-cloud text-navy"
+                    : "rounded-tr-sm bg-info-soft text-navy"
                 }`}
               >
                 {c.text}
@@ -544,13 +553,14 @@ export function LiveConsultation({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-line bg-card px-5 py-4">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-line bg-card px-4 py-3 md:px-5 md:py-4">
         {/* Durante la sesión esto ya lo dice el aviso de arriba, más completo;
             aquí solo queda como recordatorio una vez terminada. */}
-        <p className="text-xs text-muted-foreground">
-          {done ? "🔒 El audio no se almacenó. Solo el texto, cifrado." : ""}
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {done && <Lock className="size-3.5 shrink-0 text-success" />}
+          {done ? "El audio no se almacenó. Solo el texto, cifrado." : ""}
         </p>
-        <Button onClick={finalize} disabled={pending} variant="default">
+        <Button onClick={finalize} disabled={pending} variant="default" size="lg">
           <Square className="size-4" />
           {pending ? "Generando reporte…" : "Finalizar consulta"}
         </Button>

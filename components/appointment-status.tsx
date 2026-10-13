@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const META: Record<AppointmentStatus, { label: string; className: string }> = {
-  scheduled: { label: "Agendada", className: "bg-secondary text-secondary-foreground" },
-  confirmed: { label: "Confirmada", className: "bg-brand/15 text-brand" },
-  completed: { label: "Completada", className: "bg-mint/15 text-[#04342a]" },
-  cancelled: { label: "Cancelada", className: "bg-destructive/15 text-destructive" },
-  no_show: { label: "No asistió", className: "bg-muted text-muted-foreground" },
+  scheduled: { label: "Agendada", className: "h-6 border-gray-line bg-cloud px-2.5 text-navy" },
+  confirmed: { label: "Confirmada", className: "h-6 border-info-border bg-info-soft px-2.5 text-brand" },
+  completed: { label: "Completada", className: "h-6 border-success-border bg-success-soft px-2.5 text-success" },
+  cancelled: { label: "Cancelada", className: "h-6 border-danger-border bg-danger-soft px-2.5 text-destructive" },
+  no_show: { label: "No asistió", className: "h-6 border-warning-border bg-warning-soft px-2.5 text-warning" },
 };
 
 const ORDER: AppointmentStatus[] = ["scheduled", "confirmed", "completed", "cancelled", "no_show"];
@@ -34,7 +34,7 @@ export function AppointmentStatusMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <Badge className={`${META[status].className} cursor-pointer gap-1`}>
           {META[status].label}
           <ChevronDown className="size-3" />
