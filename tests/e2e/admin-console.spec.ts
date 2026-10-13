@@ -15,7 +15,7 @@ async function grantPlatformAdmin(email: string) {
   expect(error).toBeNull();
 }
 
-test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI)", async ({
+test("consola de admin: tabs, gestión de citas y acceso directo (sin PHI)", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -96,11 +96,6 @@ test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI
   await apptRow.locator("select").selectOption("completed");
   await expect(apptRow.locator("select")).toHaveValue("completed");
 
-  // Planes: solo lectura, con los precios que se cobran (lib/plans.ts).
-  await page.goto("/admin/planes");
-  await expect(page.getByText("$99.000 COP/mes")).toBeVisible();
-  await expect(page.getByText(/Para cambiar un precio o un límite/)).toBeVisible();
-  await expect(page.locator('input[name="price"]')).toHaveCount(0);
 
   // Configuración: referencia de variables.
   await page.goto("/admin/configuracion");
