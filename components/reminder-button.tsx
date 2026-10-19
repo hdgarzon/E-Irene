@@ -4,9 +4,12 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
 import { sendReminderAction } from "@/app/(app)/appointments/actions";
+import { useHydrated } from "@/lib/use-hydrated";
 
 export function ReminderButton({ appointmentId }: { appointmentId: string }) {
   const [pending, startTransition] = useTransition();
+  // Antes de hidratar, el clic no envía el recordatorio.
+  const hydrated = useHydrated();
 
   function send() {
     startTransition(async () => {
@@ -20,7 +23,7 @@ export function ReminderButton({ appointmentId }: { appointmentId: string }) {
     <button
       type="button"
       onClick={send}
-      disabled={pending}
+      disabled={pending || !hydrated}
       className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-cloud hover:text-brand disabled:opacity-50"
       aria-label="Enviar recordatorio"
       title="Enviar recordatorio por correo"

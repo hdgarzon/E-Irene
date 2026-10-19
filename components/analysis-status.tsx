@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle, RotateCw } from "lucide-react";
 import { retryAnalysisAction } from "@/app/(app)/consultations/actions";
 import type { AnalysisStatus } from "@/lib/db/consultations";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 
 const POLL_MS = 3000;
@@ -21,6 +22,8 @@ export function AnalysisStatusBanner({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // Antes de hidratar, reintentar no llega al servidor.
+  const hydrated = useHydrated();
   const inProgress = status === "pending" || status === "processing";
 
   useEffect(() => {
@@ -70,7 +73,7 @@ export function AnalysisStatusBanner({
           type="button"
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !hydrated}
           onClick={() => startTransition(() => retryAnalysisAction(consultationId))}
         >
           <RotateCw className="size-3.5" />

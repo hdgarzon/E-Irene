@@ -89,12 +89,29 @@ test("consola de admin: tabs, gestión de citas y acceso directo (sin PHI)", asy
   // Citas: la cita aparece y se puede cambiar de estado, PERO sin exponer el
   // nombre del paciente (PHI). Se busca por clínica y se identifica por la fila
   // de la cita, no por el paciente.
-  await page.goto(`/admin/citas?q=${encodeURIComponent(clinicName)}`);
+  //
+  // Como el cambio de plan en platform-admin.spec.ts: con el JS del cliente
+  // retrasado, selectOption actúa sobre el HTML del servidor antes de hidratar.
+  // Ahí el <select> muestra el estado nuevo sin que salga ningún POST, así que
+  // se espera la petición y se comprueba el estado tras recargar.
+  const citasUrl = `/admin/citas?q=${encodeURIComponent(clinicName)}`;
+  await page.route("**/_next/static/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.continue();
+  });
+  await page.goto(citasUrl, { waitUntil: "commit" });
   const apptRow = page.locator("tbody tr", { hasText: clinicName });
   await expect(apptRow).toHaveCount(1);
   await expect(page.getByText("Paciente Console")).toHaveCount(0);
-  await apptRow.locator("select").selectOption("completed");
-  await expect(apptRow.locator("select")).toHaveValue("completed");
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin/citas")),
+    apptRow.locator("select").selectOption("completed"),
+  ]);
+  await page.unroute("**/_next/static/**");
+  await page.goto(citasUrl);
+  await expect(page.locator("tbody tr", { hasText: clinicName }).locator("select")).toHaveValue(
+    "completed",
+  );
 
 
   // Configuración: referencia de variables.

@@ -8,6 +8,7 @@ import {
   type ActionState,
 } from "@/app/admin/actions";
 import type { AdminStaff } from "@/lib/db/platform-console";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,8 @@ export function AdminStaffRow({ staff }: { staff: AdminStaff }) {
   );
   const [deletePending, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Antes de hidratar, eliminar no llega al servidor.
+  const hydrated = useHydrated();
 
   if (state.ok && editing) setEditing(false);
 
@@ -82,7 +85,7 @@ export function AdminStaffRow({ staff }: { staff: AdminStaff }) {
           type="button"
           size="sm"
           variant="destructive"
-          disabled={deletePending}
+          disabled={deletePending || !hydrated}
           onClick={onDelete}
         >
           <Trash2 className="size-3.5" />
