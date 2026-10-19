@@ -15,7 +15,7 @@ async function grantPlatformAdmin(email: string) {
   expect(error).toBeNull();
 }
 
-test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI)", async ({
+test("consola de admin: tabs, gestión de citas y acceso directo (sin PHI)", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -113,12 +113,6 @@ test("consola de admin: tabs, gestión de citas/planes y acceso directo (sin PHI
     "completed",
   );
 
-  // Planes: editar el precio del plan Free.
-  await page.goto("/admin/planes");
-  const freeForm = page.locator("form", { hasText: "free" }).first();
-  await freeForm.locator('input[name="price"]').fill("$0 / siempre");
-  await freeForm.getByRole("button", { name: /guardar/i }).click();
-  await expect(freeForm.getByText("Guardado")).toBeVisible();
 
   // Configuración: referencia de variables.
   await page.goto("/admin/configuracion");

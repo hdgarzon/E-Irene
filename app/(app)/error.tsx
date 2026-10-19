@@ -23,7 +23,7 @@ export default function Error({
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
       <AlertTriangle className="size-10 text-destructive" />
-      <h1 className="font-heading text-xl font-bold text-navy">Algo salió mal</h1>
+      <h1 className="font-display text-2xl leading-tight font-semibold text-navy">Algo salió mal</h1>
       <p className="text-sm text-muted-foreground">
         No pudimos cargar esta sección. Intenta de nuevo; si el problema persiste, contacta al
         administrador de tu clínica.

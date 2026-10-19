@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getConsultation } from "@/lib/db/consultations";
+import { getActiveConsent } from "@/lib/db/consents";
 import { getAppointment } from "@/lib/db/appointments";
 import { beginTranscriptionSession } from "@/lib/db/transcription-usage";
 import { getTranscriptionProvider } from "@/lib/providers";
@@ -38,13 +39,18 @@ export default async function LiveConsultationPage({
   // se crea sesión de ningún proveedor (mock incluido) y la UI lo explica.
   const quota = await beginTranscriptionSession(id, user.clinicId);
 
+  // Pieza 3: sin consentimiento vigente no se transcribe. Crear la consulta ya lo
+  // exige, pero el paciente puede revocarlo con la consulta abierta (0064): se
+  // vuelve a comprobar aquí y, si no hay, ni siquiera se acuña el token.
+  const consentActive = (await getActiveConsent(consultation.patientId)) !== null;
+
   // El token efímero de Deepgram se acuña aquí (servidor); el navegador abre
   // el WebSocket directo con él. La API key real nunca llega al cliente.
   // En modo video se necesita igual (transcribe el mic local del doctor).
   const transcriptionProvider = getTranscriptionProvider();
   const needsDeepgramSession = transcriptionProvider.mode === "deepgram" || isVideo;
   const session =
-    quota.allowed && needsDeepgramSession
+    quota.allowed && consentActive && needsDeepgramSession
       ? await transcriptionProvider.createSession(id)
       : null;
 
@@ -109,7 +115,7 @@ export default async function LiveConsultationPage({
       {videoBlocked && (
         <div
           role="status"
-          className="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-foreground/90"
+          className="mb-4 rounded-2xl border border-warning-border bg-warning-soft p-4 text-sm text-foreground/90"
         >
           {videoBlocked === "plan"
             ? "Tu plan no incluye videollamadas: esta consulta sigue sin video."
@@ -133,6 +139,8 @@ export default async function LiveConsultationPage({
       videoToken={videoToken}
       quotaExceeded={!quota.allowed}
       canManagePlan={user.role === "admin"}
+      consentActive={consentActive}
+      patientId={consultation.patientId}
       />
     </>
   );

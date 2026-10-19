@@ -51,10 +51,21 @@ export function AnalysisStatusBanner({
       <div className="space-y-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-5">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <div className="text-sm">
-            <p className="font-medium text-destructive">No se pudo generar el reporte</p>
+          <div className="space-y-2 text-sm">
+            <p className="font-medium text-destructive">
+              No se pudo generar el reporte ni evaluar el riesgo
+            </p>
             <p className="text-muted-foreground">
               {error ?? "Ocurrió un error al analizar la transcripción."}
+            </p>
+            {/* La detección de riesgo (ideación suicida, autolesión, consumo,
+                riesgo a terceros) sale del mismo análisis que acaba de fallar.
+                Decir solo "no se pudo generar el reporte" se lee como "te
+                quedaste sin el resumen", y deja al profesional creyendo que, de
+                haber algo grave, el sistema le habría avisado. No lo evaluó. */}
+            <p className="font-medium text-foreground/90">
+              Esta sesión no fue revisada por el sistema: que no aparezcan alertas acá no
+              significa que no haya riesgo. Revisa la transcripción con tu propio criterio.
             </p>
           </div>
         </div>

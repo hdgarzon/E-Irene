@@ -275,3 +275,24 @@ describe("email", () => {
     expect(res.id).toMatch(/^log_/);
   });
 });
+
+describe("buildPaymentConfirmationEmail (Términos 12.5)", () => {
+  it("indica concepto, valor con IVA, fecha, período cubierto y referencia, y escapa lo dinámico", async () => {
+    const { buildPaymentConfirmationEmail } = await import("@/lib/email/templates");
+    const msg = buildPaymentConfirmationEmail({
+      to: "admin@example.com",
+      clinicName: "Clínica <b>Demo</b>",
+      concept: "Plan Profesional, mensual",
+      amount: "$99.000 COP",
+      paidAt: "10 de octubre de 2026, 14:00",
+      coverage: "hasta el 10 de noviembre de 2026",
+      reference: "tx-demo-1",
+      settingsUrl: "https://e-irene.co/settings/plan",
+    });
+    for (const parte of ["Plan Profesional, mensual", "$99.000 COP", "IVA incluido", "10 de octubre de 2026", "hasta el 10 de noviembre de 2026", "tx-demo-1"]) {
+      expect(msg.text).toContain(parte);
+      expect(msg.html).toContain(parte);
+    }
+    expect(msg.html).not.toContain("<b>Demo</b>");
+  });
+});

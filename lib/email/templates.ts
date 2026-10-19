@@ -508,3 +508,73 @@ export function buildAccountDeletionRequestedEmail(input: {
     ),
   };
 }
+
+/**
+ * Aviso de cambios en los documentos legales (Política de Tratamiento, sección
+ * 10; Términos de Vinculación, cláusula décima): qué cambia, desde cuándo, y el
+ * derecho a terminar sin penalidad si el cambio es desfavorable.
+ */
+export function buildLegalNoticeEmail(input: {
+  to: string;
+  name: string;
+  title: string;
+  body: string;
+  effectiveDate: string;
+  documentsUrl: string;
+}): EmailMessage {
+  const nombre = input.name.split(" ")[0] || input.name;
+  const href = safeHref(input.documentsUrl);
+  return {
+    to: input.to,
+    subject: `Aviso: ${input.title} (vigente desde el ${input.effectiveDate})`,
+    text:
+      `Hola ${nombre}. ${input.title}. Vigente desde el ${input.effectiveDate}.\n\n${input.body}\n\n` +
+      `Si el cambio te resulta desfavorable puedes terminar la relación sin penalidad antes de esa fecha ` +
+      `(Términos de Vinculación, cláusula décima). Documentos: ${input.documentsUrl}`,
+    html: wrapPlatform(
+      escapeHtml(input.title),
+      `<p>Hola <strong>${escapeHtml(nombre)}</strong>,</p>
+       <p>Te avisamos con anticipación de un cambio en los documentos que rigen el servicio. <strong>Entra en vigor el ${escapeHtml(input.effectiveDate)}.</strong></p>
+       <p style="background:#f0f4f8;border-radius:8px;padding:12px;font-size:14px;white-space:pre-wrap">${escapeHtml(input.body)}</p>
+       <p style="font-size:13px;color:#5b6b7c">Si el cambio te resulta desfavorable, puedes terminar la relación sin penalidad antes de esa fecha (Términos de Vinculación, cláusula décima).</p>
+       ${href ? `<p><a href="${href}">Ver los documentos</a></p>` : ""}`,
+    ),
+  };
+}
+
+/**
+ * Confirmación de un pago (Términos y Condiciones, cláusula duodécima,
+ * numeral 5): el concepto, el precio, la fecha y el período cubierto.
+ */
+export function buildPaymentConfirmationEmail(input: {
+  to: string;
+  clinicName: string;
+  concept: string;
+  amount: string;
+  paidAt: string;
+  coverage: string;
+  reference: string;
+  settingsUrl: string;
+}): EmailMessage {
+  const href = safeHref(input.settingsUrl);
+  return {
+    to: input.to,
+    subject: `Pago recibido: ${input.concept}`,
+    text:
+      `Recibimos el pago de ${input.clinicName}. Concepto: ${input.concept}. Valor: ${input.amount} ` +
+      `(IVA incluido). Fecha: ${input.paidAt}. Período cubierto: ${input.coverage}. ` +
+      `Referencia: ${input.reference}. ${input.settingsUrl}`,
+    html: wrapPlatform(
+      "Pago recibido",
+      `<p>Recibimos el pago de <strong>${escapeHtml(input.clinicName)}</strong>.</p>
+       <p style="background:#f0f4f8;border-radius:8px;padding:12px;font-size:14px">
+         <strong>Concepto:</strong> ${escapeHtml(input.concept)}<br />
+         <strong>Valor:</strong> ${escapeHtml(input.amount)} (IVA incluido)<br />
+         <strong>Fecha:</strong> ${escapeHtml(input.paidAt)}<br />
+         <strong>Período cubierto:</strong> ${escapeHtml(input.coverage)}<br />
+         <strong>Referencia:</strong> ${escapeHtml(input.reference)}
+       </p>
+       ${href ? `<p><a href="${href}">Ver Plan y facturación</a></p>` : ""}`,
+    ),
+  };
+}

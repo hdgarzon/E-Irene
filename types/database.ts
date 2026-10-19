@@ -456,6 +456,9 @@ export type Database = {
           ip: string | null
           is_minor: boolean
           minor_assent: boolean | null
+          revocation_note: string | null
+          revoked_at: string | null
+          revoked_by: string | null
           link_id: string | null
           patient_id: string
           representative_document_enc: string | null
@@ -474,6 +477,9 @@ export type Database = {
           ip?: string | null
           is_minor?: boolean
           minor_assent?: boolean | null
+          revocation_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           link_id?: string | null
           patient_id: string
           representative_document_enc?: string | null
@@ -492,6 +498,9 @@ export type Database = {
           ip?: string | null
           is_minor?: boolean
           minor_assent?: boolean | null
+          revocation_note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           link_id?: string | null
           patient_id?: string
           representative_document_enc?: string | null
@@ -617,6 +626,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      legal_notices: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          effective_at: string
+          emailed_at: string | null
+          emailed_count: number | null
+          id: string
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          effective_at: string
+          emailed_at?: string | null
+          emailed_count?: number | null
+          id?: string
+          title: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          effective_at?: string
+          emailed_at?: string | null
+          emailed_count?: number | null
+          id?: string
+          title?: string
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
@@ -867,6 +909,7 @@ export type Database = {
           id: string
           notes_enc: string | null
           phone_enc: string | null
+          search_index_key: string
           search_trigrams: string[]
           updated_at: string
         }
@@ -886,6 +929,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_index_key?: string
           search_trigrams?: string[]
           updated_at?: string
         }
@@ -905,6 +949,7 @@ export type Database = {
           id?: string
           notes_enc?: string | null
           phone_enc?: string | null
+          search_index_key?: string
           search_trigrams?: string[]
           updated_at?: string
         }
@@ -1854,6 +1899,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      encryption_key_status: {
+        Args: { p_active_id: string }
+        Returns: { column_name: string; pending: number; table_name: string }[]
+      }
+      reencrypt_values: { Args: { p_column: string; p_items: Json; p_table: string }; Returns: number }
+      reindex_patient_search: { Args: { p_items: Json; p_key: string }; Returns: number }
+      revoke_patient_consent: { Args: { p_note?: string; p_patient: string }; Returns: number }
       account_identity_retention: { Args: never; Returns: unknown }
       purge_deleted_account_identity: { Args: { p_clinic: string }; Returns: string[] }
       account_deletion_grace: { Args: never; Returns: unknown }

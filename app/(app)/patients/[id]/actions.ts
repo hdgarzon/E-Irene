@@ -1,6 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
+import { revokePatientConsent } from "@/lib/db/consents";
 import { getPatient } from "@/lib/db/patients";
 import { createPatientLink } from "@/lib/db/patient-links";
 import { buildPatientLinkUrl } from "@/lib/patient-links";
@@ -91,4 +93,31 @@ export async function generateAssessmentLinkAction(
   type: AssessmentType,
 ): Promise<GenerateLinkResult> {
   return generateAndSendLink(patientId, "assessment", type);
+}
+
+export type RevokeConsentState = { error?: string };
+
+/**
+ * Registra que el paciente revocó su consentimiento (Consentimiento informado,
+ * cláusula novena). Desde ese momento no se pueden iniciar consultas ni
+ * transcribir hasta que firme de nuevo; la historia clínica se conserva.
+ */
+export async function revokeConsentAction(
+  patientId: string,
+  _prev: RevokeConsentState,
+  formData: FormData,
+): Promise<RevokeConsentState> {
+  const user = await requireUser();
+  if (formData.get("confirm") !== "on") {
+    return { error: "Confirma que el paciente pidió revocar su consentimiento." };
+  }
+  const note = String(formData.get("note") ?? "").trim().slice(0, 500) || null;
+  try {
+    await revokePatientConsent(patientId, note);
+  } catch (error) {
+    logger.error("consent.revoke_failed", { clinicId: user.clinicId, actorId: user.id, patientId, error });
+    return { error: "No se pudo registrar la revocación. Intenta de nuevo." };
+  }
+  revalidatePath(`/patients/${patientId}`);
+  return {};
 }

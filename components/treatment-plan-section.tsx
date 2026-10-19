@@ -9,12 +9,12 @@ import {
 import { THERAPEUTIC_APPROACHES, APPROACH_LABEL } from "@/lib/treatment-approach";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 const TYPE_LABEL = { objetivo: "Objetivo", checkpoint: "Checkpoint" } as const;
 
 const SELECT_CLASS =
-  "flex h-9 rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "flex h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring sm:w-auto";
 
 function ApproachSelect({ name, defaultValue }: { name: string; defaultValue?: string }) {
   return (
@@ -39,18 +39,18 @@ export function TreatmentPlanSection({
   if (!plan) {
     const create = createPlanAction.bind(null, patientId);
     return (
-      <div className="rounded-2xl border border-gray-line bg-card p-6">
-        <h2 className="mb-3 flex items-center gap-2 font-heading font-semibold text-navy">
+      <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold text-navy">
           <ClipboardCheck className="size-4 text-brand" />
           Plan de tratamiento
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
           Aún no hay un plan de tratamiento activo para este paciente.
         </p>
-        <form action={create} className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <form action={create} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <Input name="title" placeholder="Título del plan (p. ej. Manejo de ansiedad social)" required />
           <ApproachSelect name="approach" />
-          <Button type="submit" size="sm">
+          <Button type="submit">
             Crear plan
           </Button>
         </form>
@@ -62,13 +62,13 @@ export function TreatmentPlanSection({
   const updateApproach = setApproachAction.bind(null, plan.id, patientId);
 
   return (
-    <div className="rounded-2xl border border-gray-line bg-card p-6">
+    <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 font-heading font-semibold text-navy">
+        <h2 className="flex items-center gap-2 font-semibold text-navy">
           <ClipboardCheck className="size-4 text-brand" />
           Plan de tratamiento
         </h2>
-        <Badge className="bg-brand/15 text-brand capitalize">{plan.status}</Badge>
+        <StatusBadge tone="info" className="capitalize">{plan.status}</StatusBadge>
       </div>
       <p className="mt-1 text-sm text-navy">{plan.title}</p>
       {plan.approach && (
@@ -93,7 +93,7 @@ export function TreatmentPlanSection({
                 <form action={toggle}>
                   <button type="submit" className="mt-0.5" aria-label="Cambiar estado">
                     {done ? (
-                      <CheckCircle2 className="size-4 text-mint" />
+                      <CheckCircle2 className="size-4 text-success" />
                     ) : (
                       <Circle className="size-4 text-muted-foreground" />
                     )}
@@ -114,18 +114,18 @@ export function TreatmentPlanSection({
         </ul>
       )}
 
-      <form action={addItem} className="mt-4 grid gap-2 sm:grid-cols-[auto_1fr_auto_auto]">
+      <form action={addItem} className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
         <select
           name="type"
           defaultValue="objetivo"
-          className="flex h-9 rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          className={SELECT_CLASS}
         >
           <option value="objetivo">Objetivo</option>
           <option value="checkpoint">Checkpoint</option>
         </select>
         <Input name="description" placeholder="Descripción" required />
         <Input name="targetDate" type="date" className="sm:w-auto" />
-        <Button type="submit" size="sm" variant="outline">
+        <Button type="submit" variant="outline">
           Agregar
         </Button>
       </form>

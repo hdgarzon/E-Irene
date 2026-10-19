@@ -20,7 +20,7 @@ export const ebGaramond = EB_Garamond({
 export const inter = Inter({
   variable: "--font-landing-sans",
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500"],
+  weight: ["200", "300", "400", "500", "600", "700"],
 });
 
 /** Clases de variables de fuente para el contenedor de un route group. */

@@ -263,14 +263,14 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     <div className="mx-auto max-w-4xl space-y-6">
       <Link
         href="/settings"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Configuración
       </Link>
 
       <div>
-        <h1 className="font-heading text-2xl font-bold text-navy">Plan y facturación</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">Plan y facturación</h1>
         <p className="text-sm text-muted-foreground">
           Elige el plan que mejor se ajuste a tu práctica. Precios mensuales en pesos colombianos.
         </p>
@@ -279,7 +279,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {(reconciled?.result === "activated" || reconciled?.result === "already_processed") && (
         <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-mint" />
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               <span className="font-semibold text-navy">Pago confirmado.</span>{" "}
               {reconciled.kind === "upgrade"
@@ -329,7 +329,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {wompi === "return" && !reconciled && (
         <div className="rounded-2xl border border-mint/40 bg-soft-mint/20 p-4 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
-            <Info className="mt-0.5 size-4 shrink-0 text-mint" />
+            <Info className="mt-0.5 size-4 shrink-0 text-success" />
             <p>
               Si el pago fue aprobado, tu plan se actualizará en unos segundos. Revisá tu correo
               para confirmar.
@@ -365,7 +365,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
       <div className="rounded-2xl border border-gray-line bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-heading font-semibold text-navy">Consumo del ciclo</h2>
+          <h2 className="font-semibold text-navy">Consumo del ciclo</h2>
           <span className="text-xs text-muted-foreground">Se reinicia el {cycleEndLabel}</span>
         </div>
         <div className="mt-3 space-y-3">
@@ -426,7 +426,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
 
       <section id="videollamadas" className="rounded-2xl border border-gray-line bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-heading font-semibold text-navy">Videollamadas</h2>
+          <h2 className="font-semibold text-navy">Videollamadas</h2>
           {videoMode === "addon" && (
             <span className="text-sm font-medium text-navy">
               {videoAvailable} disponible{videoAvailable === 1 ? "" : "s"}
@@ -496,7 +496,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               <ul className="flex-1 space-y-1.5 text-xs text-muted-foreground">
                 {planFeatures(plan).map((f) => (
                   <li key={f} className="flex items-start gap-1.5">
-                    <Check className="mt-0.5 size-3 shrink-0 text-mint" />
+                    <Check className="mt-0.5 size-3 shrink-0 text-success" />
                     {f}
                   </li>
                 ))}

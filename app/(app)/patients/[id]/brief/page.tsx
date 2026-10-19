@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getPatient } from "@/lib/db/patients";
 import { listAssessmentsForPatient } from "@/lib/db/assessments";
+import { countUnreviewedConsultationsForPatient } from "@/lib/db/consultations";
 import { getLatestClinicalStateSnapshot } from "@/lib/db/clinical-state";
 import { whatsNewInSession, type ClinicalState } from "@/lib/clinical-state";
 import { RISK_CATEGORY_LABEL } from "@/lib/risk-flags";
@@ -63,8 +64,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-line bg-card p-6">
-      <h2 className={cn("mb-4 flex items-center gap-2 font-heading font-semibold text-navy", accent)}>
+    <div className="rounded-2xl border border-gray-line bg-card p-5 md:p-6">
+      <h2 className={cn("mb-4 flex items-center gap-2 font-semibold text-navy", accent)}>
         <Icon className="size-4" />
         {title}
       </h2>
@@ -78,9 +79,10 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
   const patient = await getPatient(id);
   if (!patient) notFound();
 
-  const [snapshot, assessments] = await Promise.all([
+  const [snapshot, assessments, unreviewed] = await Promise.all([
     getLatestClinicalStateSnapshot(id),
     listAssessmentsForPatient(id),
+    countUnreviewedConsultationsForPatient(id),
   ]);
 
   const assessmentsByType = (["phq9", "gad7"] as AssessmentType[]).map((type) => ({
@@ -98,15 +100,15 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
         href={`/patients/${id}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-navy"
+        className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground transition-colors hover:text-navy"
       >
         <ArrowLeft className="size-4" />
         Volver a la ficha
       </Link>
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-navy">
+          <h1 className="font-display text-[1.75rem] leading-tight font-semibold tracking-tight text-navy">
             Brief pre-sesión — {patient.fullName}
           </h1>
           {snapshot && (
@@ -126,11 +128,25 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <Sparkles className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Aún no hay estado clínico</h3>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            El brief se construye con lo que la IA identifica en cada sesión analizada. Realiza la
-            primera consulta con este paciente para empezar a verlo.
-          </p>
+          <h3 className="font-semibold text-navy">Aún no hay estado clínico</h3>
+          {/* El vacío tiene dos causas muy distintas y conviene no confundirlas:
+              que no haya habido sesiones, o que las haya habido y su análisis
+              fallara. En el segundo caso, invitar a "realizar la primera
+              consulta" es falso y sugiere que la IA miró y no encontró nada. */}
+          {unreviewed > 0 ? (
+            <p className="mx-auto mt-1 max-w-sm text-sm text-destructive">
+              {unreviewed === 1
+                ? "Hay 1 consulta de este paciente que no pudo analizarse"
+                : `Hay ${unreviewed} consultas de este paciente que no pudieron analizarse`}
+              , así que el brief está vacío por un fallo del análisis, no porque no haya hallazgos.
+              Ábrelas y reintenta el análisis, o revisa sus transcripciones.
+            </p>
+          ) : (
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+              El brief se construye con lo que la IA identifica en cada sesión analizada. Realiza la
+              primera consulta con este paciente para empezar a verlo.
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -182,7 +198,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
                     points.length > 0 && (
                       <div key={type}>
                         <p className="mb-2 text-sm font-medium text-navy">{ASSESSMENT_LABEL[type]}</p>
-                        <ScoreTrendChart points={points} max={ASSESSMENT_MAX_SCORE[type]} />
+                        <ScoreTrendChart points={points} max={ASSESSMENT_MAX_SCORE[type]} type={type} />
                         <p className="mt-1 text-xs text-muted-foreground">
                           Último: {points[points.length - 1].score}/{ASSESSMENT_MAX_SCORE[type]} ·{" "}
                           {points[points.length - 1].severity}

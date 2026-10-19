@@ -46,8 +46,8 @@ export function MobileNav({ role, clinicName }: { role: UserRole; clinicName: st
             onClick={() => setOpen(false)}
           />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col bg-sidebar text-sidebar-foreground shadow-xl">
-            <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-5">
-              <span className="flex items-center gap-2 font-heading text-lg font-bold text-white">
+            <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-5">
+              <span className="flex items-center gap-2 font-display text-lg font-semibold text-white">
                 <span className="grid size-8 place-items-center rounded-lg bg-sidebar-accent">
                   <Activity className="size-4 text-mint" />
                 </span>
@@ -57,13 +57,13 @@ export function MobileNav({ role, clinicName }: { role: UserRole; clinicName: st
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Cerrar menú"
-                className="grid size-9 place-items-center rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+                className="grid size-9 place-items-center rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-white focus-visible:outline-mint"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+            <nav aria-label="Principal" className="flex-1 space-y-0.5 overflow-y-auto p-3">
               {items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 const Icon = item.icon;
@@ -71,12 +71,13 @@ export function MobileNav({ role, clinicName }: { role: UserRole; clinicName: st
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={active ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors focus-visible:outline-mint",
                       active
-                        ? "bg-sidebar-primary font-medium text-sidebar-primary-foreground"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white",
+                        ? "bg-sidebar-accent font-medium text-white shadow-[inset_3px_0_0_var(--color-mint)]"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-white",
                     )}
                   >
                     <Icon className="size-4" />

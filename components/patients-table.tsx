@@ -72,7 +72,7 @@ export function PatientsTable({
           <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-cloud">
             <Search className="size-6 text-brand" />
           </div>
-          <h3 className="font-heading font-semibold text-navy">Ningún paciente coincide</h3>
+          <h3 className="font-semibold text-navy">Ningún paciente coincide</h3>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             Prueba con otro nombre, documento o teléfono.
           </p>
@@ -84,8 +84,10 @@ export function PatientsTable({
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Documento</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead className="text-right">Registrado</TableHead>
+                {/* En móvil solo nombre y documento: con cuatro columnas la
+                    tabla se desbordaba y había que desplazarla de lado. */}
+                <TableHead className="hidden md:table-cell">Teléfono</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Registrado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,14 +96,16 @@ export function PatientsTable({
                   <TableCell>
                     <Link
                       href={`/patients/${p.id}`}
-                      className="font-medium text-navy hover:text-brand hover:underline"
+                      className="rounded-sm font-medium text-navy hover:text-brand hover:underline"
                     >
                       {p.fullName}
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{p.document ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.phone ?? "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    {p.phone ?? "—"}
+                  </TableCell>
+                  <TableCell className="hidden text-right text-muted-foreground sm:table-cell">
                     {new Date(p.createdAt).toLocaleDateString("es-CO")}
                   </TableCell>
                 </TableRow>
