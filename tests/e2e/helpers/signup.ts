@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 const MAILPIT_URL = "http://127.0.0.1:54324";
@@ -72,12 +72,21 @@ export async function signUpAndActivate(
   await page.getByLabel(/declaro bajo la gravedad del juramento/i).check();
   await page.getByRole("button", { name: /crear cuenta y entrar/i }).click();
 
-  // Falló una vez en CI quedándose en /auth/set-password, y no se reprodujo ni
-  // con el JS retrasado (el envío antes de hidratar sí llega) ni en 20 corridas.
-  // Si vuelve a pasar, el fallo dice qué mostró el formulario: un error del
+  // Este POST hace todo el registro y además renderiza /dashboard (el redirect
+  // del server action viaja en la misma respuesta). Con la máquina cargada, el
+  // dev server tiene picos: medido con 10 procesos de CPU en paralelo, un POST
+  // tardó 16,1 s, de los cuales el action fueron 2,1 s y el render de
+  // /dashboard 14 s, aunque para una clínica nueva sus consultas ya van en
+  // paralelo y casi no traen filas. Con los 10 s por defecto, en una corrida
+  // completa fallaron 2 de las 21 specs que usan este helper. Se da margen solo
+  // a esta espera, y se suma al presupuesto del test para no comerse el de los
+  // pasos siguientes.
+  const dashboardTimeout = 25_000;
+  test.info().setTimeout(test.info().timeout + dashboardTimeout);
+  // Si aun así falla, el error dice qué mostró el formulario: un error del
   // server action, un error de campo, o el botón aún en "Creando tu cuenta…".
   try {
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: dashboardTimeout });
   } catch (error) {
     const messages = await page
       .locator("form .landing-form-error, form .landing-field-error")
