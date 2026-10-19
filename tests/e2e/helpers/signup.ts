@@ -72,7 +72,24 @@ export async function signUpAndActivate(
   await page.getByLabel(/declaro bajo la gravedad del juramento/i).check();
   await page.getByRole("button", { name: /crear cuenta y entrar/i }).click();
 
-  await expect(page).toHaveURL(/\/dashboard/);
+  // Falló una vez en CI quedándose en /auth/set-password, y no se reprodujo ni
+  // con el JS retrasado (el envío antes de hidratar sí llega) ni en 20 corridas.
+  // Si vuelve a pasar, el fallo dice qué mostró el formulario: un error del
+  // server action, un error de campo, o el botón aún en "Creando tu cuenta…".
+  try {
+    await expect(page).toHaveURL(/\/dashboard/);
+  } catch (error) {
+    const messages = await page
+      .locator("form .landing-form-error, form .landing-field-error")
+      .allTextContents();
+    const button = (await page.locator("form button[type=submit]").textContent())?.trim();
+    throw new Error(
+      `El registro no llegó a /dashboard (URL: ${page.url()}). ` +
+        `Errores visibles del formulario: ${messages.length ? messages.join(" | ") : "ninguno"}. ` +
+        `Botón: "${button}".`,
+      { cause: error },
+    );
+  }
 
   await verifyProfessional(opts.email);
 }
